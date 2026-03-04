@@ -3,6 +3,6 @@ services:
     name: chess-ia
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt ; apt-get update ; apt-get install -y stockfish
+    buildCommand: set -e ; pip install -r requirements.txt ; cd engine/stockfish/src ; make -j2 build ARCH=x86-64
     startCommand: python server.py
     autoDeploy: true

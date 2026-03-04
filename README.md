@@ -142,7 +142,7 @@ La forma mas simple para que cualquier persona entre por URL es desplegar en Ren
 Notas importantes:
 - Plan gratis puede "dormir" la app tras inactividad; el primer acceso tarda unos segundos.
 - `server.py` ya soporta puerto dinamico con variable `PORT` (requerido en cloud).
-- Si Render no encontrara Stockfish por paquete del sistema, puedes subir un binario Linux en `engine/`.
+- Este proyecto compila Stockfish desde `engine/stockfish/src` durante el build (no requiere `apt-get`).
 
 ### Configuracion manual en Render (si no usa `render.yaml`)
 
@@ -150,7 +150,7 @@ Notas importantes:
 - Build Command:
 
 ```bash
-pip install -r requirements.txt ; apt-get update ; apt-get install -y stockfish
+set -e ; pip install -r requirements.txt ; cd engine/stockfish/src ; make -j2 build ARCH=x86-64
 ```
 
 - Start Command:
