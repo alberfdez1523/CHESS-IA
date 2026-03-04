@@ -4,10 +4,12 @@
 
 const API_BASE = '';  // same origin — served by FastAPI
 
-// ─── Piece Unicode Map (all use filled glyphs so CSS color works) ───
+// ─── Piece Unicode Map (estilo clásico relleno, estable en móvil/desktop) ───
+// Usamos la serie negra para todas y dejamos el color al CSS, como el diseño original.
+// FE0E fuerza presentación de texto para evitar fallback emoji en iOS/Android.
 const PIECE_UNICODE = {
-    wK: '\u265A', wQ: '\u265B', wR: '\u265C', wB: '\u265D', wN: '\u265E', wP: '\u265F',
-    bK: '\u265A', bQ: '\u265B', bR: '\u265C', bB: '\u265D', bN: '\u265E', bP: '\u265F'
+    wK: '\u265A\uFE0E', wQ: '\u265B\uFE0E', wR: '\u265C\uFE0E', wB: '\u265D\uFE0E', wN: '\u265E\uFE0E', wP: '\u265F\uFE0E',
+    bK: '\u265A\uFE0E', bQ: '\u265B\uFE0E', bR: '\u265C\uFE0E', bB: '\u265D\uFE0E', bN: '\u265E\uFE0E', bP: '\u265F\uFE0E'
 };
 
 const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
