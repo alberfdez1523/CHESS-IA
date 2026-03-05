@@ -55,11 +55,17 @@ function needsPromotion(game: InstanceType<typeof Chess>, from: string, to: stri
 
 function detectGameEnd(
   game: InstanceType<typeof Chess>,
-  playerColor: PieceColor
+  playerColor: PieceColor,
+  isAIMode: boolean,
 ): GameOverInfo | null {
   if (!game.game_over()) return null
   if (game.in_checkmate()) {
     const loserTurn = game.turn()
+    if (!isAIMode) {
+      return loserTurn === 'w'
+        ? { title: 'Jaque mate', message: 'Ganan negras', result: 'lose' }
+        : { title: 'Jaque mate', message: 'Ganan blancas', result: 'win' }
+    }
     return loserTurn === playerColor
       ? { title: 'Derrota', message: 'La IA te ha dado jaque mate', result: 'lose' }
       : { title: '¡Victoria!', message: 'Has ganado por jaque mate', result: 'win' }
@@ -93,6 +99,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
   const [chances, setChances] = useState<Chances>({ white: 33, draw: 34, black: 33 })
   const [promotionPending, setPromotionPending] = useState<{ from: string; to: string } | null>(null)
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null)
+  const isAIMode = config.opponentMode === 'ai'
 
   // ─── Valores derivados ───
 
@@ -152,10 +159,13 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
 
   const status = useMemo(() => {
     if (gameOverInfo) return { text: gameOverInfo.title, type: 'over' as const }
-    if (isThinking) return { text: 'La IA está pensando...', type: 'thinking' as const }
-    if (turn === config.playerColor) return { text: 'Tu turno', type: 'player' as const }
-    return { text: 'Turno de la IA', type: 'ai' as const }
-  }, [gameOverInfo, isThinking, turn, config.playerColor])
+    if (isAIMode) {
+      if (isThinking) return { text: 'La IA está pensando...', type: 'thinking' as const }
+      if (turn === config.playerColor) return { text: 'Tu turno', type: 'player' as const }
+      return { text: 'Turno de la IA', type: 'ai' as const }
+    }
+    return { text: turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras', type: 'player' as const }
+  }, [gameOverInfo, isThinking, turn, config.playerColor, isAIMode])
 
   // ─── Obtener pieza en casilla ───
 
@@ -181,7 +191,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
       setLastMove({ from, to })
       setFen(game.fen())
 
-      const endInfo = detectGameEnd(game, config.playerColor)
+      const endInfo = detectGameEnd(game, config.playerColor, isAIMode)
       if (endInfo) {
         sounds.playGameEnd()
         setGameOverInfo(endInfo)
@@ -190,12 +200,13 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
       return true
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [config.playerColor, sounds]
+    [config.playerColor, sounds, isAIMode]
   )
 
   // ─── Turno de la IA (efecto) ───
 
   useEffect(() => {
+    if (!isAIMode) return
     const game = gameRef.current
     if (game.game_over() || isThinkingRef.current || !!gameOverInfo) return
     if (game.turn() === config.playerColor) return
@@ -227,7 +238,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
 
         if (game.in_check()) setTimeout(() => sounds.playCheck(), 80)
 
-        const endInfo = detectGameEnd(game, config.playerColor)
+        const endInfo = detectGameEnd(game, config.playerColor, isAIMode)
         if (endInfo) {
           sounds.playGameEnd()
           setGameOverInfo(endInfo)
@@ -242,11 +253,15 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
 
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fen, gameOverInfo])
+  }, [fen, gameOverInfo, isAIMode])
 
   // ─── Evaluación continua de la posición para probabilidades realistas ───
 
   useEffect(() => {
+    if (!isAIMode) {
+      setChances({ white: 50, draw: 0, black: 50 })
+      return
+    }
     if (isThinkingRef.current) return
 
     let cancelled = false
@@ -266,7 +281,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [fen])
+  }, [fen, isAIMode])
 
   // ─── Atajo de teclado (Ctrl+Z = deshacer) ───
 
@@ -288,7 +303,8 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
     (sq: string) => {
       const game = gameRef.current
       if (isThinkingRef.current || gameOverInfo) return
-      if (game.turn() !== config.playerColor) return
+      const allowedColor = isAIMode ? config.playerColor : (game.turn() as PieceColor)
+      if (game.turn() !== allowedColor) return
 
       const clicked = game.get(sq)
 
@@ -304,7 +320,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
           }
           return
         }
-        if (clicked && clicked.color === config.playerColor) {
+        if (clicked && clicked.color === allowedColor) {
           setSelectedSquare(sq)
           return
         }
@@ -312,21 +328,22 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
         return
       }
 
-      if (clicked && clicked.color === config.playerColor) {
+      if (clicked && clicked.color === allowedColor) {
         setSelectedSquare(sq)
       }
     },
-    [selectedSquare, config.playerColor, gameOverInfo, doMove]
+    [selectedSquare, config.playerColor, gameOverInfo, doMove, isAIMode]
   )
 
   const handleDrop = useCallback(
     (from: string, to: string) => {
       const game = gameRef.current
       if (isThinkingRef.current || gameOverInfo) return
-      if (game.turn() !== config.playerColor) return
+      const allowedColor = isAIMode ? config.playerColor : (game.turn() as PieceColor)
+      if (game.turn() !== allowedColor) return
 
       const piece = game.get(from)
-      if (!piece || piece.color !== config.playerColor) return
+      if (!piece || piece.color !== allowedColor) return
 
       const moves = game.moves({ square: from, verbose: true }) as any[]
       const isLegal = moves.some((m: any) => m.to === to)
@@ -342,7 +359,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
         doMove(from, to)
       }
     },
-    [config.playerColor, gameOverInfo, doMove]
+    [config.playerColor, gameOverInfo, doMove, isAIMode]
   )
 
   const handlePromotion = useCallback(
@@ -381,12 +398,16 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
       if (gameOverInfo) return
       sounds.playGameEnd()
       setGameOverInfo(
-        color === config.playerColor
-          ? { title: '¡Tiempo agotado!', message: 'Se te acabó el tiempo', result: 'lose' }
-          : { title: '¡Victoria!', message: 'La IA se quedó sin tiempo', result: 'win' }
+        isAIMode
+          ? color === config.playerColor
+            ? { title: '¡Tiempo agotado!', message: 'Se te acabó el tiempo', result: 'lose' }
+            : { title: '¡Victoria!', message: 'La IA se quedó sin tiempo', result: 'win' }
+          : color === 'w'
+            ? { title: 'Tiempo agotado', message: 'Ganan negras por tiempo', result: 'lose' }
+            : { title: 'Tiempo agotado', message: 'Ganan blancas por tiempo', result: 'win' }
       )
     },
-    [gameOverInfo, config.playerColor, sounds]
+    [gameOverInfo, config.playerColor, sounds, isAIMode]
   )
 
   const dismissGameOver = useCallback(() => setGameOverInfo(null), [])
@@ -418,6 +439,8 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
     handleTimedOut,
     dismissGameOver,
     playerColor: config.playerColor,
+    controlColor: isAIMode ? config.playerColor : turn,
+    isAIMode,
     difficulty: config.difficulty,
   }
 }

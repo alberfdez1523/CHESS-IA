@@ -1,5 +1,5 @@
 """
-Backend de ChessAI.
+Backend de Gambito de Dama Cuantico.
 
 Este servicio hace 3 cosas:
 1) Levanta Stockfish localmente.
@@ -116,7 +116,7 @@ async def lifespan(app: FastAPI):
     engine.quit()
 
 
-app = FastAPI(title="ChessAI", lifespan=lifespan)
+app = FastAPI(title="Gambito de Dama Cuantico", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -147,6 +147,179 @@ class EvalRequest(BaseModel):
 class EvalResponse(BaseModel):
     evaluation: float
     mate: int | None
+
+
+# ─── Esquemas cuánticos ───
+
+class QuantumPieceSquare(BaseModel):
+    square: str
+    probability: float
+
+class QuantumPieceInfo(BaseModel):
+    id: str
+    type: str          # p, n, b, r, q, k
+    color: str         # w, b
+    squares: list[QuantumPieceSquare]
+
+class QuantumCastling(BaseModel):
+    w: dict  # { k: bool, q: bool }
+    b: dict
+
+class QuantumStatePayload(BaseModel):
+    pieces: list[QuantumPieceInfo]
+    turn: str
+    castling: QuantumCastling
+
+class QuantumMoveRequest(BaseModel):
+    quantum_state: QuantumStatePayload
+    difficulty: str = "medium"
+
+class QuantumMoveResponse(BaseModel):
+    pieceId: str
+    from_sq: str          # "from" es palabra reservada en Python
+    to: str
+    promotion: str | None = None
+    weightedEval: float
+    universeCount: int
+
+
+# ---------------------------------------------------------------------------
+# Generador de tableros clásicos desde estado cuántico (Enfoque Multiverso)
+# ---------------------------------------------------------------------------
+
+PIECE_TYPE_MAP = {"p": chess.PAWN, "n": chess.KNIGHT, "b": chess.BISHOP,
+                  "r": chess.ROOK, "q": chess.QUEEN, "k": chess.KING}
+
+def _generate_classical_boards(qs: QuantumStatePayload, max_boards: int = 128):
+    """Genera todos los tableros clásicos posibles a partir del estado cuántico.
+
+    Cada pieza cuántica (>1 posición) genera opciones.
+    El producto cartesiano de opciones produce universos clásicos.
+    Se descartan universos con conflictos (dos piezas en la misma casilla).
+    """
+    classical = []
+    quantum = []
+
+    for p in qs.pieces:
+        if len(p.squares) == 1 and p.squares[0].probability >= 1.0:
+            classical.append(p)
+        else:
+            quantum.append(p)
+
+    if not quantum:
+        # Todo clásico → un solo tablero
+        board = _build_board(classical, [], qs.turn, qs.castling)
+        if board:
+            piece_map = {s.squares[0].square: s.id for s in classical}
+            return [{"fen": board.fen(), "probability": 1.0, "piece_map": piece_map}]
+        return []
+
+    # Generar opciones para cada pieza cuántica
+    options_list = []
+    for p in quantum:
+        opts = [(p, sq.square, sq.probability) for sq in p.squares]
+        options_list.append(opts)
+
+    from itertools import product as cart_product
+    boards = []
+
+    for combo in cart_product(*options_list):
+        if len(boards) >= max_boards:
+            break
+
+        prob = 1.0
+        placements = {}  # square → piece_info
+        valid = True
+
+        # Primero poner piezas clásicas
+        for p in classical:
+            sq = p.squares[0].square
+            if sq in placements:
+                valid = False
+                break
+            placements[sq] = p
+
+        if not valid:
+            continue
+
+        # Luego las cuánticas para esta combinación
+        for piece_info, sq, sq_prob in combo:
+            prob *= sq_prob
+            if sq in placements:
+                valid = False
+                break
+            placements[sq] = piece_info
+
+        if not valid or prob < 1e-6:
+            continue
+
+        # Construir tablero chess.Board
+        board = chess.Board(None)
+        board.clear()
+
+        for sq_str, pi in placements.items():
+            cell = chess.parse_square(sq_str)
+            ptype = PIECE_TYPE_MAP.get(pi.type)
+            if ptype is None:
+                continue
+            is_white = pi.color == "w"
+            board.set_piece_at(cell, chess.Piece(ptype, is_white))
+
+        board.turn = chess.WHITE if qs.turn == "w" else chess.BLACK
+
+        # Derechos de enroque
+        cr = chess.BB_EMPTY
+        if qs.castling.w.get("k", False):
+            cr |= chess.BB_H1
+        if qs.castling.w.get("q", False):
+            cr |= chess.BB_A1
+        if qs.castling.b.get("k", False):
+            cr |= chess.BB_H8
+        if qs.castling.b.get("q", False):
+            cr |= chess.BB_A8
+        board.castling_rights = cr
+
+        piece_map = {sq_str: pi.id for sq_str, pi in placements.items()}
+        boards.append({"fen": board.fen(), "probability": prob, "piece_map": piece_map})
+
+    # Normalizar probabilidades
+    total = sum(b["probability"] for b in boards)
+    if total > 0:
+        for b in boards:
+            b["probability"] /= total
+
+    return boards
+
+
+def _build_board(classical_pieces, quantum_choices, turn, castling):
+    """Helper para construir un chess.Board."""
+    board = chess.Board(None)
+    board.clear()
+
+    for p in classical_pieces:
+        sq = chess.parse_square(p.squares[0].square)
+        ptype = PIECE_TYPE_MAP.get(p.type)
+        if ptype:
+            board.set_piece_at(sq, chess.Piece(ptype, p.color == "w"))
+
+    for p, sq_str, _ in quantum_choices:
+        sq = chess.parse_square(sq_str)
+        ptype = PIECE_TYPE_MAP.get(p.type)
+        if ptype:
+            board.set_piece_at(sq, chess.Piece(ptype, p.color == "w"))
+
+    board.turn = chess.WHITE if turn == "w" else chess.BLACK
+    cr = chess.BB_EMPTY
+    if castling.w.get("k", False):
+        cr |= chess.BB_H1
+    if castling.w.get("q", False):
+        cr |= chess.BB_A1
+    if castling.b.get("k", False):
+        cr |= chess.BB_H8
+    if castling.b.get("q", False):
+        cr |= chess.BB_A8
+    board.castling_rights = cr
+    return board
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +412,98 @@ def health():
 
 
 # ---------------------------------------------------------------------------
+# Endpoint Cuántico — Enfoque Multiverso
+# ---------------------------------------------------------------------------
+@app.post("/api/quantum/move")
+def quantum_move(req: QuantumMoveRequest):
+    """Evalúa todos los tableros clásicos posibles del estado cuántico
+    y devuelve la mejor jugada ponderada por probabilidad."""
+    global engine
+    if engine is None:
+        raise HTTPException(503, "Engine not ready")
+
+    preset = DIFFICULTIES.get(req.difficulty, DIFFICULTIES["medium"])
+
+    # 1) Generar todos los universos clásicos
+    boards = _generate_classical_boards(req.quantum_state)
+    if not boards:
+        raise HTTPException(400, "No valid classical boards could be generated")
+
+    # 2) Para cada universo, pedir a Stockfish la mejor jugada
+    move_votes: dict[str, float] = {}    # move_uci → suma de probabilidades
+    move_evals: dict[str, list] = {}      # move_uci → lista de (prob, eval)
+    move_piece_maps: dict[str, dict] = {} # move_uci → piece_map del primer universo
+
+    try:
+        engine.configure({"Skill Level": preset["skill"]})
+    except chess.engine.EngineError:
+        pass
+
+    limit = chess.engine.Limit(depth=min(preset["depth"], 14), time=min(preset["time"], 0.5))
+
+    for b in boards:
+        try:
+            board = chess.Board(b["fen"])
+        except ValueError:
+            continue
+
+        if board.is_game_over() or not list(board.legal_moves):
+            continue
+
+        try:
+            result = engine.play(board, limit, info=chess.engine.INFO_SCORE)
+        except Exception:
+            continue
+
+        move_uci = result.move.uci()
+        prob = b["probability"]
+
+        # Evaluación
+        ev = 0.0
+        if result.info and "score" in result.info:
+            score = result.info["score"].white()
+            if score.is_mate():
+                m = score.mate()
+                ev = 10000.0 if (m and m > 0) else -10000.0
+            else:
+                ev = float(score.score(mate_score=10000))
+
+        if move_uci not in move_votes:
+            move_votes[move_uci] = 0.0
+            move_evals[move_uci] = []
+            move_piece_maps[move_uci] = b["piece_map"]
+
+        move_votes[move_uci] += prob
+        move_evals[move_uci].append((prob, ev))
+
+    if not move_votes:
+        raise HTTPException(400, "No legal moves found in any universe")
+
+    # 3) Elegir movimiento con mayor voto ponderado
+    best_move = max(move_votes, key=move_votes.get)
+
+    # 4) Calcular evaluación ponderada total
+    weighted_eval = sum(p * ev for evals in move_evals.values() for p, ev in evals)
+
+    # 5) Identificar qué pieza mueve (del piece_map del primer universo con ese movimiento)
+    from_sq = best_move[:2]
+    to_sq = best_move[2:4]
+    promotion = best_move[4] if len(best_move) > 4 else None
+
+    piece_map = move_piece_maps.get(best_move, {})
+    piece_id = piece_map.get(from_sq, "")
+
+    return {
+        "pieceId": piece_id,
+        "from": from_sq,
+        "to": to_sq,
+        "promotion": promotion,
+        "weightedEval": round(weighted_eval, 1),
+        "universeCount": len(boards),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Frontend estático
 # ---------------------------------------------------------------------------
 DIST_DIR = HERE / "frontend" / "dist"
@@ -287,5 +552,5 @@ def static_files(filename: str):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "3000"))
-    print(f"\n🚀  ChessAI server → http://localhost:{port}\n")
+    print(f"\n🚀  Gambito de Dama Cuantico server -> http://localhost:{port}\n")
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

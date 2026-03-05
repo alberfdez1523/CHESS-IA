@@ -1,4 +1,4 @@
-import type { APIMoveResponse, Difficulty } from './types'
+import type { APIMoveResponse, Difficulty, QuantumAIMoveResponse } from './types'
 
 const API_BASE = '/api'
 
@@ -22,6 +22,20 @@ export async function requestEval(fen: string): Promise<{ evaluation: number; ma
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fen }),
+  })
+  if (!res.ok) throw new Error(`Error del servidor: ${res.status}`)
+  return res.json()
+}
+
+// ─── Solicitar movimiento cuántico de la IA (Enfoque Multiverso) ───
+export async function requestQuantumAIMove(
+  quantumState: object,
+  difficulty: Difficulty,
+): Promise<QuantumAIMoveResponse> {
+  const res = await fetch(`${API_BASE}/quantum/move`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantum_state: quantumState, difficulty }),
   })
   if (!res.ok) throw new Error(`Error del servidor: ${res.status}`)
   return res.json()

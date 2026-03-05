@@ -1,184 +1,195 @@
-# ChessAI
+﻿# Gambito de Dama Cuantico
 
-Aplicacion web para jugar ajedrez contra Stockfish desde el navegador.
+Aplicacion web de ajedrez con dos modos de juego:
 
-Incluye:
-- Seleccion de color (blancas, negras o azar)
-- 5 niveles de dificultad
-- Historial descriptivo de movimientos
-- Probabilidades de victoria/tablas/derrota segun evaluacion del motor
-- Soporte de mouse y tactil
-- Musica ambiente y efectos de sonido
+- Modo clasico
+  - Vs IA (Stockfish)
+  - 2 jugadores locales (sin IA)
+- Modo cuantico
+  - 2 jugadores locales (sin IA)
+  - Superposicion, fusion, enroque cuantico, medicion y efecto tunel
+
+## Novedades recientes (Marzo 2026)
+
+- Rebranding completo a `Gambito de Dama Cuantico`.
+- Modo clasico con selector de oponente:
+  - `Vs IA` (Stockfish)
+  - `2 jugadores locales`
+- Modo cuantico orientado a `2 jugadores locales`.
+- Ruleta de medicion manual:
+  - el usuario decide cuando girar,
+  - muestra probabilidad vivo/muerto,
+  - conserva resultado ~1 segundo antes de cerrar.
+- Casuisticas de captura cuantica explicadas en UI y documentacion.
+- Paneles laterales adaptados a movil (reglas y casuisticas en `details`).
+
+## Implementaciones actuales
+
+### Modo Clasico
+
+- Reglas completas via `chess.js`
+- 5 niveles de dificultad contra Stockfish (`beginner` a `master`)
+- Opcion de partida local 2 jugadores
+- Historial de jugadas descriptivo
+- Barra de evaluacion (vs IA)
+- Reloj opcional por color
+- Promocion, enroque, deteccion de jaque mate y tablas
+
+### Modo Cuantico (2 jugadores)
+
+- Movimiento cuantico (split): piezas no peon pueden dividirse en 2 casillas
+- Divisiones sucesivas: probabilidades 50/50, 25/25, etc.
+- Fusion: estados de una misma pieza se reunen en una casilla
+- Enroque cuantico con entrelazamiento
+- Efecto tunel al atravesar estados cuanticos
+- Medicion probabilistica al capturar entre estados clasicos/cuanticos
+- Ruleta visual de medicion con:
+  - porcentaje vivo/muerto
+  - giro animado
+  - resultado del colapso
+
+#### Casuisticas de captura (cuantico)
+
+- Clasica -> Clasica: captura normal, sin medicion.
+- Clasica -> Cuantica: se mide la pieza objetivo.
+  - Si existe en esa casilla, la captura ocurre.
+  - Si no existe, la captura falla y la pieza objetivo colapsa en su otra posicion.
+- Cuantica -> Clasica: se mide la pieza atacante.
+  - Si existe, captura y colapsa a estado clasico.
+  - Si no existe, la captura falla, pierde turno y colapsa en la otra casilla.
+- Cuantica -> Cuantica:
+  - Primero se mide la atacante.
+  - Si la atacante existe, se mide la objetivo con la misma logica.
+
+## UI / UX
+
+- Frontend React + TypeScript + Vite
+- Animaciones con Framer Motion
+- Sonidos de jugada/captura/jaque/fin
+- Musica ambiente con control de volumen
+- Tema visual oscuro/claro
+- Panel lateral con reglas claras por modo
 
 ## Stack tecnico
 
-- Frontend: `index.html` + `style.css` + `app.js`
-- Reglas de ajedrez en cliente: `chess.js`
-- Backend: `FastAPI` (`server.py`)
-- Motor: `Stockfish` local via `python-chess`
+- Frontend: React 18, TypeScript, Vite, Tailwind CSS, Framer Motion
+- Motor clasico: `chess.js`
+- Backend: FastAPI (`server.py`)
+- IA: Stockfish via `python-chess`
 
-## Estructura
+## Estructura relevante
 
 ```txt
-CHESS-IA/
-|- app.js
-|- index.html
-|- style.css
-|- server.py
-|- requirements.txt
-|- render.yaml
-|- package.json
-|- music/
-|  \- lofi.mp3
-\- engine/
-     \- stockfish/
+frontend/
+  src/
+    components/
+      StartMenu.tsx
+      GameScreen.tsx
+      QuantumGameScreen.tsx
+      QuantumMeasurementRoulette.tsx
+      Board.tsx
+      QuantumBoard.tsx
+    hooks/
+      useChessGame.ts
+      useQuantumChess.ts
+    lib/
+      quantumEngine.ts
+      types.ts
+server.py
 ```
 
-## Requisitos
+## Instalacion
 
-- Python 3.10 o superior
-- Pip actualizado
-- Binario de Stockfish disponible (en `engine/` o instalado en el sistema)
+### Requisitos
 
-## Instalacion local
+- Python 3.10+
+- Node.js 18+
+- Stockfish (en PATH o dentro de `engine/`)
 
-1. Crear y activar entorno virtual.
+### Backend
 
 ```bash
 python -m venv .venv
-
 # Windows
 .venv\Scripts\activate
-
-# Linux / macOS
-source .venv/bin/activate
-```
-
-2. Instalar dependencias.
-
-```bash
 pip install -r requirements.txt
-```
-
-3. Asegurar Stockfish.
-
-- Opcion A: tener `stockfish` instalado en el sistema (PATH).
-- Opcion B: colocar el ejecutable dentro de `engine/`.
-
-Ejemplo en Windows:
-
-```txt
-engine/
-\- stockfish/
-     \- stockfish-windows-x86-64-avx2.exe
-```
-
-## Ejecutar en local
-
-```bash
 python server.py
 ```
 
-Luego abrir:
+### Frontend (build)
 
-```txt
-http://localhost:3000
+```bash
+cd frontend
+npm install
+npm run build
 ```
 
-## API
+La app se sirve en `http://localhost:3000` desde FastAPI (usando `frontend/dist` si existe).
+
+## API disponible
 
 - `GET /api/health`
-    Verifica que el backend esta vivo y que Stockfish se detecto.
-
 - `POST /api/move`
-    Pide la mejor jugada para una posicion.
-
-    Body:
-
-```json
-{
-    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-    "difficulty": "medium"
-}
-```
-
-    Respuesta:
-
-```json
-{
-    "bestmove": "e2e4",
-    "evaluation": 22,
-    "mate": null,
-    "ponder": "c7c5"
-}
-```
-
 - `POST /api/eval`
-    Evalua posicion sin forzar jugada.
+- `POST /api/quantum/move` (mantenido para analisis multiverso, aunque el modo cuantico actual esta orientado a 2 jugadores)
 
-## Dificultades
+## Nombre del proyecto
 
-| Nivel | Skill | Depth | Time (s) | ELO aprox |
-|---|---:|---:|---:|---:|
-| beginner | 0 | 1 | 0.05 | 800 |
-| easy | 5 | 5 | 0.15 | 1200 |
-| medium | 10 | 10 | 0.3 | 1600 |
-| hard | 15 | 14 | 0.6 | 2000 |
-| master | 20 | 20 | 1.0 | 2600 |
+- Nombre publico: `Gambito de Dama Cuantico`
+- Servicio Render sugerido: `gambito-dama-cuantico`
 
-## Publicar gratis para compartirla con cualquiera
+## Renombrar en GitHub y Render (gratis)
 
-La forma mas simple para que cualquier persona entre por URL es desplegar en Render.
+### 1) Renombrar repositorio en GitHub
 
-### Opcion recomendada: Render (gratis)
-
-1. Subir el proyecto a GitHub.
-2. Crear cuenta en Render: `https://render.com`.
-3. En Render, crear un nuevo servicio desde el repositorio.
-4. Detectara `render.yaml` automaticamente.
-5. Esperar build y deploy.
-6. Compartir la URL publica de Render (ejemplo: `https://chess-ia.onrender.com`).
-
-Notas importantes:
-- Plan gratis puede "dormir" la app tras inactividad; el primer acceso tarda unos segundos.
-- `server.py` ya soporta puerto dinamico con variable `PORT` (requerido en cloud).
-- Este proyecto compila Stockfish desde `engine/stockfish/src` durante el build (no requiere `apt-get`).
-
-### Configuracion manual en Render (si no usa `render.yaml`)
-
-- Environment: `Python`
-- Build Command:
+1. Entra al repo en GitHub.
+2. Ve a `Settings`.
+3. En `Repository name`, cambia a `gambito-dama-cuantico`.
+4. Guarda con `Rename`.
+5. En local, actualiza el remoto:
 
 ```bash
-set -e ; pip install -r requirements.txt ; cd engine/stockfish/src ; make -j2 build ARCH=x86-64
+git remote -v
+git remote set-url origin https://github.com/TU_USUARIO/gambito-dama-cuantico.git
+git remote -v
 ```
 
-- Start Command:
+### 2) Confirmar branding en codigo
 
-```bash
-python server.py
-```
+1. `frontend/index.html` -> titulo `Gambito de Dama Cuantico`.
+2. `frontend/src/components/StartMenu.tsx` -> encabezado principal actualizado.
+3. `server.py` -> titulo FastAPI actualizado.
+4. `render.yaml` -> nombre del servicio `gambito-dama-cuantico`.
 
-## Calidad y mantenimiento
+### 3) Actualizar Render (plan Free)
 
-- El codigo de frontend y backend esta comentado por secciones para que sea facil de mantener.
-- El backend reutiliza una sola instancia de Stockfish para mejor rendimiento.
-- Se protege el acceso a `engine/` desde el router estatico.
+Opcion A (sin crear servicio nuevo):
 
-## Solucion de problemas
+1. Abre tu servicio en Render.
+2. Ve a `Settings` -> `Name`.
+3. Cambia el nombre (si esta disponible) y guarda.
+4. En `Build & Deploy`, verifica que el repo conectado sea el renombrado.
+5. Dispara `Manual Deploy` o haz `git push` a `main`.
 
-- Error `Stockfish binary not found`:
-    Instala Stockfish en sistema o coloca ejecutable en `engine/`.
+Opcion B (si Render no deja renombrar):
 
-- Error `PermissionError: [Errno 13] Permission denied` al iniciar motor:
-    Suele ocurrir cuando se detecta un archivo llamado "stockfish" que no es ejecutable.
-    Verifica que exista binario real en `engine/stockfish/src/stockfish` (Linux) o `.exe` (Windows).
+1. Crea un servicio nuevo `Web Service` en Free.
+2. Conecta el repo renombrado.
+3. Usa la configuracion del `render.yaml` del proyecto.
+4. Deploy y valida `health`.
+5. Elimina o suspende el servicio anterior para quedarte en gratis.
 
-- El boton `Jugar` queda deshabilitado:
-    Revisa que `python server.py` este en ejecucion y que `GET /api/health` responda `ok`.
+### 4) No pagar en Render
 
-- En movil no arrastra piezas:
-    La app soporta touch; prueba tap en origen y destino si el gesto no se reconoce.
+1. Usa `plan: free` (ya esta en `render.yaml`).
+2. Mantente con un solo servicio activo si no necesitas multiples.
+3. Evita disco persistente de pago.
+4. Si quieres dominio custom, usa subdominio gratis de Render.
+
+## Notas de uso
+
+- En modo clasico 2 jugadores y en modo cuantico no hace falta motor IA para jugar.
+- Si quieres usar modo clasico vs IA, asegurate de que Stockfish este detectado.
 
 ## Licencia
 

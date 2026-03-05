@@ -226,3 +226,81 @@ body {
 .btn-shine:hover::after {
   transform: rotate(25deg) translateX(120%);
 }
+
+/* ═══════════════════════════════════════════════════ */
+/*  Estilos del modo Ajedrez Cuántico                 */
+/* ═══════════════════════════════════════════════════ */
+
+/* Fondo radial cuántico (violeta) */
+.bg-radial-quantum {
+  background: radial-gradient(ellipse at 50% 30%, rgba(139, 92, 246, 0.12) 0%, transparent 70%);
+}
+
+.theme-light .bg-radial-quantum {
+  background: radial-gradient(ellipse at 50% 30%, rgba(124, 58, 237, 0.14) 0%, transparent 72%);
+}
+
+/* Casilla seleccionada en modo cuántico */
+.sq-quantum-selected {
+  box-shadow: inset 0 0 0 3px rgba(139, 92, 246, 0.8);
+  background-color: rgba(139, 92, 246, 0.3) !important;
+}
+
+/* Primer destino cuántico seleccionado */
+.sq-quantum-first {
+  box-shadow: inset 0 0 0 3px rgba(168, 85, 247, 0.9);
+  background-color: rgba(168, 85, 247, 0.35) !important;
+  animation: quantum-pulse 1.5s ease-in-out infinite;
+}
+
+/* Indicador de movimiento cuántico (split) */
+.quantum-dot {
+  width: 28%;
+  height: 28%;
+  background: rgba(168, 85, 247, 0.7);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.5);
+}
+
+/* Indicador de fusión */
+.merge-dot {
+  width: 28%;
+  height: 28%;
+  background: rgba(6, 182, 212, 0.7);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+}
+
+/* Glow en piezas cuánticas (probabilidad < 100%) */
+.quantum-piece-glow {
+  animation: quantum-glow 2s ease-in-out infinite;
+  filter:
+    drop-shadow(0 0 4px rgba(168, 85, 247, 0.4))
+    drop-shadow(0 0 8px rgba(168, 85, 247, 0.2));
+}
+
+/* Badge de probabilidad */
+.quantum-prob-badge {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  font-size: 8px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.75);
+  color: #c084fc;
+  padding: 0px 3px;
+  border-radius: 4px;
+  line-height: 1.4;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
+@keyframes quantum-glow {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.3)) drop-shadow(0 0 6px rgba(168, 85, 247, 0.1)); }
+  50%      { filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.6)) drop-shadow(0 0 16px rgba(168, 85, 247, 0.3)); }
+}
+
+@keyframes quantum-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 3px rgba(168, 85, 247, 0.9); }
+  50%      { box-shadow: inset 0 0 0 3px rgba(168, 85, 247, 0.4), 0 0 12px rgba(168, 85, 247, 0.3); }
+}

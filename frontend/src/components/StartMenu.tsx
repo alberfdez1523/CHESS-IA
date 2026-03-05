@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DIFFICULTIES, TIMER_OPTIONS } from '../lib/constants'
 import { checkHealth } from '../lib/api'
-import type { GameConfig, PieceColor, Difficulty, PlayerColorChoice } from '../lib/types'
+import type { GameConfig, GameMode, OpponentMode, PieceColor, Difficulty, PlayerColorChoice } from '../lib/types'
 
 interface StartMenuProps {
   onPlay: (config: GameConfig) => void
@@ -14,10 +14,14 @@ const FLOATING_PIECES = ['♔', '♕', '♗', '♘', '♙', '♚', '♛', '♝',
 export default function StartMenu({ onPlay }: StartMenuProps) {
   const [color, setColor] = useState<PlayerColorChoice>('w')
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
+  const [opponentMode, setOpponentMode] = useState<OpponentMode>('ai')
   const [useTimer, setUseTimer] = useState(false)
   const [timerMinutes, setTimerMinutes] = useState(10)
+  const [gameMode, setGameMode] = useState<GameMode>('classic')
   const [serverReady, setServerReady] = useState(false)
   const [checking, setChecking] = useState(true)
+  const requiresEngine = gameMode === 'classic' && opponentMode === 'ai'
+  const canPlay = requiresEngine ? serverReady : true
 
   // Verificar estado del servidor
   useEffect(() => {
@@ -36,11 +40,12 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
   }, [])
 
   const handlePlay = useCallback(() => {
-    if (!serverReady) return
+    if (!canPlay) return
     const playerColor: PieceColor =
       color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : color
-    onPlay({ playerColor, difficulty, useTimer, timerMinutes })
-  }, [color, difficulty, useTimer, timerMinutes, serverReady, onPlay])
+    const mode = gameMode === 'quantum' ? 'local' : opponentMode
+    onPlay({ playerColor, difficulty, opponentMode: mode, useTimer, timerMinutes, gameMode })
+  }, [color, difficulty, opponentMode, useTimer, timerMinutes, gameMode, canPlay, onPlay])
 
   return (
     <div className="bg-radial-orange relative flex min-h-screen items-center justify-center overflow-hidden p-4">
@@ -86,9 +91,52 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
         >
           <div className="start-logo mb-2 text-5xl lg:text-7xl">♛</div>
           <h1 className="start-title text-3xl font-extrabold tracking-tight text-white lg:text-5xl">
-            Chess<span className="text-accent">AI</span>
+            Gambito de Dama <span className="text-accent">Cuantico</span>
           </h1>
-          <p className="mt-1 text-sm text-neutral-500 lg:text-base">Juega contra Stockfish</p>
+          <p className="mt-1 text-sm text-neutral-500 lg:text-base">
+            {gameMode === 'quantum' ? 'Modo cuantico local 2 jugadores ⚛' : 'Clasico vs Stockfish o 2 jugadores'}
+          </p>
+        </motion.div>
+
+        {/* Selector de modo de juego */}
+        <motion.div
+          className="mb-6"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+        >
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
+            Modo de juego
+          </label>
+          <div className="flex gap-2">
+            {[
+              { value: 'classic' as GameMode, label: 'Clásico', icon: '♛', desc: 'Ajedrez tradicional' },
+              { value: 'quantum' as GameMode, label: 'Cuántico', icon: '⚛', desc: 'Superposición y medición' },
+            ].map((opt) => (
+              <motion.button
+                key={opt.value}
+                onClick={() => {
+                  setGameMode(opt.value)
+                  if (opt.value === 'quantum') {
+                    setOpponentMode('local')
+                    setColor('w')
+                  }
+                }}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-3 text-sm transition-all duration-200 lg:py-4 lg:text-base
+                  ${gameMode === opt.value
+                    ? opt.value === 'quantum'
+                      ? 'bg-purple-500/15 text-purple-400 ring-1 ring-purple-500/40'
+                      : 'bg-accent/15 text-accent ring-1 ring-accent/40 shadow-glow-sm'
+                    : 'bg-surface-2 text-neutral-400 hover:bg-surface-3 hover:text-neutral-200'
+                  }`}
+              >
+                <span className="text-xl lg:text-2xl">{opt.icon}</span>
+                <span className="text-[10px] font-medium lg:text-xs">{opt.label}</span>
+              </motion.button>
+            ))}
+          </div>
         </motion.div>
 
         {/* Selector de color */}
@@ -125,6 +173,50 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           </div>
         </motion.div>
 
+        {/* Oponente (solo clásico) */}
+        {gameMode === 'classic' ? (
+          <motion.div
+            className="mb-6"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+          >
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
+              Tipo de partida
+            </label>
+            <div className="flex gap-2">
+              {[
+                { value: 'ai' as OpponentMode, label: 'Vs IA', icon: '🤖' },
+                { value: 'local' as OpponentMode, label: '2 jugadores', icon: '👥' },
+              ].map((opt) => (
+                <motion.button
+                  key={opt.value}
+                  onClick={() => setOpponentMode(opt.value)}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-xs transition-all lg:text-sm
+                    ${opponentMode === opt.value
+                      ? 'bg-accent/15 text-accent ring-1 ring-accent/40'
+                      : 'bg-surface-2 text-neutral-400 hover:bg-surface-3 hover:text-neutral-200'
+                    }`}
+                >
+                  <span>{opt.icon}</span>
+                  <span>{opt.label}</span>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            className="mb-6 rounded-lg border border-purple-500/20 bg-purple-500/10 px-3 py-2 text-xs text-purple-300"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+          >
+            ⚛ Modo cuántico: solo 2 jugadores en el mismo tablero.
+          </motion.div>
+        )}
+
         {/* Selector de dificultad */}
         <motion.div
           className="mb-6"
@@ -135,17 +227,25 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
             Dificultad
           </label>
+          {gameMode === 'classic' && opponentMode === 'local' && (
+            <p className="mb-2 text-[11px] text-neutral-500">
+              En 2 jugadores la dificultad no se usa.
+            </p>
+          )}
           <div className="grid grid-cols-5 gap-1.5">
             {DIFFICULTIES.map((d) => (
               <motion.button
                 key={d.key}
                 onClick={() => setDifficulty(d.key)}
+                disabled={!requiresEngine}
                 whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.94 }}
                 className={`flex flex-col items-center gap-1 rounded-lg py-2.5 transition-all duration-200 lg:py-3.5
-                  ${difficulty === d.key
+                  ${difficulty === d.key && requiresEngine
                     ? 'bg-accent/15 text-accent ring-1 ring-accent/40'
-                    : 'bg-surface-2 text-neutral-500 hover:bg-surface-3 hover:text-neutral-300'
+                    : requiresEngine
+                      ? 'bg-surface-2 text-neutral-500 hover:bg-surface-3 hover:text-neutral-300'
+                      : 'cursor-not-allowed bg-surface-2 text-neutral-600'
                   }`}
               >
                 {/* Barras de nivel */}
@@ -229,16 +329,18 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
         >
           <motion.button
             onClick={handlePlay}
-            disabled={!serverReady}
-            whileHover={serverReady ? { scale: 1.02 } : {}}
-            whileTap={serverReady ? { scale: 0.98 } : {}}
+            disabled={!canPlay}
+            whileHover={canPlay ? { scale: 1.02 } : {}}
+            whileTap={canPlay ? { scale: 0.98 } : {}}
             className={`btn-shine w-full rounded-xl py-3.5 text-sm font-bold uppercase tracking-wider transition-all lg:py-4 lg:text-base
-              ${serverReady
+              ${canPlay
                 ? 'bg-accent text-white shadow-glow hover:bg-accent-hover'
                 : 'cursor-wait bg-surface-3 text-neutral-500'
               }`}
           >
-            {serverReady ? '▶  Jugar' : checking ? 'Conectando…' : 'Servidor no disponible'}
+            {canPlay
+              ? gameMode === 'quantum' ? '⚛  Jugar Cuántico' : '▶  Jugar'
+              : checking ? 'Conectando…' : 'Servidor no disponible'}
           </motion.button>
         </motion.div>
 
@@ -255,7 +357,9 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
             }`}
           />
           <span className="text-[10px] text-neutral-600">
-            {serverReady ? 'Stockfish listo' : checking ? 'Buscando servidor…' : 'Sin conexión'}
+            {!requiresEngine
+              ? 'Stockfish opcional en este modo'
+              : serverReady ? 'Stockfish listo' : checking ? 'Buscando servidor…' : 'Sin conexión'}
           </span>
         </motion.div>
       </motion.div>

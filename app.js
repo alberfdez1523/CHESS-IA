@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════
-   ChessAI — v3: Frontend rediseñado con GSAP
-   ═══════════════════════════════════════════════════════ */
+    Gambito de Dama Cuantico — v3: Frontend redisenado con GSAP
+    ═══════════════════════════════════════════════════════ */
 
 const API_BASE = '';  // mismo origen — servido por FastAPI
 

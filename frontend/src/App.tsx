@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import StartMenu from './components/StartMenu'
 import GameScreen from './components/GameScreen'
+import QuantumGameScreen from './components/QuantumGameScreen'
 import type { GameConfig } from './lib/types'
 
 export default function App() {
@@ -56,7 +57,11 @@ export default function App() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <GameScreen config={gameConfig} onNewGame={handleNewGame} />
+            {gameConfig.gameMode === 'quantum' ? (
+              <QuantumGameScreen config={gameConfig} onNewGame={handleNewGame} />
+            ) : (
+              <GameScreen config={gameConfig} onNewGame={handleNewGame} />
+            )}
           </motion.div>
         ) : null}
       </AnimatePresence>
