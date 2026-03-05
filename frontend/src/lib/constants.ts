@@ -24,11 +24,11 @@ export const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8']
 
 // ─── Metadatos de dificultad ───
 export const DIFFICULTIES: DifficultyMeta[] = [
-  { key: 'beginner', label: 'Principiante', elo: '~400', bars: 1 },
-  { key: 'easy', label: 'Fácil', elo: '~800', bars: 2 },
-  { key: 'medium', label: 'Medio', elo: '~1200', bars: 3 },
-  { key: 'hard', label: 'Difícil', elo: '~1800', bars: 4 },
-  { key: 'master', label: 'Maestro', elo: '~2500', bars: 5 },
+  { key: 'beginner', label: 'Principiante', elo: '~800', bars: 1 },
+  { key: 'easy', label: 'Fácil', elo: '~1200', bars: 2 },
+  { key: 'medium', label: 'Medio', elo: '~1600', bars: 3 },
+  { key: 'hard', label: 'Difícil', elo: '~2000', bars: 4 },
+  { key: 'master', label: 'Maestro', elo: '~2600', bars: 5 },
 ]
 
 // ─── Opciones de tiempo para el reloj ───

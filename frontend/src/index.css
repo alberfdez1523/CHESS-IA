@@ -6,13 +6,37 @@
 :root {
   --sq-light: #F0D9B5;
   --sq-dark: #B58863;
-  --sq-selected: rgba(249, 115, 22, 0.45);
-  --sq-last-from: rgba(249, 115, 22, 0.22);
-  --sq-last-to: rgba(249, 115, 22, 0.35);
-  --sq-legal: rgba(249, 115, 22, 0.55);
+  --sq-selected: rgba(224, 90, 19, 0.45);
+  --sq-last-from: rgba(224, 90, 19, 0.22);
+  --sq-last-to: rgba(224, 90, 19, 0.35);
+  --sq-legal: rgba(224, 90, 19, 0.55);
   --sq-check: rgba(239, 68, 68, 0.6);
+
+  --surface-0: #0A0A0A;
+  --surface-1: #111111;
+  --surface-2: #1A1A1A;
+  --surface-3: #222222;
+  --surface-4: #2A2A2A;
+  --text-main: #f5f5f5;
+
   --board-size: min(88vw, 560px);
   --sq-size: calc(var(--board-size) / 8);
+}
+
+/* Tema claro cálido */
+.theme-light {
+  --surface-0: #f5efe5;
+  --surface-1: #efe6d8;
+  --surface-2: #e8dccb;
+  --surface-3: #e1d3bf;
+  --surface-4: #d6c7b1;
+  --text-main: #2f2217;
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --board-size: min(60vw, 760px);
+  }
 }
 
 @media (max-width: 640px) {
@@ -28,6 +52,35 @@
 
 body {
   overflow-x: hidden;
+  color: var(--text-main);
+}
+
+.theme-light body {
+  background: var(--surface-0);
+}
+
+.theme-light .bg-surface-0 { background-color: var(--surface-0) !important; }
+.theme-light .bg-surface-1 { background-color: var(--surface-1) !important; }
+.theme-light .bg-surface-2 { background-color: var(--surface-2) !important; }
+.theme-light .bg-surface-3 { background-color: var(--surface-3) !important; }
+.theme-light .bg-surface-4 { background-color: var(--surface-4) !important; }
+.theme-light .text-white { color: var(--text-main) !important; }
+.theme-light .text-neutral-400 { color: #6c5847 !important; }
+.theme-light .text-neutral-500 { color: #7a6656 !important; }
+.theme-light .text-neutral-600 { color: #8a7463 !important; }
+
+.start-logo {
+  color: #e05a13;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.theme-light .start-title {
+  color: #3f2a18 !important;
+}
+
+.theme-light .start-logo {
+  color: #c84e0b;
+  text-shadow: 0 2px 6px rgba(90, 50, 20, 0.2);
 }
 
 /* ─── Scrollbar personalizada ─── */
@@ -55,7 +108,7 @@ body {
 
 /* Resaltes */
 .sq-selected {
-  box-shadow: inset 0 0 0 3px rgba(249, 115, 22, 0.8);
+  box-shadow: inset 0 0 0 3px rgba(224, 90, 19, 0.8);
   background-color: var(--sq-selected) !important;
 }
 .sq-last-from {
@@ -72,10 +125,20 @@ body {
 .chess-piece {
   font-family: 'Noto Sans Symbols 2', 'Segoe UI Symbol', 'Apple Color Emoji', sans-serif;
   font-size: calc(var(--sq-size) * 0.82);
-  line-height: 1;
+  line-height: 0.88;
   user-select: none;
   cursor: grab;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transform-origin: center center;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.2))
+    drop-shadow(0 4px 5px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 10px 14px rgba(0, 0, 0, 0.28));
   transition: transform 0.08s ease;
 }
 .chess-piece:active {
@@ -130,7 +193,11 @@ body {
 
 /* ─── Gradiente de fondo para StartMenu ─── */
 .bg-radial-orange {
-  background: radial-gradient(ellipse at 50% 30%, rgba(249, 115, 22, 0.08) 0%, transparent 70%);
+  background: radial-gradient(ellipse at 50% 30%, rgba(224, 90, 19, 0.12) 0%, transparent 70%);
+}
+
+.theme-light .bg-radial-orange {
+  background: radial-gradient(ellipse at 50% 30%, rgba(200, 78, 11, 0.16) 0%, transparent 72%);
 }
 
 /* ─── Shine en botón de Play ─── */

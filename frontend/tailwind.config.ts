@@ -13,10 +13,10 @@ export default {
           4: '#2A2A2A',
         },
         accent: {
-          DEFAULT: '#F97316',
-          hover: '#EA580C',
-          light: '#FDBA74',
-          muted: '#9A3412',
+          DEFAULT: '#E05A13',
+          hover: '#C84E0B',
+          light: '#F2A15D',
+          muted: '#8C340C',
         },
       },
       fontFamily: {
@@ -24,8 +24,8 @@ export default {
         mono: ['JetBrains Mono', 'monospace'],
       },
       boxShadow: {
-        glow: '0 0 20px -5px rgba(249, 115, 22, 0.4)',
-        'glow-sm': '0 0 10px -3px rgba(249, 115, 22, 0.3)',
+        glow: '0 0 20px -5px rgba(224, 90, 19, 0.45)',
+        'glow-sm': '0 0 10px -3px rgba(224, 90, 19, 0.34)',
       },
     },
   },

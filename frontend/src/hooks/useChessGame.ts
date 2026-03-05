@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { Chess } from 'chess.js'
-import { requestAIMove } from '../lib/api'
+import { requestAIMove, requestEval } from '../lib/api'
 import { PIECE_VALUES, FILES } from '../lib/constants'
 import type {
   GameConfig,
@@ -16,12 +16,18 @@ import type {
 
 function evalToChances(ev: number | null | undefined): Chances {
   if (ev === null || ev === undefined) return { white: 33, draw: 34, black: 33 }
-  const w = 1 / (1 + Math.exp(-ev * 0.4))
-  const drawRaw = Math.max(0, 1 - 2 * Math.abs(w - 0.5) - 0.1)
-  const bRaw = 1 - w
-  const total = w + drawRaw + bRaw
-  const white = Math.round((w / total) * 100)
-  const black = Math.round((bRaw / total) * 100)
+
+  // Modelo aproximado: score esperado Elo + probabilidad de tablas decreciente
+  // al aumentar la ventaja en centipeones.
+  const cp = Math.max(-1200, Math.min(1200, ev))
+  const expectedScoreWhite = 1 / (1 + Math.pow(10, -cp / 280))
+  const drawProb = Math.max(0.06, 0.44 * Math.exp(-Math.abs(cp) / 240))
+  const whiteRaw = Math.max(0, expectedScoreWhite - drawProb / 2)
+  const blackRaw = Math.max(0, 1 - expectedScoreWhite - drawProb / 2)
+
+  const total = whiteRaw + drawProb + blackRaw
+  const white = Math.round((whiteRaw / total) * 100)
+  const black = Math.round((blackRaw / total) * 100)
   const draw = 100 - white - black
   return { white, draw, black }
 }
@@ -237,6 +243,30 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fen, gameOverInfo])
+
+  // ─── Evaluación continua de la posición para probabilidades realistas ───
+
+  useEffect(() => {
+    if (isThinkingRef.current) return
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const data = await requestEval(gameRef.current.fen())
+        if (cancelled) return
+
+        const ev = data.mate !== null ? (data.mate > 0 ? 10000 : -10000) : data.evaluation
+        setChances(evalToChances(ev))
+      } catch {
+        // Si falla eval puntual, mantenemos el último valor visible.
+      }
+    }, 160)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [fen])
 
   // ─── Atajo de teclado (Ctrl+Z = deshacer) ───
 

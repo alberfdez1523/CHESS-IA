@@ -72,7 +72,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
 
       {/* Tarjeta principal */}
       <motion.div
-        className="relative z-10 w-full max-w-sm rounded-2xl border border-white/[0.06] bg-surface-1/90 p-8 shadow-2xl backdrop-blur-xl"
+        className="relative z-10 w-full max-w-sm rounded-2xl border border-white/[0.06] bg-surface-1/90 p-8 shadow-2xl backdrop-blur-xl lg:max-w-2xl lg:p-14"
         initial={{ opacity: 0, y: 40, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
@@ -84,11 +84,11 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
         >
-          <div className="mb-2 text-5xl">♛</div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">
+          <div className="start-logo mb-2 text-5xl lg:text-7xl">♛</div>
+          <h1 className="start-title text-3xl font-extrabold tracking-tight text-white lg:text-5xl">
             Chess<span className="text-accent">AI</span>
           </h1>
-          <p className="mt-1 text-xs text-neutral-500">Juega contra Stockfish</p>
+          <p className="mt-1 text-sm text-neutral-500 lg:text-base">Juega contra Stockfish</p>
         </motion.div>
 
         {/* Selector de color */}
@@ -98,7 +98,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-neutral-500">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
             Tu color
           </label>
           <div className="flex gap-2">
@@ -112,14 +112,14 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
                 onClick={() => setColor(opt.value)}
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.96 }}
-                className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-3 text-sm transition-all duration-200
+                className={`flex flex-1 flex-col items-center gap-1 rounded-xl py-3 text-sm transition-all duration-200 lg:py-4 lg:text-base
                   ${color === opt.value
                     ? 'bg-accent/15 text-accent ring-1 ring-accent/40 shadow-glow-sm'
                     : 'bg-surface-2 text-neutral-400 hover:bg-surface-3 hover:text-neutral-200'
                   }`}
               >
-                <span className="text-xl">{opt.icon}</span>
-                <span className="text-[10px] font-medium">{opt.label}</span>
+                <span className="text-xl lg:text-2xl">{opt.icon}</span>
+                <span className="text-[10px] font-medium lg:text-xs">{opt.label}</span>
               </motion.button>
             ))}
           </div>
@@ -132,7 +132,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <label className="mb-2 block text-[10px] font-semibold uppercase tracking-widest text-neutral-500">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
             Dificultad
           </label>
           <div className="grid grid-cols-5 gap-1.5">
@@ -142,7 +142,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
                 onClick={() => setDifficulty(d.key)}
                 whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.94 }}
-                className={`flex flex-col items-center gap-1 rounded-lg py-2.5 transition-all duration-200
+                className={`flex flex-col items-center gap-1 rounded-lg py-2.5 transition-all duration-200 lg:py-3.5
                   ${difficulty === d.key
                     ? 'bg-accent/15 text-accent ring-1 ring-accent/40'
                     : 'bg-surface-2 text-neutral-500 hover:bg-surface-3 hover:text-neutral-300'
@@ -162,7 +162,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
                     />
                   ))}
                 </div>
-                <span className="text-[9px] font-medium leading-tight">{d.label}</span>
+                <span className="text-[9px] font-medium leading-tight lg:text-[11px]">{d.label}</span>
               </motion.button>
             ))}
           </div>
@@ -176,7 +176,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           transition={{ delay: 0.5 }}
         >
           <div className="flex items-center justify-between">
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">
+            <label className="text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
               Reloj
             </label>
             <button
@@ -232,7 +232,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
             disabled={!serverReady}
             whileHover={serverReady ? { scale: 1.02 } : {}}
             whileTap={serverReady ? { scale: 0.98 } : {}}
-            className={`btn-shine w-full rounded-xl py-3.5 text-sm font-bold uppercase tracking-wider transition-all
+            className={`btn-shine w-full rounded-xl py-3.5 text-sm font-bold uppercase tracking-wider transition-all lg:py-4 lg:text-base
               ${serverReady
                 ? 'bg-accent text-white shadow-glow hover:bg-accent-hover'
                 : 'cursor-wait bg-surface-3 text-neutral-500'

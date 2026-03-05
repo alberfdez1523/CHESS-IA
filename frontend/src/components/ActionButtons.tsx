@@ -12,7 +12,7 @@ export default function ActionButtons({ onUndo, onFlip, onResign, canUndo, gameO
   const buttons = [
     { icon: '↩', label: 'Deshacer', action: onUndo, disabled: !canUndo || gameOver },
     { icon: '⇅', label: 'Girar', action: onFlip, disabled: false },
-    { icon: '⚑', label: 'Resignar', action: onResign, disabled: gameOver },
+    { icon: '⚑', label: 'Rendirse', action: onResign, disabled: gameOver },
   ]
 
   return (

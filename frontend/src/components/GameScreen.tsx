@@ -11,7 +11,7 @@ import GameOverModal from './GameOverModal'
 import { useChessGame } from '../hooks/useChessGame'
 import { useSoundFX } from '../hooks/useSoundFX'
 import { useAmbientMusic } from '../hooks/useAmbientMusic'
-import { useTimer, formatTime } from '../hooks/useTimer'
+import { useTimer } from '../hooks/useTimer'
 import { DIFFICULTIES } from '../lib/constants'
 import type { GameConfig } from '../lib/types'
 
@@ -81,7 +81,7 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
   }, [bottomColor, config, diffMeta, game, timer])
 
   return (
-    <div className="flex min-h-screen flex-col bg-surface-0">
+    <div className="bg-radial-orange flex min-h-screen flex-col bg-surface-0">
       {/* Header */}
       <motion.header
         className="flex items-center justify-between border-b border-white/[0.04] px-4 py-3"
@@ -102,7 +102,7 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
           onClick={onNewGame}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-neutral-400
+          className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-neutral-400 lg:px-5 lg:py-2.5 lg:text-sm
             transition-colors hover:bg-surface-3 hover:text-white"
         >
           ← Menú
@@ -110,10 +110,10 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
       </motion.header>
 
       {/* Contenido principal */}
-      <div className="flex flex-1 items-start justify-center gap-6 px-4 py-4 lg:py-8">
+      <div className="flex flex-1 items-start justify-center gap-6 px-4 py-4 pb-2 lg:gap-8 lg:py-8">
         {/* Columna del tablero */}
         <motion.div
-          className="flex flex-col gap-2"
+          className="flex flex-col gap-2 lg:gap-3"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, delay: 0.1 }}
@@ -177,11 +177,23 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
             />
             <span className="text-xs text-neutral-500">{game.status.text}</span>
           </motion.div>
+
+          {/* Panel móvil: evaluación + historial */}
+          <motion.div
+            className="mt-1 flex w-full flex-col gap-2 lg:hidden"
+            style={{ width: 'var(--board-size)' }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+          >
+            <EvalBar chances={game.chances} playerColor={config.playerColor} />
+            <MoveHistory history={game.history} />
+          </motion.div>
         </motion.div>
 
         {/* Panel lateral (solo desktop) */}
         <motion.div
-          className="hidden w-64 flex-col gap-3 lg:flex"
+          className="hidden w-80 flex-col gap-4 xl:w-96 lg:flex"
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
@@ -206,7 +218,7 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
 
       {/* Acciones rápidas móvil (solo sm) */}
       <motion.div
-        className="flex items-center gap-2 border-t border-white/[0.04] px-4 py-2 lg:hidden"
+        className="mx-3 mb-3 mt-2 flex items-center gap-2 rounded-xl border border-white/[0.06] bg-surface-1/80 px-3 py-2 backdrop-blur-sm lg:hidden"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}

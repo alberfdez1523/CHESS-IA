@@ -20,13 +20,10 @@ export default function Piece({ type, color, draggable, onDragStart, animate = t
       draggable={draggable}
       onDragStart={(e) => {
         if (onDragStart) onDragStart()
-        const dt = (e as unknown as React.DragEvent).dataTransfer
+        const dt = (e as unknown as DragEvent).dataTransfer
         if (dt) {
           dt.effectAllowed = 'move'
-          // Imagen de arrastre transparente
-          const img = new Image()
-          img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-          dt.setDragImage(img, 0, 0)
+          dt.setData('text/plain', `${color}${type}`)
         }
       }}
       initial={animate ? { scale: 0.6, opacity: 0 } : false}
