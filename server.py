@@ -10,7 +10,7 @@ Ejecución local:
     python server.py
 """
 
-import os, pathlib, json
+import os, pathlib, json, sys
 from contextlib import asynccontextmanager
 
 import chess
@@ -78,8 +78,9 @@ def find_stockfish():
 
 STOCKFISH_PATH = find_stockfish()
 if STOCKFISH_PATH is None:
-    print("WARN: Stockfish binary not found. Running in no-engine mode.")
-    print("      Classic vs AI and /api/move endpoints will return 503 until Stockfish is available.")
+    print("ERROR: Stockfish binary not found.")
+    print("       Compile it first:  cd engine/stockfish/src && make -j2 build ARCH=x86-64")
+    sys.exit(1)
 else:
     print(f"✓ Stockfish: {STOCKFISH_PATH}")
 
@@ -106,24 +107,14 @@ engine: chess.engine.SimpleEngine | None = None
 async def lifespan(app: FastAPI):
     """Ciclo de vida de FastAPI: arranque y apagado limpio del motor."""
     global engine
-    if STOCKFISH_PATH is None:
-        print("Starting API without Stockfish engine …")
-        engine = None
-    else:
-        print("Starting Stockfish engine …")
-        try:
-            engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
-            # Ajustes conservadores para equipos normales.
-            engine.configure({"Threads": 2, "Hash": 128})
-            print("✓ Engine ready")
-        except Exception as exc:
-            # No derribar el servicio completo si el motor falla en runtime.
-            engine = None
-            print(f"WARN: Could not start Stockfish engine: {exc}")
+    print("Starting Stockfish engine …")
+    engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+    # Ajustes conservadores para equipos normales.
+    engine.configure({"Threads": 2, "Hash": 128})
+    print("✓ Engine ready")
     yield
-    if engine is not None:
-        print("Shutting down engine …")
-        engine.quit()
+    print("Shutting down engine …")
+    engine.quit()
 
 
 app = FastAPI(title="Gambito de Dama Cuantico", lifespan=lifespan)
