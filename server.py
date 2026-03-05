@@ -10,7 +10,7 @@ Ejecución local:
     python server.py
 """
 
-import os, sys, pathlib, json
+import os, pathlib, json
 from contextlib import asynccontextmanager
 
 import chess
@@ -78,10 +78,10 @@ def find_stockfish():
 
 STOCKFISH_PATH = find_stockfish()
 if STOCKFISH_PATH is None:
-    print("ERROR: Stockfish binary not found.  Place it inside  engine/  folder.")
-    sys.exit(1)
-
-print(f"✓ Stockfish: {STOCKFISH_PATH}")
+    print("WARN: Stockfish binary not found. Running in no-engine mode.")
+    print("      Classic vs AI and /api/move endpoints will return 503 until Stockfish is available.")
+else:
+    print(f"✓ Stockfish: {STOCKFISH_PATH}")
 
 # ---------------------------------------------------------------------------
 # Presets de dificultad
@@ -106,14 +106,24 @@ engine: chess.engine.SimpleEngine | None = None
 async def lifespan(app: FastAPI):
     """Ciclo de vida de FastAPI: arranque y apagado limpio del motor."""
     global engine
-    print("Starting Stockfish engine …")
-    engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
-    # Ajustes conservadores para equipos normales.
-    engine.configure({"Threads": 2, "Hash": 128})
-    print("✓ Engine ready")
+    if STOCKFISH_PATH is None:
+        print("Starting API without Stockfish engine …")
+        engine = None
+    else:
+        print("Starting Stockfish engine …")
+        try:
+            engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+            # Ajustes conservadores para equipos normales.
+            engine.configure({"Threads": 2, "Hash": 128})
+            print("✓ Engine ready")
+        except Exception as exc:
+            # No derribar el servicio completo si el motor falla en runtime.
+            engine = None
+            print(f"WARN: Could not start Stockfish engine: {exc}")
     yield
-    print("Shutting down engine …")
-    engine.quit()
+    if engine is not None:
+        print("Shutting down engine …")
+        engine.quit()
 
 
 app = FastAPI(title="Gambito de Dama Cuantico", lifespan=lifespan)
