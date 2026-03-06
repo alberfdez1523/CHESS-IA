@@ -2,8 +2,10 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { Chess } from 'chess.js'
 import { requestAIMove, requestEval } from '../lib/api'
 import { PIECE_VALUES, FILES } from '../lib/constants'
+import { getColorName, getPieceName, translateGameOverInfo } from '../lib/i18n'
 import type {
   GameConfig,
+  Language,
   PieceColor,
   PieceType,
   Chances,
@@ -32,18 +34,24 @@ function evalToChances(ev: number | null | undefined): Chances {
   return { white, draw, black }
 }
 
-const PIECE_LABEL: Record<string, string> = {
-  p: 'Peón', n: 'Caballo', b: 'Alfil', r: 'Torre', q: 'Dama', k: 'Rey',
-}
-
 function describeMove(m: {
   piece: string; to: string; flags: string; captured?: string; promotion?: string
-}): string {
-  if (m.flags.includes('k')) return 'Enroque corto'
-  if (m.flags.includes('q')) return 'Enroque largo'
-  if (m.promotion) return `Promoción a ${PIECE_LABEL[m.promotion] || ''}`
-  if (m.captured) return `${PIECE_LABEL[m.piece] || ''} captura en ${m.to}`
-  return `${PIECE_LABEL[m.piece] || ''} a ${m.to}`
+}, language: Language): string {
+  if (m.flags.includes('k')) return language === 'es' ? 'Enroque corto' : 'Kingside castling'
+  if (m.flags.includes('q')) return language === 'es' ? 'Enroque largo' : 'Queenside castling'
+  if (m.promotion) {
+    return language === 'es'
+      ? `Promoción a ${getPieceName(m.promotion as PieceType, language)}`
+      : `Promotion to ${getPieceName(m.promotion as PieceType, language)}`
+  }
+  if (m.captured) {
+    return language === 'es'
+      ? `${getPieceName(m.piece as PieceType, language)} captura en ${m.to}`
+      : `${getPieceName(m.piece as PieceType, language)} captures on ${m.to}`
+  }
+  return language === 'es'
+    ? `${getPieceName(m.piece as PieceType, language)} a ${m.to}`
+    : `${getPieceName(m.piece as PieceType, language)} to ${m.to}`
 }
 
 function needsPromotion(game: InstanceType<typeof Chess>, from: string, to: string): boolean {
@@ -57,24 +65,25 @@ function detectGameEnd(
   game: InstanceType<typeof Chess>,
   playerColor: PieceColor,
   isAIMode: boolean,
+  language: Language,
 ): GameOverInfo | null {
   if (!game.game_over()) return null
   if (game.in_checkmate()) {
     const loserTurn = game.turn()
     if (!isAIMode) {
       return loserTurn === 'w'
-        ? { title: 'Jaque mate', message: 'Ganan negras', result: 'lose' }
-        : { title: 'Jaque mate', message: 'Ganan blancas', result: 'win' }
+        ? { title: language === 'es' ? 'Jaque mate' : 'Checkmate', message: language === 'es' ? 'Ganan negras' : 'Black wins', result: 'lose' }
+        : { title: language === 'es' ? 'Jaque mate' : 'Checkmate', message: language === 'es' ? 'Ganan blancas' : 'White wins', result: 'win' }
     }
     return loserTurn === playerColor
-      ? { title: 'Derrota', message: 'La IA te ha dado jaque mate', result: 'lose' }
-      : { title: '¡Victoria!', message: 'Has ganado por jaque mate', result: 'win' }
+      ? { title: language === 'es' ? 'Derrota' : 'Defeat', message: language === 'es' ? 'La IA te ha dado jaque mate' : 'The AI checkmated you', result: 'lose' }
+      : { title: language === 'es' ? '¡Victoria!' : 'Victory!', message: language === 'es' ? 'Has ganado por jaque mate' : 'You won by checkmate', result: 'win' }
   }
-  if (game.in_stalemate()) return { title: 'Tablas', message: 'Rey ahogado', result: 'draw' }
-  if (game.in_threefold_repetition()) return { title: 'Tablas', message: 'Triple repetición', result: 'draw' }
-  if (game.insufficient_material()) return { title: 'Tablas', message: 'Material insuficiente', result: 'draw' }
-  if (game.in_draw()) return { title: 'Tablas', message: 'Empate técnico', result: 'draw' }
-  return { title: 'Fin', message: 'Partida terminada', result: 'draw' }
+  if (game.in_stalemate()) return { title: language === 'es' ? 'Tablas' : 'Draw', message: language === 'es' ? 'Rey ahogado' : 'Stalemate', result: 'draw' }
+  if (game.in_threefold_repetition()) return { title: language === 'es' ? 'Tablas' : 'Draw', message: language === 'es' ? 'Triple repetición' : 'Threefold repetition', result: 'draw' }
+  if (game.insufficient_material()) return { title: language === 'es' ? 'Tablas' : 'Draw', message: language === 'es' ? 'Material insuficiente' : 'Insufficient material', result: 'draw' }
+  if (game.in_draw()) return { title: language === 'es' ? 'Tablas' : 'Draw', message: language === 'es' ? 'Empate técnico' : 'Draw', result: 'draw' }
+  return { title: language === 'es' ? 'Fin' : 'Game Over', message: language === 'es' ? 'Partida terminada' : 'Game finished', result: 'draw' }
 }
 
 // ─── Sonidos ───
@@ -87,7 +96,7 @@ export interface GameSounds {
 
 // ─── Hook principal ───
 
-export function useChessGame(config: GameConfig, sounds: GameSounds) {
+export function useChessGame(config: GameConfig, sounds: GameSounds, language: Language) {
   const gameRef = useRef(new Chess())
   const isThinkingRef = useRef(false)
 
@@ -115,8 +124,8 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
 
   const history: MoveInfo[] = useMemo(() => {
     const moves = gameRef.current.history({ verbose: true }) as any[]
-    return moves.map((m: any) => ({ ...m, description: describeMove(m) }))
-  }, [fen])
+    return moves.map((m: any) => ({ ...m, description: describeMove(m, language) }))
+  }, [fen, language])
 
   const captures: CapturedPieces = useMemo(() => {
     const player: PieceType[] = []
@@ -158,14 +167,14 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
   }, [fen])
 
   const status = useMemo(() => {
-    if (gameOverInfo) return { text: gameOverInfo.title, type: 'over' as const }
+    if (gameOverInfo) return { text: translateGameOverInfo(gameOverInfo, language).title, type: 'over' as const }
     if (isAIMode) {
-      if (isThinking) return { text: 'La IA está pensando...', type: 'thinking' as const }
-      if (turn === config.playerColor) return { text: 'Tu turno', type: 'player' as const }
-      return { text: 'Turno de la IA', type: 'ai' as const }
+      if (isThinking) return { text: language === 'es' ? 'La IA está pensando...' : 'The AI is thinking...', type: 'thinking' as const }
+      if (turn === config.playerColor) return { text: language === 'es' ? 'Tu turno' : 'Your turn', type: 'player' as const }
+      return { text: language === 'es' ? 'Turno de la IA' : 'AI turn', type: 'ai' as const }
     }
-    return { text: turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras', type: 'player' as const }
-  }, [gameOverInfo, isThinking, turn, config.playerColor, isAIMode])
+    return { text: language === 'es' ? `Turno: ${getColorName(turn, language)}` : `${getColorName(turn, language)} to move`, type: 'player' as const }
+  }, [gameOverInfo, isThinking, turn, config.playerColor, isAIMode, language])
 
   // ─── Obtener pieza en casilla ───
 
@@ -191,7 +200,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
       setLastMove({ from, to })
       setFen(game.fen())
 
-      const endInfo = detectGameEnd(game, config.playerColor, isAIMode)
+      const endInfo = detectGameEnd(game, config.playerColor, isAIMode, language)
       if (endInfo) {
         sounds.playGameEnd()
         setGameOverInfo(endInfo)
@@ -200,7 +209,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
       return true
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [config.playerColor, sounds, isAIMode]
+    [config.playerColor, sounds, isAIMode, language]
   )
 
   // ─── Turno de la IA (efecto) ───
@@ -238,7 +247,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
 
         if (game.in_check()) setTimeout(() => sounds.playCheck(), 80)
 
-        const endInfo = detectGameEnd(game, config.playerColor, isAIMode)
+        const endInfo = detectGameEnd(game, config.playerColor, isAIMode, language)
         if (endInfo) {
           sounds.playGameEnd()
           setGameOverInfo(endInfo)
@@ -253,7 +262,7 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
 
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fen, gameOverInfo, isAIMode])
+  }, [fen, gameOverInfo, isAIMode, language])
 
   // ─── Evaluación continua de la posición para probabilidades realistas ───
 
@@ -390,8 +399,12 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
   const resign = useCallback(() => {
     if (gameOverInfo) return
     sounds.playGameEnd()
-    setGameOverInfo({ title: 'Resignación', message: 'Has abandonado la partida', result: 'lose' })
-  }, [gameOverInfo, sounds])
+    setGameOverInfo({
+      title: language === 'es' ? 'Resignación' : 'Resignation',
+      message: language === 'es' ? 'Has abandonado la partida' : 'You resigned the game',
+      result: 'lose',
+    })
+  }, [gameOverInfo, sounds, language])
 
   const handleTimedOut = useCallback(
     (color: PieceColor) => {
@@ -400,14 +413,14 @@ export function useChessGame(config: GameConfig, sounds: GameSounds) {
       setGameOverInfo(
         isAIMode
           ? color === config.playerColor
-            ? { title: '¡Tiempo agotado!', message: 'Se te acabó el tiempo', result: 'lose' }
-            : { title: '¡Victoria!', message: 'La IA se quedó sin tiempo', result: 'win' }
+            ? { title: language === 'es' ? '¡Tiempo agotado!' : 'Time Out!', message: language === 'es' ? 'Se te acabó el tiempo' : 'You ran out of time', result: 'lose' }
+            : { title: language === 'es' ? '¡Victoria!' : 'Victory!', message: language === 'es' ? 'La IA se quedó sin tiempo' : 'The AI ran out of time', result: 'win' }
           : color === 'w'
-            ? { title: 'Tiempo agotado', message: 'Ganan negras por tiempo', result: 'lose' }
-            : { title: 'Tiempo agotado', message: 'Ganan blancas por tiempo', result: 'win' }
+            ? { title: language === 'es' ? 'Tiempo agotado' : 'Time Out', message: language === 'es' ? 'Ganan negras por tiempo' : 'Black wins on time', result: 'lose' }
+            : { title: language === 'es' ? 'Tiempo agotado' : 'Time Out', message: language === 'es' ? 'Ganan blancas por tiempo' : 'White wins on time', result: 'win' }
       )
     },
-    [gameOverInfo, config.playerColor, sounds, isAIMode]
+    [gameOverInfo, config.playerColor, sounds, isAIMode, language]
   )
 
   const dismissGameOver = useCallback(() => setGameOverInfo(null), [])

@@ -42,7 +42,7 @@ export default function PlayerBar({
       {/* Avatar */}
       <div
         className={`flex h-8 w-8 items-center justify-center rounded-full text-sm
-          ${color === 'w' ? 'bg-white text-black' : 'bg-neutral-800 text-white ring-1 ring-neutral-600'}
+          ${color === 'w' ? 'player-avatar player-avatar-white' : 'player-avatar player-avatar-black'}
         `}
       >
         {label === 'Tú' ? '◆' : '⚙'}

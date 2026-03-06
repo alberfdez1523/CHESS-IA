@@ -16,23 +16,19 @@ import { useSoundFX } from '../hooks/useSoundFX'
 import { useAmbientMusic } from '../hooks/useAmbientMusic'
 import { useTimer } from '../hooks/useTimer'
 import { DIFFICULTIES } from '../lib/constants'
-import type { GameConfig, PieceColor, QMoveMode } from '../lib/types'
+import { getPlayerLabel } from '../lib/i18n'
+import type { GameConfig, Language, PieceColor, QMoveMode } from '../lib/types'
 
 interface QuantumGameScreenProps {
   config: GameConfig
   onNewGame: () => void
+  language: Language
 }
 
-const MODE_LABELS: Record<QMoveMode, { icon: string; label: string; color: string }> = {
-  classical: { icon: '♟', label: 'Clásico', color: 'bg-accent/15 text-accent ring-accent/40' },
-  quantum: { icon: '⚛', label: 'Cuántico', color: 'bg-purple-500/15 text-purple-400 ring-purple-500/40' },
-  merge: { icon: '🔗', label: 'Fusión', color: 'bg-cyan-500/15 text-cyan-400 ring-cyan-500/40' },
-}
-
-export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScreenProps) {
+export default function QuantumGameScreen({ config, onNewGame, language }: QuantumGameScreenProps) {
   const sounds = useSoundFX()
   const music = useAmbientMusic()
-  const game = useQuantumChess(config, sounds)
+  const game = useQuantumChess(config, sounds, language)
 
   const timer = useTimer({
     enabled: config.useTimer,
@@ -70,7 +66,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
 
   const topBar = useMemo(() => {
     return {
-      label: topColor === 'w' ? 'Jugador Blancas' : 'Jugador Negras',
+      label: getPlayerLabel(topColor, language),
       elo: '',
       color: topColor,
       isActive: game.turn === topColor && !game.gameOver,
@@ -79,11 +75,11 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
       time: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
       isLow: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
     }
-  }, [topColor, config, game, timer])
+  }, [topColor, config, game, timer, language])
 
   const bottomBar = useMemo(() => {
     return {
-      label: bottomColor === 'w' ? 'Jugador Blancas' : 'Jugador Negras',
+      label: getPlayerLabel(bottomColor, language),
       elo: '',
       color: bottomColor,
       isActive: game.turn === bottomColor && !game.gameOver,
@@ -92,7 +88,43 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
       time: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
       isLow: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
     }
-  }, [bottomColor, config, game, timer])
+  }, [bottomColor, config, game, timer, language])
+
+  const modeLabels: Record<QMoveMode, { icon: string; label: string; color: string; desc: string }> = language === 'es'
+    ? {
+        classical: { icon: '♟', label: 'Clásico', color: 'bg-accent/15 text-accent ring-accent/40', desc: 'Movimiento normal, sin dividir la pieza.' },
+        quantum: { icon: '⚛', label: 'Cuántico', color: 'bg-purple-500/15 text-purple-400 ring-purple-500/40', desc: 'La pieza entra en superposición y se divide en dos destinos.' },
+        merge: { icon: '🔗', label: 'Fusión', color: 'bg-cyan-500/15 text-cyan-400 ring-cyan-500/40', desc: 'Une dos estados de la misma pieza en una sola casilla.' },
+      }
+    : {
+        classical: { icon: '♟', label: 'Classic', color: 'bg-accent/15 text-accent ring-accent/40', desc: 'Normal move without splitting the piece.' },
+        quantum: { icon: '⚛', label: 'Quantum', color: 'bg-purple-500/15 text-purple-400 ring-purple-500/40', desc: 'The piece enters superposition and splits into two targets.' },
+        merge: { icon: '🔗', label: 'Merge', color: 'bg-cyan-500/15 text-cyan-400 ring-cyan-500/40', desc: 'Combines two states of the same piece into one square.' },
+      }
+
+  const text = language === 'es'
+    ? {
+        badge: 'Modo Cuántico · 2 jugadores',
+        menu: '← Menú',
+        moveTypes: 'Tipos de jugada',
+        moveTypesHint: 'Elige cómo actuará la pieza seleccionada.',
+        castle: (side: 'k' | 'q') => `⚛ Enroque ${side === 'k' ? 'corto' : 'largo'} cuántico`,
+        mobileRules: 'Reglas del Modo Cuántico',
+        captureCases: 'Casuísticas de Captura',
+        desktopRules: 'Reglas Ajedrez Cuántico',
+        desktopCaptureCases: 'Casuísticas de captura',
+      }
+    : {
+        badge: 'Quantum Mode · 2 players',
+        menu: '← Menu',
+        moveTypes: 'Move types',
+        moveTypesHint: 'Choose how the selected piece will act.',
+        castle: (side: 'k' | 'q') => `⚛ Quantum ${side === 'k' ? 'kingside' : 'queenside'} castling`,
+        mobileRules: 'Quantum Mode Rules',
+        captureCases: 'Capture cases',
+        desktopRules: 'Quantum Chess Rules',
+        desktopCaptureCases: 'Capture cases',
+      }
 
   const modeButtons: QMoveMode[] = ['classical', 'quantum', 'merge']
 
@@ -111,7 +143,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
             Gambito de Dama <span className="text-purple-400">Cuántico</span>
           </span>
           <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
-            Modo Cuántico · 2 jugadores
+            {text.badge}
           </span>
         </div>
         <motion.button
@@ -121,7 +153,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
           className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-neutral-400 lg:px-5 lg:py-2.5 lg:text-sm
             transition-colors hover:bg-surface-3 hover:text-white"
         >
-          ← Menú
+          {text.menu}
         </motion.button>
       </motion.header>
 
@@ -138,14 +170,14 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
             <div className="mb-3 flex items-center gap-2">
               <span className="text-lg">⚛</span>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-purple-300">Tipos de jugada</p>
-                <p className="text-[11px] text-neutral-500">Elige cómo actuará la pieza seleccionada.</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-purple-300">{text.moveTypes}</p>
+                <p className="text-[11px] text-neutral-500">{text.moveTypesHint}</p>
               </div>
             </div>
 
             <div className="space-y-3">
               {modeButtons.map((mode) => {
-                const info = MODE_LABELS[mode]
+                const info = modeLabels[mode]
                 const active = game.moveMode === mode
                 const enabled = game.availableMoveModes.includes(mode)
                 return (
@@ -170,11 +202,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm font-bold leading-none">{info.label}</div>
-                        <div className="mt-1 text-[11px] leading-tight text-neutral-400">
-                          {mode === 'classical' && 'Movimiento normal, sin dividir la pieza.'}
-                          {mode === 'quantum' && 'La pieza entra en superposición y se divide en dos destinos.'}
-                          {mode === 'merge' && 'Une dos estados de la misma pieza en una sola casilla.'}
-                        </div>
+                        <div className="mt-1 text-[11px] leading-tight text-neutral-400">{info.desc}</div>
                       </div>
                     </div>
                   </motion.button>
@@ -267,7 +295,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
             {!game.gameOver && (
               <div className="flex items-center gap-1 rounded-lg bg-surface-1/70 p-1 ring-1 ring-white/5">
                 {modeButtons.map((mode) => {
-                  const info = MODE_LABELS[mode]
+                  const info = modeLabels[mode]
                   const active = game.moveMode === mode
                   const enabled = game.availableMoveModes.includes(mode)
                   return (
@@ -312,7 +340,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
                   whileTap={{ scale: 0.95 }}
                   className="flex-1 rounded-lg bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-400 ring-1 ring-purple-500/30 transition-colors hover:bg-purple-500/20"
                 >
-                  ⚛ Enroque {side === 'k' ? 'corto' : 'largo'} cuántico
+                  {text.castle(side)}
                 </motion.button>
               ))}
             </motion.div>
@@ -326,34 +354,34 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
           >
-            <EvalBar chances={game.chances} playerColor={config.playerColor} />
+            <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
             <details className="rounded-xl border border-purple-500/20 bg-surface-1/85 px-3 py-2 text-[11px] text-neutral-400">
               <summary className="cursor-pointer text-xs font-semibold text-purple-300">
-                Reglas del Modo Cuántico
+                {text.mobileRules}
               </summary>
               <div className="mt-2 space-y-1">
-                <p>• Movimiento clásico: normal.</p>
-                <p>• Movimiento cuántico: divide una pieza en 2 casillas.</p>
-                <p>• Fusión: reúne las mitades en una casilla.</p>
-                <p>• Enroque cuántico: rey y torre entrelazados.</p>
-                <p>• Efecto túnel: atraviesa estados cuánticos.</p>
+                <p>{language === 'es' ? '• Movimiento clásico: normal.' : '• Classic move: normal.'}</p>
+                <p>{language === 'es' ? '• Movimiento cuántico: divide una pieza en 2 casillas.' : '• Quantum move: splits a piece into 2 squares.'}</p>
+                <p>{language === 'es' ? '• Fusión: reúne las mitades en una casilla.' : '• Merge: reunites both halves into one square.'}</p>
+                <p>{language === 'es' ? '• Enroque cuántico: rey y torre entrelazados.' : '• Quantum castling: king and rook become entangled.'}</p>
+                <p>{language === 'es' ? '• Efecto túnel: atraviesa estados cuánticos.' : '• Tunnel effect: pieces can pass through quantum states.'}</p>
               </div>
             </details>
             <details className="rounded-xl border border-white/10 bg-surface-1/85 px-3 py-2 text-[11px] text-neutral-400">
               <summary className="cursor-pointer text-xs font-semibold text-neutral-300">
-                Casuísticas de Captura
+                {text.captureCases}
               </summary>
               <div className="mt-2 space-y-2">
-                <p>• Clásica {'->'} Clásica: no hay ruleta; la captura ocurre como en ajedrez normal.</p>
-                <p>• Clásica {'->'} Cuántica: se mide la pieza objetivo.</p>
-                <p className="pl-2">Si sale viva, estaba ahí y es capturada. Si sale muerta, no estaba ahí y colapsa en su otra casilla.</p>
-                <p>• Cuántica {'->'} Clásica: se mide la pieza atacante.</p>
-                <p className="pl-2">Si sale viva, la captura continúa. Si sale muerta, la atacante no estaba en esa casilla y la jugada falla.</p>
-                <p>• Cuántica {'->'} Cuántica: primero se mide la atacante; si sobrevive, después se mide la objetivo.</p>
-                <p className="pl-2">La ruleta siempre indica qué pieza se está midiendo y qué pasa si el resultado es vivo o muerto.</p>
+                <p>{language === 'es' ? '• Clásica -> Clásica: no hay ruleta; la captura ocurre como en ajedrez normal.' : '• Classic -> Classic: no roulette; capture works like normal chess.'}</p>
+                <p>{language === 'es' ? '• Clásica -> Cuántica: se mide la pieza objetivo.' : '• Classic -> Quantum: the target piece is measured.'}</p>
+                <p className="pl-2">{language === 'es' ? 'Si sale viva, estaba ahí y es capturada. Si sale muerta, no estaba ahí y colapsa en su otra casilla.' : 'If it is alive, it was there and gets captured. If it is dead, it was not there and collapses to its other square.'}</p>
+                <p>{language === 'es' ? '• Cuántica -> Clásica: se mide la pieza atacante.' : '• Quantum -> Classic: the attacking piece is measured.'}</p>
+                <p className="pl-2">{language === 'es' ? 'Si sale viva, la captura continúa. Si sale muerta, la atacante no estaba en esa casilla y la jugada falla.' : 'If it is alive, the capture continues. If it is dead, the attacker was not on that square and the move fails.'}</p>
+                <p>{language === 'es' ? '• Cuántica -> Cuántica: primero se mide la atacante; si sobrevive, después se mide la objetivo.' : '• Quantum -> Quantum: first measure the attacker; if it survives, then measure the target.'}</p>
+                <p className="pl-2">{language === 'es' ? 'La ruleta siempre indica qué pieza se está midiendo y qué pasa si el resultado es vivo o muerto.' : 'The roulette always shows which piece is being measured and what happens if the result is alive or dead.'}</p>
               </div>
             </details>
-            <MoveHistory history={classicHistory} />
+            <MoveHistory history={classicHistory} language={language} />
           </motion.div>
         </motion.div>
 
@@ -364,47 +392,49 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
         >
-          <EvalBar chances={game.chances} playerColor={config.playerColor} />
+          <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
 
           {/* Info del modo cuántico */}
           <div className="rounded-xl border border-purple-500/10 bg-surface-1/80 p-3">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-sm">⚛</span>
-              <span className="text-xs font-semibold text-purple-400">Reglas Ajedrez Cuántico</span>
+              <span className="text-xs font-semibold text-purple-400">{text.desktopRules}</span>
             </div>
             <div className="space-y-1 text-[10px] text-neutral-500">
-              <p>1. <strong className="text-neutral-300">Movimiento clásico:</strong> como ajedrez normal.</p>
-              <p>2. <strong className="text-purple-300">Movimiento cuántico:</strong> una pieza (no peón) se divide en 2 casillas (50/50).</p>
-              <p>3. <strong className="text-cyan-300">Fusión:</strong> dos estados de la misma pieza se unen en una sola casilla.</p>
-              <p>4. <strong className="text-yellow-300">Medición:</strong> al capturar entre clásico/cuántico se decide por probabilidad.</p>
-              <p>5. <strong className="text-purple-300">Enroque cuántico:</strong> rey y torre quedan entrelazados.</p>
-              <p>6. <strong className="text-neutral-300">Efecto túnel:</strong> piezas pueden atravesar estados cuánticos.</p>
+              <p>{language === 'es' ? '1. ' : '1. '}<strong className="text-neutral-300">{language === 'es' ? 'Movimiento clásico:' : 'Classic move:'}</strong> {language === 'es' ? 'como ajedrez normal.' : 'like normal chess.'}</p>
+              <p>{language === 'es' ? '2. ' : '2. '}<strong className="text-purple-300">{language === 'es' ? 'Movimiento cuántico:' : 'Quantum move:'}</strong> {language === 'es' ? 'una pieza (no peón) se divide en 2 casillas (50/50).' : 'a piece (not a pawn) splits into 2 squares (50/50).'}</p>
+              <p>{language === 'es' ? '3. ' : '3. '}<strong className="text-cyan-300">{language === 'es' ? 'Fusión:' : 'Merge:'}</strong> {language === 'es' ? 'dos estados de la misma pieza se unen en una sola casilla.' : 'two states of the same piece combine into one square.'}</p>
+              <p>{language === 'es' ? '4. ' : '4. '}<strong className="text-yellow-300">{language === 'es' ? 'Medición:' : 'Measurement:'}</strong> {language === 'es' ? 'al capturar entre clásico/cuántico se decide por probabilidad.' : 'captures between classic and quantum are resolved probabilistically.'}</p>
+              <p>{language === 'es' ? '5. ' : '5. '}<strong className="text-purple-300">{language === 'es' ? 'Enroque cuántico:' : 'Quantum castling:'}</strong> {language === 'es' ? 'rey y torre quedan entrelazados.' : 'king and rook become entangled.'}</p>
+              <p>{language === 'es' ? '6. ' : '6. '}<strong className="text-neutral-300">{language === 'es' ? 'Efecto túnel:' : 'Tunnel effect:'}</strong> {language === 'es' ? 'piezas pueden atravesar estados cuánticos.' : 'pieces can pass through quantum states.'}</p>
             </div>
             <div className="mt-3 rounded-lg border border-white/10 bg-surface-2/60 p-2 text-[10px] text-neutral-400">
-              <p className="mb-1 text-[11px] font-semibold text-neutral-300">Casuísticas de captura</p>
-              <p>• Clásica {'->'} Clásica: captura normal, sin medición.</p>
-              <p>• Clásica {'->'} Cuántica: se mide la pieza objetivo.</p>
-              <p className="pl-2">Si sale viva, estaba realmente ahí y es capturada. Si sale muerta, la casilla estaba vacía y el objetivo colapsa en su otra casilla.</p>
-              <p>• Cuántica {'->'} Clásica: se mide la atacante.</p>
-              <p className="pl-2">Si sale viva, la atacante se vuelve 100% real en esa casilla y captura. Si sale muerta, la jugada falla y la atacante colapsa fuera de esa casilla.</p>
-              <p>• Cuántica {'->'} Cuántica: primero se mide atacante; si existe, luego se mide objetivo.</p>
-              <p className="pl-2">La ruleta explica en cada paso qué pieza se está comprobando y qué efecto tiene un resultado vivo o muerto.</p>
+              <p className="mb-1 text-[11px] font-semibold text-neutral-300">{text.desktopCaptureCases}</p>
+              <p>{language === 'es' ? '• Clásica -> Clásica: captura normal, sin medición.' : '• Classic -> Classic: normal capture, no measurement.'}</p>
+              <p>{language === 'es' ? '• Clásica -> Cuántica: se mide la pieza objetivo.' : '• Classic -> Quantum: the target piece is measured.'}</p>
+              <p className="pl-2">{language === 'es' ? 'Si sale viva, estaba realmente ahí y es capturada. Si sale muerta, la casilla estaba vacía y el objetivo colapsa en su otra casilla.' : 'If it is alive, it was really there and gets captured. If it is dead, the square was empty and the target collapses to its other square.'}</p>
+              <p>{language === 'es' ? '• Cuántica -> Clásica: se mide la atacante.' : '• Quantum -> Classic: the attacking piece is measured.'}</p>
+              <p className="pl-2">{language === 'es' ? 'Si sale viva, la atacante se vuelve 100% real en esa casilla y captura. Si sale muerta, la jugada falla y la atacante colapsa fuera de esa casilla.' : 'If it is alive, the attacker becomes 100% real on that square and captures. If it is dead, the move fails and the attacker collapses away from that square.'}</p>
+              <p>{language === 'es' ? '• Cuántica -> Cuántica: primero se mide atacante; si existe, luego se mide objetivo.' : '• Quantum -> Quantum: first measure the attacker; if it exists, then measure the target.'}</p>
+              <p className="pl-2">{language === 'es' ? 'La ruleta explica en cada paso qué pieza se está comprobando y qué efecto tiene un resultado vivo o muerto.' : 'The roulette explains at each step which piece is being checked and what an alive or dead result means.'}</p>
             </div>
           </div>
 
-          <MoveHistory history={classicHistory} />
+          <MoveHistory history={classicHistory} language={language} />
           <ActionButtons
             onUndo={() => {}}
             onFlip={game.flip}
             onResign={game.resign}
             canUndo={false}
             gameOver={game.gameOver}
+            language={language}
           />
           <MusicPlayer
             playing={music.playing}
             volume={music.volume}
             onToggle={music.toggle}
             onVolumeChange={music.setVolume}
+            language={language}
           />
         </motion.div>
       </div>
@@ -423,6 +453,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
             onResign={game.resign}
             canUndo={false}
             gameOver={game.gameOver}
+            language={language}
           />
         </div>
         <motion.button
@@ -440,16 +471,19 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
         visible={!!game.promotionPending}
         color={config.playerColor}
         onSelect={game.handlePromotion}
+        language={language}
       />
       <GameOverModal
         info={game.gameOverInfo}
         onNewGame={onNewGame}
         onDismiss={game.dismissGameOver}
+        language={language}
       />
       <QuantumMeasurementRoulette
         visible={!!game.measurementEvent}
         measurement={game.measurementEvent}
         onClose={game.dismissMeasurement}
+        language={language}
       />
     </div>
   )

@@ -6,6 +6,7 @@ export type Difficulty = 'beginner' | 'easy' | 'medium' | 'hard' | 'master'
 export type PlayerColorChoice = 'w' | 'b' | 'random'
 export type GameMode = 'classic' | 'quantum'
 export type OpponentMode = 'ai' | 'local'
+export type Language = 'es' | 'en'
 
 export interface GameConfig {
   playerColor: PieceColor

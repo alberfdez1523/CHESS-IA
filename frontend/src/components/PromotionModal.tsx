@@ -1,18 +1,16 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { PIECE_UNICODE, PROMOTION_PIECES } from '../lib/constants'
-import type { PieceColor, PieceType } from '../lib/types'
+import { getPieceName } from '../lib/i18n'
+import type { Language, PieceColor, PieceType } from '../lib/types'
 
 interface PromotionModalProps {
   visible: boolean
   color: PieceColor
   onSelect: (piece: string) => void
+  language: Language
 }
 
-const PROMO_LABELS: Record<string, string> = {
-  q: 'Dama', r: 'Torre', b: 'Alfil', n: 'Caballo',
-}
-
-export default function PromotionModal({ visible, color, onSelect }: PromotionModalProps) {
+export default function PromotionModal({ visible, color, onSelect, language }: PromotionModalProps) {
   return (
     <AnimatePresence>
       {visible && (
@@ -30,7 +28,7 @@ export default function PromotionModal({ visible, color, onSelect }: PromotionMo
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
           >
             <h3 className="mb-4 text-center text-sm font-semibold uppercase tracking-wider text-neutral-400">
-              Promoción
+              {language === 'es' ? 'Promoción' : 'Promotion'}
             </h3>
 
             <div className="flex gap-3">
@@ -50,7 +48,7 @@ export default function PromotionModal({ visible, color, onSelect }: PromotionMo
                     {PIECE_UNICODE[`${color}${p.toUpperCase()}`]}
                   </span>
                   <span className="text-[10px] font-medium text-neutral-500">
-                    {PROMO_LABELS[p]}
+                    {getPieceName(p, language)}
                   </span>
                 </motion.button>
               ))}

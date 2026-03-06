@@ -1,10 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion'
+import { translateGameOverInfo } from '../lib/i18n'
 import type { GameOverInfo } from '../lib/types'
+import type { Language } from '../lib/types'
 
 interface GameOverModalProps {
   info: GameOverInfo | null
   onNewGame: () => void
   onDismiss: () => void
+  language: Language
 }
 
 const RESULT_ICON: Record<string, string> = {
@@ -19,10 +22,11 @@ const RESULT_COLOR: Record<string, string> = {
   draw: 'text-neutral-400',
 }
 
-export default function GameOverModal({ info, onNewGame, onDismiss }: GameOverModalProps) {
+export default function GameOverModal({ info, onNewGame, onDismiss, language }: GameOverModalProps) {
+  const translatedInfo = info ? translateGameOverInfo(info, language) : null
   return (
     <AnimatePresence>
-      {info && (
+      {translatedInfo && (
         <motion.div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
           initial={{ opacity: 0 }}
@@ -43,16 +47,16 @@ export default function GameOverModal({ info, onNewGame, onDismiss }: GameOverMo
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.15 }}
             >
-              {RESULT_ICON[info.result] || '♟'}
+              {RESULT_ICON[translatedInfo.result] || '♟'}
             </motion.div>
 
             {/* Título */}
-            <h2 className={`mb-2 text-2xl font-extrabold ${RESULT_COLOR[info.result]}`}>
-              {info.title}
+            <h2 className={`mb-2 text-2xl font-extrabold ${RESULT_COLOR[translatedInfo.result]}`}>
+              {translatedInfo.title}
             </h2>
 
             {/* Mensaje */}
-            <p className="mb-6 text-sm text-neutral-400">{info.message}</p>
+            <p className="mb-6 text-sm text-neutral-400">{translatedInfo.message}</p>
 
             {/* Botones */}
             <div className="flex flex-col gap-2">
@@ -63,7 +67,7 @@ export default function GameOverModal({ info, onNewGame, onDismiss }: GameOverMo
                 className="btn-shine w-full rounded-xl bg-accent py-3 text-sm font-bold text-white
                   shadow-glow transition-colors hover:bg-accent-hover"
               >
-                Nueva partida
+                {language === 'es' ? 'Nueva partida' : 'New game'}
               </motion.button>
               <motion.button
                 onClick={onDismiss}
@@ -72,7 +76,7 @@ export default function GameOverModal({ info, onNewGame, onDismiss }: GameOverMo
                 className="w-full rounded-xl bg-surface-2 py-2.5 text-sm font-medium text-neutral-400
                   transition-colors hover:bg-surface-3 hover:text-white"
               >
-                Ver tablero
+                {language === 'es' ? 'Ver tablero' : 'View board'}
               </motion.button>
             </div>
           </motion.div>

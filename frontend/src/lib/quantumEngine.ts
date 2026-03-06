@@ -179,10 +179,12 @@ export class QuantumChessEngine {
     const board = this.getBoard()
     const targetCells = board[to] || []
     const enemies = targetCells.filter(c => c.color !== piece.color)
+    const attemptedPawnCapture = piece.type === 'p' && from[0] !== to[0]
 
     let captured: { id: string; type: PieceType } | undefined
     let measurement: QMeasurementEvent | undefined
     let attackerMeasurement: QMeasurementEvent | undefined
+    let staysOnOrigin = false
 
     // ¿La pieza que mueve es cuántica?
     const attackerIsQuantum = prob < 1
@@ -256,7 +258,7 @@ export class QuantumChessEngine {
           }
           this._collapsePieceAway(defender.pieceId, to)
           this._resolveEntanglementsFor(defender.pieceId)
-          // Pieza se mueve a la casilla (vacía)
+          staysOnOrigin = attemptedPawnCapture
         } else {
           // Defensor existe → captura
           measurement = {
@@ -285,8 +287,10 @@ export class QuantumChessEngine {
 
     // Mover la pieza
     const prevPositions = { ...piece.positions }
-    delete piece.positions[from]
-    piece.positions[to] = attackerIsQuantum && measurement?.result === 'alive' ? 1 : (prevPositions[from] ?? 1)
+    if (!staysOnOrigin) {
+      delete piece.positions[from]
+      piece.positions[to] = attackerIsQuantum && measurement?.result === 'alive' ? 1 : (prevPositions[from] ?? 1)
+    }
 
     // Si todas las probabilidades restantes están en un solo lugar → la pieza ya es 100%
     const sqs = Object.keys(piece.positions)
@@ -295,7 +299,7 @@ export class QuantumChessEngine {
     // Crear entrelazamientos de túnel
     const moves = this._cachedMoves ?? this.getLegalMoves(pieceId, from)
     const moveInfo = moves.find(m => m.square === to)
-    if (moveInfo && moveInfo.tunnelThrough.length > 0) {
+    if (!staysOnOrigin && moveInfo && moveInfo.tunnelThrough.length > 0) {
       for (const tunnelSq of moveInfo.tunnelThrough) {
         const blockerCells = board[tunnelSq]?.filter(c => c.probability < 1) ?? []
         for (const blocker of blockerCells) {
@@ -328,6 +332,8 @@ export class QuantumChessEngine {
     let desc = ''
     if (captured) {
       desc = `${LABELS[piece.type]} captura en ${to}`
+    } else if (staysOnOrigin) {
+      desc = `${LABELS[piece.type]} intenta capturar en ${to}, pero permanece en ${from}`
     } else {
       desc = `${LABELS[piece.type]} a ${to}`
     }
@@ -339,7 +345,7 @@ export class QuantumChessEngine {
 
     const record: QMoveRecord = {
       pieceId, pieceType: piece.type, color: piece.color,
-      moveType: 'classical', from, to, captured, measurement, description: desc,
+      moveType: 'classical', from, to: staysOnOrigin ? from : to, captured, measurement, description: desc,
     }
     this.state.history.push(record)
     this._checkGameOver()

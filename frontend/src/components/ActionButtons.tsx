@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import type { Language } from '../lib/types'
 
 interface ActionButtonsProps {
   onUndo: () => void
@@ -6,13 +7,17 @@ interface ActionButtonsProps {
   onResign: () => void
   canUndo: boolean
   gameOver: boolean
+  language: Language
 }
 
-export default function ActionButtons({ onUndo, onFlip, onResign, canUndo, gameOver }: ActionButtonsProps) {
+export default function ActionButtons({ onUndo, onFlip, onResign, canUndo, gameOver, language }: ActionButtonsProps) {
+  const labels = language === 'es'
+    ? { undo: 'Deshacer', flip: 'Girar', resign: 'Rendirse' }
+    : { undo: 'Undo', flip: 'Flip', resign: 'Resign' }
   const buttons = [
-    { icon: '↩', label: 'Deshacer', action: onUndo, disabled: !canUndo || gameOver },
-    { icon: '⇅', label: 'Girar', action: onFlip, disabled: false },
-    { icon: '⚑', label: 'Rendirse', action: onResign, disabled: gameOver },
+    { icon: '↩', label: labels.undo, action: onUndo, disabled: !canUndo || gameOver },
+    { icon: '⇅', label: labels.flip, action: onFlip, disabled: false },
+    { icon: '⚑', label: labels.resign, action: onResign, disabled: gameOver },
   ]
 
   return (

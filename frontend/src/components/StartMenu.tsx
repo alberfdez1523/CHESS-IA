@@ -2,16 +2,18 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DIFFICULTIES, TIMER_OPTIONS } from '../lib/constants'
 import { checkHealth } from '../lib/api'
-import type { GameConfig, GameMode, OpponentMode, PieceColor, Difficulty, PlayerColorChoice } from '../lib/types'
+import { getDifficultyLabel } from '../lib/i18n'
+import type { GameConfig, GameMode, OpponentMode, PieceColor, Difficulty, Language, PlayerColorChoice } from '../lib/types'
 
 interface StartMenuProps {
   onPlay: (config: GameConfig) => void
+  language: Language
 }
 
 // Piezas flotantes decorativas
 const FLOATING_PIECES = ['♔', '♕', '♗', '♘', '♙', '♚', '♛', '♝', '♞', '♟']
 
-export default function StartMenu({ onPlay }: StartMenuProps) {
+export default function StartMenu({ onPlay, language }: StartMenuProps) {
   const [color, setColor] = useState<PlayerColorChoice>('w')
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
   const [opponentMode, setOpponentMode] = useState<OpponentMode>('ai')
@@ -22,6 +24,61 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
   const [checking, setChecking] = useState(true)
   const requiresEngine = gameMode === 'classic' && opponentMode === 'ai'
   const canPlay = requiresEngine ? serverReady : true
+  const text = language === 'es'
+    ? {
+        subtitleQuantum: 'Modo cuántico local 2 jugadores ⚛',
+        subtitleClassic: 'Clásico vs Stockfish o 2 jugadores',
+        gameMode: 'Modo de juego',
+        classic: 'Clásico',
+        quantum: 'Cuántico',
+        color: 'Tu color',
+        white: 'Blancas',
+        random: 'Aleatorio',
+        black: 'Negras',
+        matchType: 'Tipo de partida',
+        vsAi: 'Vs IA',
+        twoPlayers: '2 jugadores',
+        localQuantumInfo: '⚛ Modo cuántico: solo 2 jugadores en el mismo tablero.',
+        difficulty: 'Dificultad',
+        difficultyUnused: 'En 2 jugadores la dificultad no se usa.',
+        clock: 'Reloj',
+        playClassic: '▶  Jugar',
+        playQuantum: '⚛  Jugar Cuántico',
+        connecting: 'Conectando…',
+        serverUnavailable: 'Servidor no disponible',
+        stockfishReady: 'Stockfish listo',
+        lookingServer: 'Buscando servidor…',
+        offline: 'Sin conexión',
+        traditionalChess: 'Ajedrez tradicional',
+        superposition: 'Superposición y medición',
+      }
+    : {
+        subtitleQuantum: 'Local 2-player quantum mode ⚛',
+        subtitleClassic: 'Classic vs Stockfish or 2 players',
+        gameMode: 'Game mode',
+        classic: 'Classic',
+        quantum: 'Quantum',
+        color: 'Your color',
+        white: 'White',
+        random: 'Random',
+        black: 'Black',
+        matchType: 'Match type',
+        vsAi: 'Vs AI',
+        twoPlayers: '2 players',
+        localQuantumInfo: '⚛ Quantum mode: only 2 players on the same board.',
+        difficulty: 'Difficulty',
+        difficultyUnused: 'Difficulty is not used in 2-player mode.',
+        clock: 'Clock',
+        playClassic: '▶  Play',
+        playQuantum: '⚛  Play Quantum',
+        connecting: 'Connecting…',
+        serverUnavailable: 'Server unavailable',
+        stockfishReady: 'Stockfish ready',
+        lookingServer: 'Looking for server…',
+        offline: 'Offline',
+        traditionalChess: 'Traditional chess',
+        superposition: 'Superposition and measurement',
+      }
 
   // Verificar estado del servidor
   useEffect(() => {
@@ -94,7 +151,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
             Gambito de Dama <span className="text-accent">Cuántico</span>
           </h1>
           <p className="mt-1 text-sm text-neutral-500 lg:text-base">
-            {gameMode === 'quantum' ? 'Modo cuántico local 2 jugadores ⚛' : 'Clásico vs Stockfish o 2 jugadores'}
+            {gameMode === 'quantum' ? text.subtitleQuantum : text.subtitleClassic}
           </p>
         </motion.div>
 
@@ -106,12 +163,12 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           transition={{ delay: 0.25 }}
         >
           <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
-            Modo de juego
+            {text.gameMode}
           </label>
           <div className="flex gap-2">
             {[
-              { value: 'classic' as GameMode, label: 'Clásico', icon: '♛', desc: 'Ajedrez tradicional' },
-              { value: 'quantum' as GameMode, label: 'Cuántico', icon: '⚛', desc: 'Superposición y medición' },
+              { value: 'classic' as GameMode, label: text.classic, icon: '♛', desc: text.traditionalChess },
+              { value: 'quantum' as GameMode, label: text.quantum, icon: '⚛', desc: text.superposition },
             ].map((opt) => (
               <motion.button
                 key={opt.value}
@@ -147,13 +204,13 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           transition={{ delay: 0.3 }}
         >
           <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
-            Tu color
+            {text.color}
           </label>
           <div className="flex gap-2">
             {[
-              { value: 'w' as PlayerColorChoice, label: 'Blancas', icon: '♔' },
-              { value: 'random' as PlayerColorChoice, label: 'Aleatorio', icon: '🎲' },
-              { value: 'b' as PlayerColorChoice, label: 'Negras', icon: '♚' },
+              { value: 'w' as PlayerColorChoice, label: text.white, icon: '♔' },
+              { value: 'random' as PlayerColorChoice, label: text.random, icon: '🎲' },
+              { value: 'b' as PlayerColorChoice, label: text.black, icon: '♚' },
             ].map((opt) => (
               <motion.button
                 key={opt.value}
@@ -182,12 +239,12 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
             transition={{ delay: 0.35 }}
           >
             <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
-              Tipo de partida
+              {text.matchType}
             </label>
             <div className="flex gap-2">
               {[
-                { value: 'ai' as OpponentMode, label: 'Vs IA', icon: '🤖' },
-                { value: 'local' as OpponentMode, label: '2 jugadores', icon: '👥' },
+                { value: 'ai' as OpponentMode, label: text.vsAi, icon: '🤖' },
+                { value: 'local' as OpponentMode, label: text.twoPlayers, icon: '👥' },
               ].map((opt) => (
                 <motion.button
                   key={opt.value}
@@ -213,7 +270,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
           >
-            ⚛ Modo cuántico: solo 2 jugadores en el mismo tablero.
+            {text.localQuantumInfo}
           </motion.div>
         )}
 
@@ -225,11 +282,11 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
           transition={{ delay: 0.4 }}
         >
           <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
-            Dificultad
+            {text.difficulty}
           </label>
           {gameMode === 'classic' && opponentMode === 'local' && (
             <p className="mb-2 text-[11px] text-neutral-500">
-              En 2 jugadores la dificultad no se usa.
+              {text.difficultyUnused}
             </p>
           )}
           <div className="grid grid-cols-5 gap-1.5">
@@ -262,7 +319,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
                     />
                   ))}
                 </div>
-                <span className="text-[9px] font-medium leading-tight lg:text-[11px]">{d.label}</span>
+                <span className="text-[9px] font-medium leading-tight lg:text-[11px]">{getDifficultyLabel(d.key, language)}</span>
               </motion.button>
             ))}
           </div>
@@ -277,7 +334,7 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
         >
           <div className="flex items-center justify-between">
             <label className="text-xs font-semibold uppercase tracking-widest text-neutral-500 lg:text-sm">
-              Reloj
+              {text.clock}
             </label>
             <button
               onClick={() => setUseTimer(!useTimer)}
@@ -339,29 +396,29 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
               }`}
           >
             {canPlay
-              ? gameMode === 'quantum' ? '⚛  Jugar Cuántico' : '▶  Jugar'
-              : checking ? 'Conectando…' : 'Servidor no disponible'}
+              ? gameMode === 'quantum' ? text.playQuantum : text.playClassic
+              : checking ? text.connecting : text.serverUnavailable}
           </motion.button>
         </motion.div>
 
         {/* Indicador de estado del servidor */}
-        <motion.div
-          className="mt-4 flex items-center justify-center gap-2"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-        >
-          <div
-            className={`h-1.5 w-1.5 rounded-full ${
-              serverReady ? 'bg-green-500' : checking ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
-            }`}
-          />
-          <span className="text-[10px] text-neutral-600">
-            {!requiresEngine
-              ? 'Stockfish opcional en este modo'
-              : serverReady ? 'Stockfish listo' : checking ? 'Buscando servidor…' : 'Sin conexión'}
-          </span>
-        </motion.div>
+        {gameMode === 'classic' && (
+          <motion.div
+            className="mt-4 flex items-center justify-center gap-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+          >
+            <div
+              className={`h-1.5 w-1.5 rounded-full ${
+                serverReady ? 'bg-green-500' : checking ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
+              }`}
+            />
+            <span className="text-[10px] text-neutral-600">
+              {serverReady ? text.stockfishReady : checking ? text.lookingServer : text.offline}
+            </span>
+          </motion.div>
+        )}
       </motion.div>
     </div>
   )

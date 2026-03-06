@@ -3,12 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import StartMenu from './components/StartMenu'
 import GameScreen from './components/GameScreen'
 import QuantumGameScreen from './components/QuantumGameScreen'
-import type { GameConfig } from './lib/types'
+import type { GameConfig, Language } from './lib/types'
 
 export default function App() {
   const [screen, setScreen] = useState<'menu' | 'game'>('menu')
   const [gameConfig, setGameConfig] = useState<GameConfig | null>(null)
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [language, setLanguage] = useState<Language>('es')
 
   useEffect(() => {
     const root = document.documentElement
@@ -17,9 +18,11 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
-    const modeLabel = gameConfig?.gameMode === 'quantum' ? ' | Modo Cuántico' : ''
+    const modeLabel = gameConfig?.gameMode === 'quantum'
+      ? language === 'es' ? ' | Modo Cuántico' : ' | Quantum Mode'
+      : ''
     document.title = `Gambito de Dama Cuántico${modeLabel}`
-  }, [gameConfig])
+  }, [gameConfig, language])
 
   const handlePlay = useCallback((config: GameConfig) => {
     setGameConfig(config)
@@ -33,15 +36,28 @@ export default function App() {
 
   return (
     <>
-      <motion.button
-        onClick={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        className="fixed bottom-4 right-4 z-[60] rounded-xl bg-surface-2/90 px-3.5 py-2.5 text-xs font-semibold text-neutral-300 ring-1 ring-white/10 backdrop-blur-sm transition-colors hover:bg-surface-3 lg:px-5 lg:py-3 lg:text-sm"
-        title="Cambiar tema"
-      >
-        {theme === 'dark' ? '☀ Claro' : '🌙 Oscuro'}
-      </motion.button>
+      <div className="fixed bottom-4 right-4 z-[60] flex items-center gap-2">
+        <motion.button
+          onClick={() => setLanguage(prev => (prev === 'es' ? 'en' : 'es'))}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="floating-toggle-btn rounded-xl bg-surface-2/90 px-3.5 py-2.5 text-xs font-semibold text-neutral-300 ring-1 ring-white/10 backdrop-blur-sm transition-colors hover:bg-surface-3 lg:px-5 lg:py-3 lg:text-sm"
+          title={language === 'es' ? 'Translate to English' : 'Traducir al español'}
+        >
+          🌐 {language === 'es' ? 'EN' : 'ES'}
+        </motion.button>
+        <motion.button
+          onClick={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="floating-toggle-btn rounded-xl bg-surface-2/90 px-3.5 py-2.5 text-xs font-semibold text-neutral-300 ring-1 ring-white/10 backdrop-blur-sm transition-colors hover:bg-surface-3 lg:px-5 lg:py-3 lg:text-sm"
+          title={language === 'es' ? 'Cambiar tema' : 'Change theme'}
+        >
+          {theme === 'dark'
+            ? language === 'es' ? '☀ Claro' : '☀ Light'
+            : language === 'es' ? '🌙 Oscuro' : '🌙 Dark'}
+        </motion.button>
+      </div>
 
       <AnimatePresence mode="wait">
         {screen === 'menu' ? (
@@ -52,7 +68,7 @@ export default function App() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <StartMenu onPlay={handlePlay} />
+            <StartMenu onPlay={handlePlay} language={language} />
           </motion.div>
         ) : gameConfig ? (
           <motion.div
@@ -63,9 +79,9 @@ export default function App() {
             transition={{ duration: 0.3 }}
           >
             {gameConfig.gameMode === 'quantum' ? (
-              <QuantumGameScreen config={gameConfig} onNewGame={handleNewGame} />
+              <QuantumGameScreen config={gameConfig} onNewGame={handleNewGame} language={language} />
             ) : (
-              <GameScreen config={gameConfig} onNewGame={handleNewGame} />
+              <GameScreen config={gameConfig} onNewGame={handleNewGame} language={language} />
             )}
           </motion.div>
         ) : null}

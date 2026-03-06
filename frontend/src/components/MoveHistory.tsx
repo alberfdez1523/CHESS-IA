@@ -1,13 +1,15 @@
 import { useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PIECE_UNICODE } from '../lib/constants'
-import type { MoveInfo } from '../lib/types'
+import { translateMoveDescription } from '../lib/i18n'
+import type { Language, MoveInfo } from '../lib/types'
 
 interface MoveHistoryProps {
   history: MoveInfo[]
+  language: Language
 }
 
-export default function MoveHistory({ history }: MoveHistoryProps) {
+export default function MoveHistory({ history, language }: MoveHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll al último movimiento
@@ -20,7 +22,7 @@ export default function MoveHistory({ history }: MoveHistoryProps) {
   if (history.length === 0) {
     return (
       <div className="flex h-32 items-center justify-center rounded-lg bg-surface-2 text-xs text-neutral-500">
-        Sin movimientos aún
+        {language === 'es' ? 'Sin movimientos aún' : 'No moves yet'}
       </div>
     )
   }
@@ -56,7 +58,7 @@ export default function MoveHistory({ history }: MoveHistoryProps) {
               <span className={`text-base leading-none ${isWhite ? 'piece-white' : 'piece-black'}`}>
                 {icon}
               </span>
-              <span className="truncate">{move.description}</span>
+              <span className="truncate">{translateMoveDescription(move.description, language)}</span>
               <span className="ml-auto font-mono text-[10px] text-neutral-600">{move.san}</span>
             </motion.div>
           )

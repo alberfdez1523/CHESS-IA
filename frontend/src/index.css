@@ -64,6 +64,11 @@ body {
 .theme-light .bg-surface-2 { background-color: var(--surface-2) !important; }
 .theme-light .bg-surface-3 { background-color: var(--surface-3) !important; }
 .theme-light .bg-surface-4 { background-color: var(--surface-4) !important; }
+.theme-light .bg-surface-1\/80 { background-color: rgba(255, 248, 239, 0.92) !important; }
+.theme-light .bg-surface-1\/85 { background-color: rgba(255, 248, 239, 0.95) !important; }
+.theme-light .bg-surface-1\/90 { background-color: rgba(255, 248, 239, 0.97) !important; }
+.theme-light .bg-surface-2\/70 { background-color: rgba(248, 239, 227, 0.92) !important; }
+.theme-light .bg-surface-2\/60 { background-color: rgba(248, 239, 227, 0.9) !important; }
 .theme-light .text-white { color: var(--text-main) !important; }
 .theme-light .text-neutral-200 { color: #433122 !important; }
 .theme-light .text-neutral-300 { color: #533f2f !important; }
@@ -104,12 +109,73 @@ body {
 }
 
 .theme-light .start-title {
-  color: #3f2a18 !important;
+  color: #6a4630 !important;
+  text-shadow:
+    0 1px 0 rgba(255, 248, 239, 0.9),
+    0 6px 18px rgba(120, 79, 44, 0.12);
+}
+
+.theme-light .start-title .text-accent {
+  color: #bf5a18 !important;
 }
 
 .theme-light .start-logo {
-  color: #c84e0b;
-  text-shadow: 0 2px 6px rgba(90, 50, 20, 0.2);
+  color: #c46a2c;
+  text-shadow:
+    0 1px 0 rgba(255, 248, 239, 0.92),
+    0 6px 16px rgba(120, 79, 44, 0.14);
+}
+
+.floating-toggle-btn {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+}
+
+.theme-light .floating-toggle-btn {
+  background-color: rgba(255, 248, 239, 0.96) !important;
+  color: #6a4630 !important;
+  border: 1px solid rgba(191, 90, 24, 0.16);
+  --tw-ring-color: rgba(191, 90, 24, 0.12) !important;
+  box-shadow:
+    0 10px 24px rgba(120, 79, 44, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.85) inset;
+}
+
+.theme-light .floating-toggle-btn:hover {
+  background-color: #fff3e4 !important;
+  color: #5a3823 !important;
+}
+
+.player-avatar {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+}
+
+.player-avatar-white {
+  background-color: #ffffff;
+  color: #111111;
+}
+
+.player-avatar-black {
+  background-color: #262626;
+  color: #ffffff;
+  border: 1px solid rgba(115, 115, 115, 0.7);
+}
+
+.theme-light .player-avatar-white {
+  background-color: #fff7ec;
+  color: #7a451f;
+  border: 1px solid rgba(191, 90, 24, 0.22);
+  box-shadow:
+    0 6px 16px rgba(120, 79, 44, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.theme-light .player-avatar-black {
+  background-color: #8e7764;
+  color: #fffaf3;
+  border: 1px solid rgba(90, 56, 35, 0.22);
+  box-shadow:
+    0 6px 16px rgba(120, 79, 44, 0.1),
+    0 1px 0 rgba(255, 248, 239, 0.18) inset;
 }
 
 /* ─── Scrollbar personalizada ─── */

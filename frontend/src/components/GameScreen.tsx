@@ -13,17 +13,19 @@ import { useSoundFX } from '../hooks/useSoundFX'
 import { useAmbientMusic } from '../hooks/useAmbientMusic'
 import { useTimer } from '../hooks/useTimer'
 import { DIFFICULTIES } from '../lib/constants'
-import type { GameConfig } from '../lib/types'
+import { getDifficultyLabel, getPlayerLabel } from '../lib/i18n'
+import type { GameConfig, Language } from '../lib/types'
 
 interface GameScreenProps {
   config: GameConfig
   onNewGame: () => void
+  language: Language
 }
 
-export default function GameScreen({ config, onNewGame }: GameScreenProps) {
+export default function GameScreen({ config, onNewGame, language }: GameScreenProps) {
   const sounds = useSoundFX()
   const music = useAmbientMusic()
-  const game = useChessGame(config, sounds)
+  const game = useChessGame(config, sounds, language)
 
   const timer = useTimer({
     enabled: config.useTimer,
@@ -51,9 +53,9 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
 
   const topBar = useMemo(() => {
     const isAI = isAIMode && topColor !== config.playerColor
-    const localLabel = topColor === 'w' ? 'Jugador Blancas' : 'Jugador Negras'
+    const localLabel = getPlayerLabel(topColor, language)
     return {
-      label: isAIMode ? (isAI ? 'Stockfish' : 'Tú') : localLabel,
+      label: isAIMode ? (isAI ? 'Stockfish' : language === 'es' ? 'Tú' : 'You') : localLabel,
       elo: isAI ? diffMeta?.elo || '' : '',
       color: topColor,
       captures: isAI ? game.captures.ai : game.captures.player,
@@ -64,13 +66,13 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
         ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) < 60
         : false,
     }
-  }, [topColor, config, diffMeta, game, timer, isAIMode])
+  }, [topColor, config, diffMeta, game, timer, isAIMode, language])
 
   const bottomBar = useMemo(() => {
     const isAI = isAIMode && bottomColor !== config.playerColor
-    const localLabel = bottomColor === 'w' ? 'Jugador Blancas' : 'Jugador Negras'
+    const localLabel = getPlayerLabel(bottomColor, language)
     return {
-      label: isAIMode ? (isAI ? 'Stockfish' : 'Tú') : localLabel,
+      label: isAIMode ? (isAI ? 'Stockfish' : language === 'es' ? 'Tú' : 'You') : localLabel,
       elo: isAI ? diffMeta?.elo || '' : '',
       color: bottomColor,
       captures: isAI ? game.captures.ai : game.captures.player,
@@ -81,7 +83,35 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
         ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) < 60
         : false,
     }
-  }, [bottomColor, config, diffMeta, game, timer, isAIMode])
+  }, [bottomColor, config, diffMeta, game, timer, isAIMode, language])
+
+  const text = language === 'es'
+    ? {
+        modeBadge: isAIMode ? `Clásico · ${diffMeta?.label}` : 'Clásico · 2 jugadores',
+        menu: '← Menú',
+        rulesTitle: 'Reglas del Modo Clásico',
+        rulesTitleDesktop: 'Reglas Modo Clásico',
+        rule1: '• Gana quien da jaque mate.',
+        rule2: '• Tablas por ahogado, repetición o material insuficiente.',
+        rule2Desktop: '• Tablas por ahogado, repetición, material insuficiente o acuerdo técnico.',
+        rule3: '• Peón promociona en la última fila.',
+        rule3Desktop: '• Peón promociona al llegar a la última fila.',
+        rule4: `• Partida en ${isAIMode ? 'vs IA' : '2 jugadores'}.`,
+        rule4Desktop: `• En ${isAIMode ? 'vs IA' : '2 jugadores'}, turno alternado normal de blancas/negras.`,
+      }
+    : {
+        modeBadge: isAIMode ? `Classic · ${diffMeta ? getDifficultyLabel(config.difficulty, language) : ''}` : 'Classic · 2 players',
+        menu: '← Menu',
+        rulesTitle: 'Classic Mode Rules',
+        rulesTitleDesktop: 'Classic Mode Rules',
+        rule1: '• Win by checkmate.',
+        rule2: '• Draw by stalemate, repetition, or insufficient material.',
+        rule2Desktop: '• Draw by stalemate, repetition, insufficient material, or technical draw.',
+        rule3: '• Pawns promote on the last rank.',
+        rule3Desktop: '• Pawns promote when they reach the last rank.',
+        rule4: `• Match in ${isAIMode ? 'vs AI' : '2 players'}.`,
+        rule4Desktop: `• In ${isAIMode ? 'vs AI' : '2 players'}, turns alternate normally between white and black.`,
+      }
 
   return (
     <div className="bg-radial-orange flex min-h-screen flex-col bg-surface-0">
@@ -98,7 +128,7 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
             Gambito de Dama <span className="text-accent">Cuántico</span>
           </span>
           <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
-            {isAIMode ? `Clásico · ${diffMeta?.label}` : 'Clásico · 2 jugadores'}
+            {text.modeBadge}
           </span>
         </div>
         <motion.button
@@ -108,7 +138,7 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
           className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-neutral-400 lg:px-5 lg:py-2.5 lg:text-sm
             transition-colors hover:bg-surface-3 hover:text-white"
         >
-          ← Menú
+          {text.menu}
         </motion.button>
       </motion.header>
 
@@ -189,19 +219,19 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
           >
-            <EvalBar chances={game.chances} playerColor={config.playerColor} />
+            <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
             <details className="rounded-xl border border-white/[0.08] bg-surface-1/85 px-3 py-2 text-[11px] text-neutral-400">
               <summary className="cursor-pointer text-xs font-semibold text-neutral-300">
-                Reglas del Modo Clásico
+                {text.rulesTitle}
               </summary>
               <div className="mt-2 space-y-1">
-                <p>• Gana quien da jaque mate.</p>
-                <p>• Tablas por ahogado, repetición o material insuficiente.</p>
-                <p>• Peón promociona en la última fila.</p>
-                <p>• Partida en <strong>{isAIMode ? 'vs IA' : '2 jugadores'}</strong>.</p>
+                <p>{text.rule1}</p>
+                <p>{text.rule2}</p>
+                <p>{text.rule3}</p>
+                <p>{text.rule4}</p>
               </div>
             </details>
-            <MoveHistory history={game.history} />
+            <MoveHistory history={game.history} language={language} />
           </motion.div>
         </motion.div>
 
@@ -212,27 +242,29 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
         >
-          <EvalBar chances={game.chances} playerColor={config.playerColor} />
+          <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
           <div className="rounded-xl border border-white/[0.08] bg-surface-1/80 p-3 text-[11px] text-neutral-400">
-            <p className="mb-2 text-xs font-semibold text-neutral-300">Reglas Modo Clásico</p>
-            <p>• Gana quien da jaque mate.</p>
-            <p>• Tablas por ahogado, repetición, material insuficiente o acuerdo técnico.</p>
-            <p>• Peón promociona al llegar a la última fila.</p>
-            <p>• En <strong>{isAIMode ? 'vs IA' : '2 jugadores'}</strong>, turno alternado normal de blancas/negras.</p>
+            <p className="mb-2 text-xs font-semibold text-neutral-300">{text.rulesTitleDesktop}</p>
+            <p>{text.rule1}</p>
+            <p>{text.rule2Desktop}</p>
+            <p>{text.rule3Desktop}</p>
+            <p>{text.rule4Desktop}</p>
           </div>
-          <MoveHistory history={game.history} />
+          <MoveHistory history={game.history} language={language} />
           <ActionButtons
             onUndo={game.undo}
             onFlip={game.flip}
             onResign={game.resign}
             canUndo={game.history.length >= 2 && !game.isThinking}
             gameOver={game.gameOver}
+            language={language}
           />
           <MusicPlayer
             playing={music.playing}
             volume={music.volume}
             onToggle={music.toggle}
             onVolumeChange={music.setVolume}
+            language={language}
           />
         </motion.div>
       </div>
@@ -251,6 +283,7 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
             onResign={game.resign}
             canUndo={game.history.length >= 2 && !game.isThinking}
             gameOver={game.gameOver}
+            language={language}
           />
         </div>
         <motion.button
@@ -268,11 +301,13 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
         visible={!!game.promotionPending}
         color={config.playerColor}
         onSelect={game.handlePromotion}
+        language={language}
       />
       <GameOverModal
         info={game.gameOverInfo}
         onNewGame={onNewGame}
         onDismiss={game.dismissGameOver}
+        language={language}
       />
     </div>
   )

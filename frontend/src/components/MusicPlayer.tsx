@@ -1,13 +1,15 @@
 import { motion } from 'framer-motion'
+import type { Language } from '../lib/types'
 
 interface MusicPlayerProps {
   playing: boolean
   volume: number
   onToggle: () => void
   onVolumeChange: (v: number) => void
+  language: Language
 }
 
-export default function MusicPlayer({ playing, volume, onToggle, onVolumeChange }: MusicPlayerProps) {
+export default function MusicPlayer({ playing, volume, onToggle, onVolumeChange, language }: MusicPlayerProps) {
   return (
     <div className="flex items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5">
       <motion.button
@@ -19,7 +21,7 @@ export default function MusicPlayer({ playing, volume, onToggle, onVolumeChange 
             ? 'bg-accent text-white shadow-glow-sm'
             : 'bg-surface-3 text-neutral-400 hover:text-white'
           }`}
-        title={playing ? 'Pausar música' : 'Reproducir música'}
+        title={playing ? (language === 'es' ? 'Pausar música' : 'Pause music') : (language === 'es' ? 'Reproducir música' : 'Play music')}
       >
         {playing ? '⏸' : '♫'}
       </motion.button>

@@ -1,7 +1,8 @@
 ﻿import { useState, useRef, useCallback, useMemo } from 'react'
 import { QuantumChessEngine } from '../lib/quantumEngine'
+import { getColorName, translateGameOverInfo } from '../lib/i18n'
 import type {
-  GameConfig, PieceColor, PieceType, Chances, QBoardCell,
+  GameConfig, Language, PieceColor, PieceType, Chances, QBoardCell,
   QMoveRecord, QMoveMode, QGameOver, GameOverInfo, QMeasurementEvent,
 } from '../lib/types'
 
@@ -35,14 +36,21 @@ function quantumEvalToChances(cp: number): Chances {
   return { white, draw, black }
 }
 
-function qGameOverToClassic(qgo: QGameOver, playerColor: PieceColor): GameOverInfo {
+function qGameOverToClassic(qgo: QGameOver, playerColor: PieceColor, language: Language): GameOverInfo {
   const isWin = qgo.winner === playerColor
+  const reason = language === 'es'
+    ? qgo.reason
+    : qgo.reason === 'Rey blanco capturado'
+      ? 'White king captured'
+      : qgo.reason === 'Rey negro capturado'
+        ? 'Black king captured'
+        : qgo.reason
   return isWin
-    ? { title: '¡Victoria!', message: qgo.reason, result: 'win' }
-    : { title: 'Derrota', message: qgo.reason, result: 'lose' }
+    ? { title: language === 'es' ? '¡Victoria!' : 'Victory!', message: reason, result: 'win' }
+    : { title: language === 'es' ? 'Derrota' : 'Defeat', message: reason, result: 'lose' }
 }
 
-export function useQuantumChess(config: GameConfig, sounds: GameSounds) {
+export function useQuantumChess(config: GameConfig, sounds: GameSounds, language: Language) {
   const engineRef = useRef(new QuantumChessEngine())
 
   const [boardVersion, setBoardVersion] = useState(0)
@@ -146,18 +154,18 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds) {
   }, [selectedPiece, boardVersion])
 
   const status = useMemo(() => {
-    if (gameOverInfo) return { text: gameOverInfo.title, type: 'over' as const }
-    return { text: turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras', type: 'player' as const }
-  }, [gameOverInfo, turn])
+    if (gameOverInfo) return { text: translateGameOverInfo(gameOverInfo, language).title, type: 'over' as const }
+    return { text: language === 'es' ? `Turno: ${getColorName(turn, language)}` : `${getColorName(turn, language)} to move`, type: 'player' as const }
+  }, [gameOverInfo, turn, language])
 
   const refresh = useCallback(() => {
     setBoardVersion(v => v + 1)
     const qgo = engine.checkGameOverPublic()
     if (qgo && !gameOverInfo) {
       sounds.playGameEnd()
-      setGameOverInfo(qGameOverToClassic(qgo, config.playerColor))
+      setGameOverInfo(qGameOverToClassic(qgo, config.playerColor, language))
     }
-  }, [engine, sounds, config.playerColor, gameOverInfo])
+  }, [engine, sounds, config.playerColor, gameOverInfo, language])
 
   const handleSquareClick = useCallback((sq: string) => {
     if (gameOverInfo) return
@@ -218,7 +226,7 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds) {
 
         setSelectedPiece(null)
         setMoveMode('classical')
-        setLastMove({ from: selectedPiece.square, to: sq })
+        setLastMove({ from: record.from, to: record.to })
         refresh()
         return
       }
@@ -274,7 +282,7 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds) {
     else sounds.playMove()
 
     setSelectedPiece(null)
-    setLastMove({ from, to })
+    setLastMove({ from: record.from, to: record.to })
     refresh()
   }, [board, engine, gameOverInfo, refresh, sounds, state.turn])
 
@@ -289,7 +297,7 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds) {
     else sounds.playMove()
     setPromotionPending(null)
     setSelectedPiece(null)
-    setLastMove({ from: promotionPending.from, to: promotionPending.to })
+    setLastMove({ from: record.from, to: record.to })
     refresh()
   }, [promotionPending, engine, sounds, refresh])
 
@@ -315,18 +323,22 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds) {
   const resign = useCallback(() => {
     if (gameOverInfo) return
     sounds.playGameEnd()
-    setGameOverInfo({ title: 'Resignación', message: 'Partida terminada por rendición', result: 'lose' })
-  }, [gameOverInfo, sounds])
+    setGameOverInfo({
+      title: language === 'es' ? 'Resignación' : 'Resignation',
+      message: language === 'es' ? 'Partida terminada por rendición' : 'Game ended by resignation',
+      result: 'lose',
+    })
+  }, [gameOverInfo, sounds, language])
 
   const handleTimedOut = useCallback((color: PieceColor) => {
     if (gameOverInfo) return
     sounds.playGameEnd()
     setGameOverInfo(
       color === 'w'
-        ? { title: 'Tiempo agotado', message: 'Ganan negras por tiempo', result: 'lose' }
-        : { title: 'Tiempo agotado', message: 'Ganan blancas por tiempo', result: 'win' }
+        ? { title: language === 'es' ? 'Tiempo agotado' : 'Time Out', message: language === 'es' ? 'Ganan negras por tiempo' : 'Black wins on time', result: 'lose' }
+        : { title: language === 'es' ? 'Tiempo agotado' : 'Time Out', message: language === 'es' ? 'Ganan blancas por tiempo' : 'White wins on time', result: 'win' }
     )
-  }, [gameOverInfo, sounds])
+  }, [gameOverInfo, sounds, language])
 
   const dismissGameOver = useCallback(() => setGameOverInfo(null), [])
   const dismissMeasurement = useCallback(() => setMeasurementEvent(null), [])

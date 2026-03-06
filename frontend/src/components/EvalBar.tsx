@@ -1,12 +1,13 @@
 import { motion } from 'framer-motion'
-import type { Chances, PieceColor } from '../lib/types'
+import type { Chances, Language, PieceColor } from '../lib/types'
 
 interface EvalBarProps {
   chances: Chances
   playerColor: PieceColor
+  language: Language
 }
 
-export default function EvalBar({ chances, playerColor }: EvalBarProps) {
+export default function EvalBar({ chances, playerColor, language }: EvalBarProps) {
   // Mostrar perspectiva del jugador a la derecha
   const playerChance = playerColor === 'w' ? chances.white : chances.black
   const aiChance = playerColor === 'w' ? chances.black : chances.white
@@ -14,7 +15,7 @@ export default function EvalBar({ chances, playerColor }: EvalBarProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs text-neutral-400">
-        <span>Evaluación</span>
+        <span>{language === 'es' ? 'Evaluación' : 'Evaluation'}</span>
         <span className="font-mono text-neutral-500">
           {playerChance > aiChance ? '+' : ''}{playerChance - aiChance}%
         </span>
