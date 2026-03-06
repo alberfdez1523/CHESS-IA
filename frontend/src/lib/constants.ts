@@ -13,11 +13,6 @@ export const PIECE_VALUES: Record<string, number> = {
   p: 1, n: 3, b: 3, r: 5, q: 9, k: 0,
 }
 
-// ─── Nombres de piezas en español ───
-export const PIECE_NAMES: Record<string, string> = {
-  p: 'peón', n: 'caballo', b: 'alfil', r: 'torre', q: 'dama', k: 'rey',
-}
-
 // ─── Columnas del tablero ───
 export const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 export const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8']

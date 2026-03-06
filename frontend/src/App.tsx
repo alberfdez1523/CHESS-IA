@@ -16,6 +16,11 @@ export default function App() {
     root.classList.add(theme === 'dark' ? 'theme-dark' : 'theme-light')
   }, [theme])
 
+  useEffect(() => {
+    const modeLabel = gameConfig?.gameMode === 'quantum' ? ' | Modo Cuántico' : ''
+    document.title = `Gambito de Dama Cuántico${modeLabel}`
+  }, [gameConfig])
+
   const handlePlay = useCallback((config: GameConfig) => {
     setGameConfig(config)
     setScreen('game')

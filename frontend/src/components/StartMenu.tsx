@@ -91,10 +91,10 @@ export default function StartMenu({ onPlay }: StartMenuProps) {
         >
           <div className="start-logo mb-2 text-5xl lg:text-7xl">♛</div>
           <h1 className="start-title text-3xl font-extrabold tracking-tight text-white lg:text-5xl">
-            Gambito de Dama <span className="text-accent">Cuantico</span>
+            Gambito de Dama <span className="text-accent">Cuántico</span>
           </h1>
           <p className="mt-1 text-sm text-neutral-500 lg:text-base">
-            {gameMode === 'quantum' ? 'Modo cuantico local 2 jugadores ⚛' : 'Clasico vs Stockfish o 2 jugadores'}
+            {gameMode === 'quantum' ? 'Modo cuántico local 2 jugadores ⚛' : 'Clásico vs Stockfish o 2 jugadores'}
           </p>
         </motion.div>
 

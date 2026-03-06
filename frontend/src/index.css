@@ -65,9 +65,38 @@ body {
 .theme-light .bg-surface-3 { background-color: var(--surface-3) !important; }
 .theme-light .bg-surface-4 { background-color: var(--surface-4) !important; }
 .theme-light .text-white { color: var(--text-main) !important; }
+.theme-light .text-neutral-200 { color: #433122 !important; }
+.theme-light .text-neutral-300 { color: #533f2f !important; }
 .theme-light .text-neutral-400 { color: #6c5847 !important; }
 .theme-light .text-neutral-500 { color: #7a6656 !important; }
 .theme-light .text-neutral-600 { color: #8a7463 !important; }
+.theme-light .text-accent-light { color: #9f3f0a !important; }
+.theme-light .text-purple-200 { color: #6b21a8 !important; }
+.theme-light .text-purple-300 { color: #7e22ce !important; }
+.theme-light .text-purple-400 { color: #6d28d9 !important; }
+.theme-light .text-cyan-300 { color: #0f766e !important; }
+.theme-light .text-yellow-300 { color: #a16207 !important; }
+.theme-light .text-emerald-300 { color: #047857 !important; }
+.theme-light .text-emerald-400 { color: #059669 !important; }
+.theme-light .hover\:text-white:hover { color: var(--text-main) !important; }
+.theme-light .hover\:text-neutral-200:hover { color: #433122 !important; }
+.theme-light .hover\:text-neutral-300:hover { color: #533f2f !important; }
+.theme-light [class*="border-white/"] { border-color: rgba(83, 63, 47, 0.14) !important; }
+.theme-light [class*="ring-white/"] { --tw-ring-color: rgba(83, 63, 47, 0.16) !important; }
+.theme-light .bg-white { background-color: #fffaf2 !important; }
+.theme-light .bg-neutral-800 { background-color: #463426 !important; }
+.theme-light .bg-neutral-500 { background-color: #8a7463 !important; }
+.theme-light .bg-purple-500\/10 { background-color: rgba(109, 40, 217, 0.12) !important; }
+.theme-light .bg-purple-500\/15 { background-color: rgba(109, 40, 217, 0.14) !important; }
+.theme-light .bg-purple-500\/20 { background-color: rgba(109, 40, 217, 0.18) !important; }
+.theme-light .bg-cyan-500\/15 { background-color: rgba(8, 145, 178, 0.15) !important; }
+.theme-light .bg-emerald-500\/10 { background-color: rgba(5, 150, 105, 0.12) !important; }
+.theme-light .bg-red-500\/10 { background-color: rgba(220, 38, 38, 0.1) !important; }
+.theme-light .border-purple-400\/30 { border-color: rgba(109, 40, 217, 0.24) !important; }
+
+.theme-light input[type='range'] {
+  accent-color: #c84e0b;
+}
 
 .start-logo {
   color: #e05a13;

@@ -18,7 +18,7 @@ import chess.engine
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
@@ -513,7 +513,54 @@ USE_REACT = DIST_DIR.exists() and (DIST_DIR / "index.html").exists()
 if USE_REACT:
     print(f"✓ Serving React build from {DIST_DIR}")
 else:
-    print("ℹ React build not found, serving legacy frontend from project root")
+        print("ℹ React build not found. Run 'cd frontend && npm run build' or use 'npm run dev' inside frontend/")
+
+
+def frontend_not_built_response() -> HTMLResponse:
+        return HTMLResponse(
+                """
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Frontend no compilado</title>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                margin: 0;
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                background: #111111;
+                color: #f5f5f5;
+            }
+            main {
+                max-width: 680px;
+                padding: 32px;
+                border: 1px solid #2a2a2a;
+                border-radius: 16px;
+                background: #1a1a1a;
+            }
+            code {
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                background: #222222;
+                padding: 2px 6px;
+                border-radius: 6px;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <h1>El frontend no está compilado</h1>
+            <p>Este backend ya no usa el frontend legado de la raíz del proyecto.</p>
+            <p>Compila la aplicación React con <code>cd frontend && npm install && npm run build</code> o ejecuta el entorno de desarrollo con <code>cd frontend && npm run dev</code>.</p>
+        </main>
+    </body>
+</html>
+                """.strip(),
+                status_code=503,
+        )
 
 # Música siempre se sirve desde music/
 _music_dir = HERE / "music"
@@ -529,7 +576,7 @@ if USE_REACT and (DIST_DIR / "assets").exists():
 def root():
     if USE_REACT:
         return FileResponse(str(DIST_DIR / "index.html"))
-    return FileResponse(str(HERE / "index.html"))
+    return frontend_not_built_response()
 
 
 @app.head("/")
@@ -554,10 +601,10 @@ def static_files(filename: str):
 
         return FileResponse(str(DIST_DIR / "index.html"))
 
-    fp = HERE / filename
-    if fp.is_file() and not str(fp.resolve()).startswith(str(HERE / "engine")):
-        return FileResponse(str(fp))
-    raise HTTPException(404)
+    name = pathlib.Path(filename).name
+    if "." in name:
+        raise HTTPException(404)
+    return frontend_not_built_response()
 
 
 # ---------------------------------------------------------------------------

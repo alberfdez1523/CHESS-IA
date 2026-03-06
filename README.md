@@ -124,7 +124,9 @@ npm install
 npm run build
 ```
 
-La app se sirve en `http://localhost:3000` desde FastAPI (usando `frontend/dist` si existe).
+La app se sirve en `http://localhost:3000` desde FastAPI usando `frontend/dist`.
+
+Nota: el frontend legado de la raíz fue eliminado. Si `frontend/dist` no existe, compílalo antes de arrancar el backend o usa `npm run dev` dentro de `frontend/`.
 
 ## API disponible
 

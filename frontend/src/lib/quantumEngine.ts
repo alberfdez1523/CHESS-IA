@@ -6,7 +6,7 @@
 import type {
   PieceColor, PieceType, QPiece, QBoardCell, QMoveRecord,
   QMoveType, QEntanglement, QCastleEntData, QTunnelEntData,
-  QState, QGameOver,
+  QState, QGameOver, QMeasurementEvent,
 } from './types'
 
 // ─── Utilidades de coordenadas ───
@@ -181,7 +181,8 @@ export class QuantumChessEngine {
     const enemies = targetCells.filter(c => c.color !== piece.color)
 
     let captured: { id: string; type: PieceType } | undefined
-    let measurement: QMoveRecord['measurement']
+    let measurement: QMeasurementEvent | undefined
+    let attackerMeasurement: QMeasurementEvent | undefined
 
     // ¿La pieza que mueve es cuántica?
     const attackerIsQuantum = prob < 1
@@ -197,7 +198,16 @@ export class QuantumChessEngine {
         const alive = roll < prob
         if (!alive) {
           // Atacante no existe → pierde turno, colapsa en otra casilla
-          measurement = { target: 'attacker', result: 'dead', probability: prob, roll }
+          measurement = {
+            target: 'attacker',
+            result: 'dead',
+            probability: prob,
+            roll,
+            attackerWasQuantum: true,
+            defenderWasQuantum: defenderIsQuantum,
+            step: 1,
+            totalSteps: defenderIsQuantum ? 2 : 1,
+          }
           this._collapsePieceAway(pieceId, from)
           this._resolveEntanglementsFor(pieceId)
           const desc = `⚡ ${LABELS[piece.type]} mide en ${to} → NO existe`
@@ -210,7 +220,17 @@ export class QuantumChessEngine {
           return record
         }
         // Atacante existe → colapsa a 100% en from, luego captura
-        measurement = { target: 'attacker', result: 'alive', probability: prob, roll }
+        attackerMeasurement = {
+          target: 'attacker',
+          result: 'alive',
+          probability: prob,
+          roll,
+          attackerWasQuantum: true,
+            defenderWasQuantum: defenderIsQuantum,
+          step: 1,
+          totalSteps: defenderIsQuantum ? 2 : 1,
+        }
+        measurement = attackerMeasurement
         this._collapsePieceTo(pieceId, from)
         this._resolveEntanglementsFor(pieceId)
       }
@@ -221,13 +241,37 @@ export class QuantumChessEngine {
         const defAlive = defRoll < defender.probability
         if (!defAlive) {
           // Defensor no existe → movimiento normal (casilla vacía), defensor colapsa en otra casilla
-          measurement = { target: 'defender', result: 'dead', probability: defender.probability, roll: defRoll }
+          measurement = {
+            target: 'defender',
+            result: 'dead',
+            probability: defender.probability,
+            roll: defRoll,
+            attackerWasQuantum: attackerIsQuantum,
+            defenderWasQuantum: true,
+            step: attackerIsQuantum ? 2 : 1,
+            totalSteps: attackerIsQuantum ? 2 : 1,
+            priorStepResult: attackerMeasurement
+              ? { target: attackerMeasurement.target, result: attackerMeasurement.result }
+              : undefined,
+          }
           this._collapsePieceAway(defender.pieceId, to)
           this._resolveEntanglementsFor(defender.pieceId)
           // Pieza se mueve a la casilla (vacía)
         } else {
           // Defensor existe → captura
-          measurement = measurement ?? { target: 'defender', result: 'alive', probability: defender.probability, roll: defRoll }
+          measurement = {
+            target: 'defender',
+            result: 'alive',
+            probability: defender.probability,
+            roll: defRoll,
+            attackerWasQuantum: attackerIsQuantum,
+            defenderWasQuantum: true,
+            step: attackerIsQuantum ? 2 : 1,
+            totalSteps: attackerIsQuantum ? 2 : 1,
+            priorStepResult: attackerMeasurement
+              ? { target: attackerMeasurement.target, result: attackerMeasurement.result }
+              : undefined,
+          }
           captured = { id: defender.pieceId, type: defender.type }
           this._killPiece(defender.pieceId)
           this._resolveEntanglementsFor(defender.pieceId)
@@ -289,7 +333,8 @@ export class QuantumChessEngine {
     }
     if (measurement) {
       const icon = measurement.result === 'alive' ? '✓' : '✗'
-      desc = `⚡ ${desc} (${measurement.target === 'attacker' ? 'atac.' : 'def.'}: ${icon})`
+      const stepLabel = measurement.totalSteps > 1 ? ` ${measurement.step}/${measurement.totalSteps}` : ''
+      desc = `⚡ ${desc} (${measurement.target === 'attacker' ? 'atac.' : 'def.'}${stepLabel}: ${icon})`
     }
 
     const record: QMoveRecord = {

@@ -82,6 +82,21 @@ export interface QBoardCell {
 export type QMoveType = 'classical' | 'quantum' | 'merge' | 'quantumCastle'
 export type QMoveMode = 'classical' | 'quantum' | 'merge'
 
+export interface QMeasurementEvent {
+  target: 'attacker' | 'defender'
+  result: 'alive' | 'dead'
+  probability: number
+  roll: number
+  attackerWasQuantum: boolean
+  defenderWasQuantum: boolean
+  step: number
+  totalSteps: number
+  priorStepResult?: {
+    target: 'attacker' | 'defender'
+    result: 'alive' | 'dead'
+  }
+}
+
 export interface QMoveRecord {
   pieceId: string
   pieceType: PieceType
@@ -91,12 +106,7 @@ export interface QMoveRecord {
   to: string
   secondTo?: string
   captured?: { id: string; type: PieceType }
-  measurement?: {
-    target: 'attacker' | 'defender'
-    result: 'alive' | 'dead'
-    probability: number
-    roll: number
-  }
+  measurement?: QMeasurementEvent
   description: string
 }
 
@@ -134,13 +144,4 @@ export interface QState {
   entanglements: QEntanglement[]
   nextEntId: number
   gameOver: QGameOver | null
-}
-
-export interface QuantumAIMoveResponse {
-  pieceId: string
-  from: string
-  to: string
-  promotion?: string
-  weightedEval: number
-  universeCount: number
 }

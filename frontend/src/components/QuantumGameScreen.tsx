@@ -108,10 +108,10 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
         <div className="flex items-center gap-2">
           <span className="text-xl">⚛</span>
           <span className="text-sm font-bold text-white">
-            Quantum<span className="text-purple-400">Chess</span>
+            Gambito de Dama <span className="text-purple-400">Cuántico</span>
           </span>
           <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
-            2 jugadores
+            Modo Cuántico · 2 jugadores
           </span>
         </div>
         <motion.button
@@ -127,6 +127,78 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
 
       {/* Contenido principal */}
       <div className="flex flex-1 items-start justify-center gap-6 px-4 py-4 pb-2 lg:gap-8 lg:py-8">
+        {/* Panel izquierdo (desktop) */}
+        <motion.div
+          className="hidden w-64 flex-col gap-4 lg:flex"
+          initial={{ opacity: 0, x: -24 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.45, delay: 0.2 }}
+        >
+          <div className="rounded-2xl border border-purple-500/20 bg-surface-1/85 p-4 shadow-glow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-lg">⚛</span>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-purple-300">Tipos de jugada</p>
+                <p className="text-[11px] text-neutral-500">Elige cómo actuará la pieza seleccionada.</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {modeButtons.map((mode) => {
+                const info = MODE_LABELS[mode]
+                const active = game.moveMode === mode
+                const enabled = game.availableMoveModes.includes(mode)
+                return (
+                  <motion.button
+                    key={mode}
+                    onClick={() => game.chooseMoveMode(mode)}
+                    whileHover={enabled ? { scale: 1.02, x: 2 } : {}}
+                    whileTap={enabled ? { scale: 0.98 } : {}}
+                    disabled={!enabled || game.gameOver}
+                    className={`w-full rounded-2xl px-4 py-4 text-left ring-1 transition-all ${
+                      active
+                        ? `${info.color} shadow-glow-sm`
+                        : enabled && !game.gameOver
+                          ? 'bg-surface-2 text-neutral-200 ring-white/10 hover:bg-surface-3 hover:ring-white/20'
+                          : 'cursor-not-allowed bg-surface-2/60 text-neutral-600 ring-white/5'
+                    }`}
+                    title={info.label}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-black/20 text-2xl ring-1 ring-white/10">
+                        {info.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold leading-none">{info.label}</div>
+                        <div className="mt-1 text-[11px] leading-tight text-neutral-400">
+                          {mode === 'classical' && 'Movimiento normal, sin dividir la pieza.'}
+                          {mode === 'quantum' && 'La pieza entra en superposición y se divide en dos destinos.'}
+                          {mode === 'merge' && 'Une dos estados de la misma pieza en una sola casilla.'}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.button>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-surface-2/70 px-3 py-2 text-[11px] text-neutral-400">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`h-2 w-2 rounded-full ${
+                    game.status.type === 'player'
+                      ? 'bg-purple-400'
+                      : game.status.type === 'over'
+                        ? 'bg-red-400'
+                        : 'bg-neutral-600'
+                  }`}
+                />
+                <span>{game.status.text}</span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Columna del tablero */}
         <motion.div
           className="flex flex-col gap-2 lg:gap-3"
@@ -173,7 +245,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
 
           {/* Controles de modo cuántico */}
           <motion.div
-            className="flex items-center justify-between gap-2 py-1"
+            className="flex items-center justify-between gap-2 py-1 lg:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
@@ -271,12 +343,14 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
               <summary className="cursor-pointer text-xs font-semibold text-neutral-300">
                 Casuísticas de Captura
               </summary>
-              <div className="mt-2 space-y-1">
-                <p>• Clásica {'->'} Clásica: captura normal.</p>
-                <p>• Clásica {'->'} Cuántica: se mide la objetivo.</p>
-                <p>• Cuántica {'->'} Clásica: se mide la atacante.</p>
-                <p>• Cuántica {'->'} Cuántica: atacante y luego objetivo.</p>
-                <p>• La ruleta muestra la probabilidad y resuelve el colapso.</p>
+              <div className="mt-2 space-y-2">
+                <p>• Clásica {'->'} Clásica: no hay ruleta; la captura ocurre como en ajedrez normal.</p>
+                <p>• Clásica {'->'} Cuántica: se mide la pieza objetivo.</p>
+                <p className="pl-2">Si sale viva, estaba ahí y es capturada. Si sale muerta, no estaba ahí y colapsa en su otra casilla.</p>
+                <p>• Cuántica {'->'} Clásica: se mide la pieza atacante.</p>
+                <p className="pl-2">Si sale viva, la captura continúa. Si sale muerta, la atacante no estaba en esa casilla y la jugada falla.</p>
+                <p>• Cuántica {'->'} Cuántica: primero se mide la atacante; si sobrevive, después se mide la objetivo.</p>
+                <p className="pl-2">La ruleta siempre indica qué pieza se está midiendo y qué pasa si el resultado es vivo o muerto.</p>
               </div>
             </details>
             <MoveHistory history={classicHistory} />
@@ -310,10 +384,11 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
               <p className="mb-1 text-[11px] font-semibold text-neutral-300">Casuísticas de captura</p>
               <p>• Clásica {'->'} Clásica: captura normal, sin medición.</p>
               <p>• Clásica {'->'} Cuántica: se mide la pieza objetivo.</p>
-              <p className="pl-2">Si existe, la captura ocurre. Si no existe, falla y el objetivo colapsa en su otra casilla.</p>
+              <p className="pl-2">Si sale viva, estaba realmente ahí y es capturada. Si sale muerta, la casilla estaba vacía y el objetivo colapsa en su otra casilla.</p>
               <p>• Cuántica {'->'} Clásica: se mide la atacante.</p>
-              <p className="pl-2">Si existe, captura y colapsa. Si no existe, la captura falla y pierde turno.</p>
+              <p className="pl-2">Si sale viva, la atacante se vuelve 100% real en esa casilla y captura. Si sale muerta, la jugada falla y la atacante colapsa fuera de esa casilla.</p>
               <p>• Cuántica {'->'} Cuántica: primero se mide atacante; si existe, luego se mide objetivo.</p>
+              <p className="pl-2">La ruleta explica en cada paso qué pieza se está comprobando y qué efecto tiene un resultado vivo o muerto.</p>
             </div>
           </div>
 
@@ -373,10 +448,7 @@ export default function QuantumGameScreen({ config, onNewGame }: QuantumGameScre
       />
       <QuantumMeasurementRoulette
         visible={!!game.measurementEvent}
-        probability={game.measurementEvent?.probability ?? 0.5}
-        roll={game.measurementEvent?.roll ?? 0.5}
-        result={game.measurementEvent?.result ?? 'dead'}
-        target={game.measurementEvent?.target ?? 'defender'}
+        measurement={game.measurementEvent}
         onClose={game.dismissMeasurement}
       />
     </div>

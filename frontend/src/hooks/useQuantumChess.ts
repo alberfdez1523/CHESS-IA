@@ -2,7 +2,7 @@
 import { QuantumChessEngine } from '../lib/quantumEngine'
 import type {
   GameConfig, PieceColor, PieceType, Chances, QBoardCell,
-  QMoveRecord, QMoveMode, QGameOver, GameOverInfo,
+  QMoveRecord, QMoveMode, QGameOver, GameOverInfo, QMeasurementEvent,
 } from '../lib/types'
 
 export interface GameSounds {
@@ -52,12 +52,7 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds) {
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null)
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null)
   const [boardFlipped, setBoardFlipped] = useState(config.playerColor === 'b')
-  const [measurementEvent, setMeasurementEvent] = useState<{
-    probability: number
-    roll: number
-    result: 'alive' | 'dead'
-    target: 'attacker' | 'defender'
-  } | null>(null)
+  const [measurementEvent, setMeasurementEvent] = useState<QMeasurementEvent | null>(null)
   const [promotionPending, setPromotionPending] = useState<{
     pieceId: string; from: string; to: string
   } | null>(null)

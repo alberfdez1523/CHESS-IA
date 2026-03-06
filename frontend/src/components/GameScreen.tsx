@@ -95,10 +95,10 @@ export default function GameScreen({ config, onNewGame }: GameScreenProps) {
         <div className="flex items-center gap-2">
           <span className="text-xl">♛</span>
           <span className="text-sm font-bold text-white">
-            Chess<span className="text-accent">AI</span>
+            Gambito de Dama <span className="text-accent">Cuántico</span>
           </span>
           <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
-            {isAIMode ? diffMeta?.label : '2 jugadores'}
+            {isAIMode ? `Clásico · ${diffMeta?.label}` : 'Clásico · 2 jugadores'}
           </span>
         </div>
         <motion.button
