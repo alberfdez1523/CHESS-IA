@@ -43,6 +43,13 @@ export interface MoveTarget {
   tunnelThrough: string[] // casillas de piezas cuánticas atravesadas
 }
 
+interface ClassicalCastleInfo {
+  side: 'k' | 'q'
+  rookId: string
+  rookFrom: string
+  rookTo: string
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 //  Clase principal del motor cuántico
 // ═══════════════════════════════════════════════════════════════════════
@@ -93,7 +100,7 @@ export class QuantumChessEngine {
       case 'b': return this._sliderMoves(fromSquare, BISHOP_DIRS, myColor, board, pieceId)
       case 'r': return this._sliderMoves(fromSquare, ROOK_DIRS, myColor, board, pieceId)
       case 'q': return this._sliderMoves(fromSquare, QUEEN_DIRS, myColor, board, pieceId)
-      case 'k': return this._jumpMoves(fromSquare, KING_OFFSETS, myColor, board, pieceId)
+      case 'k': return this._kingMoves(piece, fromSquare, board)
       default: return []
     }
   }
@@ -175,8 +182,13 @@ export class QuantumChessEngine {
 
   doClassicalMove(pieceId: string, from: string, to: string, promotion?: PieceType): QMoveRecord {
     const piece = this.state.pieces[pieceId]
-    const prob = piece.positions[from]
     const board = this.getBoard()
+    const castleSide = to === 'g1' || to === 'g8' ? 'k' : to === 'c1' || to === 'c8' ? 'q' : null
+    const castleInfo = piece.type === 'k' && castleSide
+      ? this._getClassicalCastleInfo(piece.color, from, castleSide, board)
+      : null
+    const isClassicalCastle = piece.type === 'k' && Math.abs(from.charCodeAt(0) - to.charCodeAt(0)) === 2 && !!castleInfo
+    const prob = piece.positions[from]
     const targetCells = board[to] || []
     const enemies = targetCells.filter(c => c.color !== piece.color)
     const attemptedPawnCapture = piece.type === 'p' && from[0] !== to[0]
@@ -292,6 +304,13 @@ export class QuantumChessEngine {
       piece.positions[to] = attackerIsQuantum && measurement?.result === 'alive' ? 1 : (prevPositions[from] ?? 1)
     }
 
+    if (isClassicalCastle && castleInfo) {
+      const rook = this.state.pieces[castleInfo.rookId]
+      if (!rook) throw new Error('Torre no disponible para enroque clásico')
+      delete rook.positions[castleInfo.rookFrom]
+      rook.positions[castleInfo.rookTo] = 1
+    }
+
     // Si todas las probabilidades restantes están en un solo lugar → la pieza ya es 100%
     const sqs = Object.keys(piece.positions)
     if (sqs.length === 1) piece.positions[sqs[0]] = 1
@@ -330,7 +349,9 @@ export class QuantumChessEngine {
 
     // Descripción
     let desc = ''
-    if (captured) {
+    if (isClassicalCastle && castleInfo) {
+      desc = castleInfo.side === 'k' ? 'Enroque corto' : 'Enroque largo'
+    } else if (captured) {
       desc = `${LABELS[piece.type]} captura en ${to}`
     } else if (staysOnOrigin) {
       desc = `${LABELS[piece.type]} intenta capturar en ${to}, pero permanece en ${from}`
@@ -624,6 +645,22 @@ export class QuantumChessEngine {
     return moves
   }
 
+  /** Movimientos del rey, incluyendo enroque clásico */
+  private _kingMoves(piece: QPiece, from: string, board: Record<string, QBoardCell[]>): MoveTarget[] {
+    const moves = this._jumpMoves(from, KING_OFFSETS, piece.color, board, piece.id)
+    if (Object.keys(piece.positions).length !== 1 || piece.positions[from] !== 1) return moves
+
+    const rank = piece.color === 'w' ? '1' : '8'
+    if (this._getClassicalCastleInfo(piece.color, from, 'k', board)) {
+      moves.push({ square: `g${rank}`, isCapture: false, tunnelThrough: [] })
+    }
+    if (this._getClassicalCastleInfo(piece.color, from, 'q', board)) {
+      moves.push({ square: `c${rank}`, isCapture: false, tunnelThrough: [] })
+    }
+
+    return moves
+  }
+
   /** Movimientos de deslizamiento (alfil, torre, dama) */
   private _sliderMoves(from: string, dirs: Dir[], color: PieceColor, board: Record<string, QBoardCell[]>, myId: string): MoveTarget[] {
     const [f, r] = sq2rc(from)
@@ -679,6 +716,35 @@ export class QuantumChessEngine {
       }
     }
     return moves
+  }
+
+  private _getClassicalCastleInfo(
+    color: PieceColor,
+    from: string,
+    side: 'k' | 'q',
+    board: Record<string, QBoardCell[]>
+  ): ClassicalCastleInfo | null {
+    const rank = color === 'w' ? '1' : '8'
+    if (from !== `e${rank}`) return null
+
+    const rights = this.state.castling[color]
+    if ((side === 'k' && !rights.k) || (side === 'q' && !rights.q)) return null
+
+    const rookId = side === 'k' ? `${color}_r_h` : `${color}_r_a`
+    const rookFrom = side === 'k' ? `h${rank}` : `a${rank}`
+    const rookTo = side === 'k' ? `f${rank}` : `d${rank}`
+    const kingId = `${color}_k`
+    const king = this.state.pieces[kingId]
+    const rook = this.state.pieces[rookId]
+
+    if (!king?.alive || !rook?.alive) return null
+    if (Object.keys(king.positions).length !== 1 || king.positions[`e${rank}`] !== 1) return null
+    if (Object.keys(rook.positions).length !== 1 || rook.positions[rookFrom] !== 1) return null
+
+    const emptySquares = side === 'k' ? [`f${rank}`, `g${rank}`] : [`b${rank}`, `c${rank}`, `d${rank}`]
+    if (emptySquares.some((sq) => (board[sq] || []).length > 0)) return null
+
+    return { side, rookId, rookFrom, rookTo }
   }
 
   /** Colapsar pieza LEJOS de una casilla (no existe ahí → va a otra posición) */

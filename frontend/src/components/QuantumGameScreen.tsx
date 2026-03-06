@@ -108,6 +108,7 @@ export default function QuantumGameScreen({ config, onNewGame, language }: Quant
         menu: '← Menú',
         moveTypes: 'Tipos de jugada',
         moveTypesHint: 'Elige cómo actuará la pieza seleccionada.',
+        classicalCastle: (side: 'k' | 'q') => `♜ Enroque ${side === 'k' ? 'corto' : 'largo'}`,
         castle: (side: 'k' | 'q') => `⚛ Enroque ${side === 'k' ? 'corto' : 'largo'} cuántico`,
         mobileRules: 'Reglas del Modo Cuántico',
         captureCases: 'Casuísticas de Captura',
@@ -119,6 +120,7 @@ export default function QuantumGameScreen({ config, onNewGame, language }: Quant
         menu: '← Menu',
         moveTypes: 'Move types',
         moveTypesHint: 'Choose how the selected piece will act.',
+        classicalCastle: (side: 'k' | 'q') => `♜ ${side === 'k' ? 'Kingside' : 'Queenside'} castling`,
         castle: (side: 'k' | 'q') => `⚛ Quantum ${side === 'k' ? 'kingside' : 'queenside'} castling`,
         mobileRules: 'Quantum Mode Rules',
         captureCases: 'Capture cases',
@@ -323,26 +325,46 @@ export default function QuantumGameScreen({ config, onNewGame, language }: Quant
             )}
           </motion.div>
 
-          {/* Enroque cuántico */}
-          {game.quantumCastleOptions.length > 0 &&
+          {/* Enroques disponibles */}
+          {(game.classicalCastleOptions.length > 0 || game.quantumCastleOptions.length > 0) &&
             !game.gameOver &&
             !game.isThinking && (
             <motion.div
-              className="flex gap-2"
+              className="flex flex-col gap-2"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              {game.quantumCastleOptions.map((side) => (
-                <motion.button
-                  key={side}
-                  onClick={() => game.doQuantumCastle(side)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex-1 rounded-lg bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-400 ring-1 ring-purple-500/30 transition-colors hover:bg-purple-500/20"
-                >
-                  {text.castle(side)}
-                </motion.button>
-              ))}
+              {game.classicalCastleOptions.length > 0 && (
+                <div className="flex gap-2">
+                  {game.classicalCastleOptions.map((side) => (
+                    <motion.button
+                      key={`classic-${side}`}
+                      onClick={() => game.doClassicalCastle(side)}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex-1 rounded-lg bg-accent/10 px-3 py-2 text-xs font-medium text-accent ring-1 ring-accent/30 transition-colors hover:bg-accent/20"
+                    >
+                      {text.classicalCastle(side)}
+                    </motion.button>
+                  ))}
+                </div>
+              )}
+
+              {game.quantumCastleOptions.length > 0 && (
+                <div className="flex gap-2">
+                  {game.quantumCastleOptions.map((side) => (
+                    <motion.button
+                      key={`quantum-${side}`}
+                      onClick={() => game.doQuantumCastle(side)}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex-1 rounded-lg bg-purple-500/10 px-3 py-2 text-xs font-medium text-purple-400 ring-1 ring-purple-500/30 transition-colors hover:bg-purple-500/20"
+                    >
+                      {text.castle(side)}
+                    </motion.button>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 

@@ -139,6 +139,18 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds, language
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardVersion, turn])
 
+  const classicalCastleOptions = useMemo(() => {
+    void boardVersion
+    const rank = turn === 'w' ? '1' : '8'
+    const kingId = `${turn}_k`
+    const moves = engine.getLegalMoves(kingId, `e${rank}`)
+    const options: Array<'k' | 'q'> = []
+    if (moves.some((move) => move.square === `g${rank}`)) options.push('k')
+    if (moves.some((move) => move.square === `c${rank}`)) options.push('q')
+    return options
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardVersion, turn])
+
   const availableMoveModes: QMoveMode[] = useMemo(() => {
     if (!selectedPiece) return ['classical', 'quantum']
     const piece = engine.getPiece(selectedPiece.id)
@@ -312,6 +324,25 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds, language
     refresh()
   }, [engine, gameOverInfo, refresh, sounds, state.turn])
 
+  const doClassicalCastle = useCallback((side: 'k' | 'q') => {
+    if (gameOverInfo) return
+
+    const allowedColor = state.turn
+    const rank = allowedColor === 'w' ? '1' : '8'
+    const kingId = `${allowedColor}_k`
+    const from = `e${rank}`
+    const to = side === 'k' ? `g${rank}` : `c${rank}`
+
+    const record = engine.doClassicalMove(kingId, from, to)
+    if (record.measurement) setMeasurementEvent(record.measurement)
+    sounds.playMove()
+    setSelectedPiece(null)
+    setFirstQuantumTarget(null)
+    setMoveMode('classical')
+    setLastMove({ from: record.from, to: record.to })
+    refresh()
+  }, [engine, gameOverInfo, refresh, sounds, state.turn])
+
   const chooseMoveMode = useCallback((mode: QMoveMode) => {
     if (!availableMoveModes.includes(mode)) return
     setMoveMode(mode)
@@ -360,6 +391,7 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds, language
     chances,
     history,
     status,
+    classicalCastleOptions,
     quantumCastleOptions,
     availableMoveModes,
     measurementEvent,
@@ -367,6 +399,7 @@ export function useQuantumChess(config: GameConfig, sounds: GameSounds, language
     handleDrop,
     handlePromotion,
     chooseMoveMode,
+    doClassicalCastle,
     doQuantumCastle,
     flip,
     resign,

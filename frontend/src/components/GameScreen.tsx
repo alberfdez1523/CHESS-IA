@@ -89,6 +89,7 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
     ? {
         modeBadge: isAIMode ? `Clásico · ${diffMeta?.label}` : 'Clásico · 2 jugadores',
         menu: '← Menú',
+        classicalCastle: (side: 'k' | 'q') => `♜ Enroque ${side === 'k' ? 'corto' : 'largo'}`,
         rulesTitle: 'Reglas del Modo Clásico',
         rulesTitleDesktop: 'Reglas Modo Clásico',
         rule1: '• Gana quien da jaque mate.',
@@ -102,6 +103,7 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
     : {
         modeBadge: isAIMode ? `Classic · ${diffMeta ? getDifficultyLabel(config.difficulty, language) : ''}` : 'Classic · 2 players',
         menu: '← Menu',
+      classicalCastle: (side: 'k' | 'q') => `♜ ${side === 'k' ? 'Kingside' : 'Queenside'} castling`,
         rulesTitle: 'Classic Mode Rules',
         rulesTitleDesktop: 'Classic Mode Rules',
         rule1: '• Win by checkmate.',
@@ -210,6 +212,26 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
             />
             <span className="text-xs text-neutral-500">{game.status.text}</span>
           </motion.div>
+
+            {game.classicalCastleOptions.length > 0 && !game.gameOver && !game.isThinking && (
+              <motion.div
+                className="flex gap-2"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {game.classicalCastleOptions.map((side) => (
+                  <motion.button
+                    key={`classic-${side}`}
+                    onClick={() => game.doClassicalCastle(side)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="flex-1 rounded-lg bg-accent/10 px-3 py-2 text-xs font-medium text-accent ring-1 ring-accent/30 transition-colors hover:bg-accent/20"
+                  >
+                    {text.classicalCastle(side)}
+                  </motion.button>
+                ))}
+              </motion.div>
+            )}
 
           {/* Panel móvil: evaluación + historial */}
           <motion.div

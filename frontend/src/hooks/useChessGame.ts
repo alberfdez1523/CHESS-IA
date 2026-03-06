@@ -122,6 +122,23 @@ export function useChessGame(config: GameConfig, sounds: GameSounds, language: L
     }
   }, [fen, selectedSquare])
 
+  const classicalCastleOptions = useMemo(() => {
+    const game = gameRef.current
+    const allowedColor = isAIMode ? config.playerColor : (game.turn() as PieceColor)
+    if (game.turn() !== allowedColor) return [] as Array<'k' | 'q'>
+
+    const rank = allowedColor === 'w' ? '1' : '8'
+    try {
+      const moves = game.moves({ square: `e${rank}`, verbose: true }) as any[]
+      const options: Array<'k' | 'q'> = []
+      if (moves.some((m: any) => m.to === `g${rank}` && m.flags.includes('k'))) options.push('k')
+      if (moves.some((m: any) => m.to === `c${rank}` && m.flags.includes('q'))) options.push('q')
+      return options
+    } catch {
+      return []
+    }
+  }, [fen, isAIMode, config.playerColor])
+
   const history: MoveInfo[] = useMemo(() => {
     const moves = gameRef.current.history({ verbose: true }) as any[]
     return moves.map((m: any) => ({ ...m, description: describeMove(m, language) }))
@@ -380,6 +397,19 @@ export function useChessGame(config: GameConfig, sounds: GameSounds, language: L
     [promotionPending, doMove]
   )
 
+  const doClassicalCastle = useCallback((side: 'k' | 'q') => {
+    const game = gameRef.current
+    if (isThinkingRef.current || gameOverInfo) return
+
+    const allowedColor = isAIMode ? config.playerColor : (game.turn() as PieceColor)
+    if (game.turn() !== allowedColor) return
+
+    const rank = allowedColor === 'w' ? '1' : '8'
+    const from = `e${rank}`
+    const to = side === 'k' ? `g${rank}` : `c${rank}`
+    doMove(from, to)
+  }, [config.playerColor, doMove, gameOverInfo, isAIMode])
+
   function undoMove() {
     const game = gameRef.current
     if (game.history().length < 2 || isThinkingRef.current || gameOverInfo) return
@@ -442,10 +472,12 @@ export function useChessGame(config: GameConfig, sounds: GameSounds, language: L
     history,
     status,
     checkSquare,
+    classicalCastleOptions,
     getPiece,
     handleSquareClick,
     handleDrop,
     handlePromotion,
+    doClassicalCastle,
     undo,
     flip,
     resign,
