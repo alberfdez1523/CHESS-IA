@@ -10,7 +10,8 @@ Ejecución local:
     python server.py
 """
 
-import os, pathlib, json, sys
+import os, pathlib, json, sys, threading
+from concurrent.futures import CancelledError
 from contextlib import asynccontextmanager
 
 import chess
@@ -102,19 +103,54 @@ DIFFICULTIES = {
 # ---------------------------------------------------------------------------
 # Mantener una sola instancia reduce latencia y evita abrir procesos por request.
 engine: chess.engine.SimpleEngine | None = None
+engine_lock = threading.Lock()
+
+
+def _score_to_eval(score: chess.engine.PovScore) -> tuple[float, int | None]:
+    """Convierte un score de python-chess a evaluación numérica y mate."""
+    white_score = score.white()
+    if white_score.is_mate():
+        mate = white_score.mate()
+        evaluation = 10000.0 if (mate and mate > 0) else -10000.0
+        return evaluation, mate
+    return float(white_score.score(mate_score=10000)), None
+
+
+def _with_engine_lock(callback):
+    """Serializa acceso al motor compartido para evitar cancelaciones internas."""
+    global engine
+
+    with engine_lock:
+        active_engine = engine
+        if active_engine is None:
+            raise HTTPException(503, "Engine not ready")
+
+        try:
+            return callback(active_engine)
+        except CancelledError as exc:
+            raise HTTPException(503, "Engine request was interrupted, retry the move") from exc
+        except chess.engine.EngineTerminatedError as exc:
+            engine = None
+            raise HTTPException(503, "Engine terminated unexpectedly") from exc
+        except chess.engine.EngineError as exc:
+            raise HTTPException(503, f"Engine error: {exc}") from exc
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Ciclo de vida de FastAPI: arranque y apagado limpio del motor."""
     global engine
     print("Starting Stockfish engine …")
-    engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
-    # Ajustes conservadores para equipos normales.
-    engine.configure({"Threads": 2, "Hash": 128})
+    with engine_lock:
+        engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
+        # Ajustes conservadores para equipos normales.
+        engine.configure({"Threads": 2, "Hash": 128})
     print("✓ Engine ready")
     yield
     print("Shutting down engine …")
-    engine.quit()
+    with engine_lock:
+        if engine is not None:
+            engine.quit()
+            engine = None
 
 
 app = FastAPI(title="Gambito de Dama Cuantico", lifespan=lifespan)
@@ -329,10 +365,6 @@ def _build_board(classical_pieces, quantum_choices, turn, castling):
 @app.post("/api/move", response_model=MoveResponse)
 def get_best_move(req: MoveRequest):
     """Devuelve la mejor jugada de Stockfish para una posición FEN."""
-    global engine
-    if engine is None:
-        raise HTTPException(503, "Engine not ready")
-
     preset = DIFFICULTIES.get(req.difficulty, DIFFICULTIES["medium"])
 
     try:
@@ -345,29 +377,29 @@ def get_best_move(req: MoveRequest):
 
     # Algunos binarios soportan Skill Level explícito.
     # Si no lo soporta, continuamos con límites de profundidad/tiempo.
-    try:
-        engine.configure({"Skill Level": preset["skill"]})
-    except chess.engine.EngineError:
-        pass  # some builds don't support it
+    def _run_move(active_engine: chess.engine.SimpleEngine):
+        try:
+            active_engine.configure({"Skill Level": preset["skill"]})
+        except chess.engine.EngineError:
+            pass  # some builds don't support it
 
-    # Combinamos límite por profundidad y por tiempo:
-    # termina al alcanzar el primero, dando buena respuesta en UI.
-    limit = chess.engine.Limit(
-        depth=preset["depth"],
-        time=preset["time"],
-    )
-    result = engine.play(board, limit, info=chess.engine.INFO_SCORE)
+        # Combinamos límite por profundidad y por tiempo:
+        # termina al alcanzar el primero, dando buena respuesta en UI.
+        limit = chess.engine.Limit(
+            depth=preset["depth"],
+            time=preset["time"],
+        )
+        return active_engine.play(board, limit, info=chess.engine.INFO_SCORE)
 
-    # Parseo de evaluación en perspectiva de blancas.
+    result = _with_engine_lock(_run_move)
+
     evaluation = 0.0
     mate = None
     if result.info and "score" in result.info:
-        score = result.info["score"].white()  # always from white's view
-        if score.is_mate():
-            mate = score.mate()
-            evaluation = 10000.0 if (mate and mate > 0) else -10000.0
-        else:
-            evaluation = float(score.score(mate_score=10000))
+        evaluation, mate = _score_to_eval(result.info["score"])
+
+    if result.move is None:
+        raise HTTPException(503, "Engine did not return a move")
 
     ponder_uci = result.ponder.uci() if result.ponder else None
     best_uci = result.move.uci()
@@ -383,25 +415,21 @@ def get_best_move(req: MoveRequest):
 @app.post("/api/eval", response_model=EvalResponse)
 def get_evaluation(req: EvalRequest):
     """Evalúa una posición sin pedir jugada."""
-    global engine
-    if engine is None:
-        raise HTTPException(503, "Engine not ready")
-
     try:
         board = chess.Board(req.fen)
     except ValueError:
         raise HTTPException(400, "Invalid FEN")
 
-    info = engine.analyse(board, chess.engine.Limit(depth=min(req.depth, 18), time=0.3))
-    score = info["score"].white()
+    info = _with_engine_lock(
+        lambda active_engine: active_engine.analyse(
+            board,
+            chess.engine.Limit(depth=min(req.depth, 18), time=0.3),
+        )
+    )
+    if "score" not in info:
+        raise HTTPException(503, "Engine did not return an evaluation")
 
-    evaluation = 0.0
-    mate = None
-    if score.is_mate():
-        mate = score.mate()
-        evaluation = 10000.0 if (mate and mate > 0) else -10000.0
-    else:
-        evaluation = float(score.score(mate_score=10000))
+    evaluation, mate = _score_to_eval(info["score"])
 
     return EvalResponse(evaluation=evaluation, mate=mate)
 
@@ -419,10 +447,6 @@ def health():
 def quantum_move(req: QuantumMoveRequest):
     """Evalúa todos los tableros clásicos posibles del estado cuántico
     y devuelve la mejor jugada ponderada por probabilidad."""
-    global engine
-    if engine is None:
-        raise HTTPException(503, "Engine not ready")
-
     preset = DIFFICULTIES.get(req.difficulty, DIFFICULTIES["medium"])
 
     # 1) Generar todos los universos clásicos
@@ -435,47 +459,47 @@ def quantum_move(req: QuantumMoveRequest):
     move_evals: dict[str, list] = {}      # move_uci → lista de (prob, eval)
     move_piece_maps: dict[str, dict] = {} # move_uci → piece_map del primer universo
 
-    try:
-        engine.configure({"Skill Level": preset["skill"]})
-    except chess.engine.EngineError:
-        pass
-
-    limit = chess.engine.Limit(depth=min(preset["depth"], 14), time=min(preset["time"], 0.5))
-
-    for b in boards:
+    def _run_quantum(active_engine: chess.engine.SimpleEngine):
         try:
-            board = chess.Board(b["fen"])
-        except ValueError:
-            continue
+            active_engine.configure({"Skill Level": preset["skill"]})
+        except chess.engine.EngineError:
+            pass
 
-        if board.is_game_over() or not list(board.legal_moves):
-            continue
+        limit = chess.engine.Limit(depth=min(preset["depth"], 14), time=min(preset["time"], 0.5))
 
-        try:
-            result = engine.play(board, limit, info=chess.engine.INFO_SCORE)
-        except Exception:
-            continue
+        for b in boards:
+            try:
+                board = chess.Board(b["fen"])
+            except ValueError:
+                continue
 
-        move_uci = result.move.uci()
-        prob = b["probability"]
+            if board.is_game_over() or not any(board.legal_moves):
+                continue
 
-        # Evaluación
-        ev = 0.0
-        if result.info and "score" in result.info:
-            score = result.info["score"].white()
-            if score.is_mate():
-                m = score.mate()
-                ev = 10000.0 if (m and m > 0) else -10000.0
-            else:
-                ev = float(score.score(mate_score=10000))
+            try:
+                result = active_engine.play(board, limit, info=chess.engine.INFO_SCORE)
+            except chess.engine.EngineError:
+                continue
 
-        if move_uci not in move_votes:
-            move_votes[move_uci] = 0.0
-            move_evals[move_uci] = []
-            move_piece_maps[move_uci] = b["piece_map"]
+            if result.move is None:
+                continue
 
-        move_votes[move_uci] += prob
-        move_evals[move_uci].append((prob, ev))
+            move_uci = result.move.uci()
+            prob = b["probability"]
+
+            ev = 0.0
+            if result.info and "score" in result.info:
+                ev, _ = _score_to_eval(result.info["score"])
+
+            if move_uci not in move_votes:
+                move_votes[move_uci] = 0.0
+                move_evals[move_uci] = []
+                move_piece_maps[move_uci] = b["piece_map"]
+
+            move_votes[move_uci] += prob
+            move_evals[move_uci].append((prob, ev))
+
+    _with_engine_lock(_run_quantum)
 
     if not move_votes:
         raise HTTPException(400, "No legal moves found in any universe")
