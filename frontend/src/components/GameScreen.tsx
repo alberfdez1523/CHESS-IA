@@ -35,7 +35,6 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
     gameOver: game.gameOver,
   })
 
-  // Detectar timeout del reloj
   useEffect(() => {
     if (timer.timedOut && !game.gameOverInfo) {
       game.handleTimedOut(timer.timedOut)
@@ -46,8 +45,6 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
   const diffMeta = DIFFICULTIES.find((d) => d.key === config.difficulty)
   const isAIMode = config.opponentMode === 'ai'
   const aiColor = config.playerColor === 'w' ? 'b' : 'w'
-
-  // Determinar quién va arriba y abajo (según orientación del tablero)
   const topColor = game.boardFlipped ? config.playerColor : aiColor
   const bottomColor = game.boardFlipped ? aiColor : config.playerColor
 
@@ -62,9 +59,7 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
       materialDiff: isAI ? -game.materialDiff : game.materialDiff,
       isActive: game.turn === topColor && !game.gameOver,
       time: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
-      isLow: config.useTimer
-        ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) < 60
-        : false,
+      isLow: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
     }
   }, [topColor, config, diffMeta, game, timer, isAIMode, language])
 
@@ -79,9 +74,7 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
       materialDiff: isAI ? -game.materialDiff : game.materialDiff,
       isActive: game.turn === bottomColor && !game.gameOver,
       time: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
-      isLow: config.useTimer
-        ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) < 60
-        : false,
+      isLow: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
     }
   }, [bottomColor, config, diffMeta, game, timer, isAIMode, language])
 
@@ -89,83 +82,44 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
     ? {
         modeBadge: isAIMode ? `Clásico · ${diffMeta?.label}` : 'Clásico · 2 jugadores',
         menu: '← Menú',
-        classicalCastle: (side: 'k' | 'q') => `♜ Enroque ${side === 'k' ? 'corto' : 'largo'}`,
-        rulesTitle: 'Reglas del Modo Clásico',
-        rulesTitleDesktop: 'Reglas Modo Clásico',
-        rule1: '• Gana quien da jaque mate.',
-        rule2: '• Tablas por ahogado, repetición o material insuficiente.',
-        rule2Desktop: '• Tablas por ahogado, repetición, material insuficiente o acuerdo técnico.',
-        rule3: '• Peón promociona en la última fila.',
-        rule3Desktop: '• Peón promociona al llegar a la última fila.',
-        rule4: `• Partida en ${isAIMode ? 'vs IA' : '2 jugadores'}.`,
-        rule4Desktop: `• En ${isAIMode ? 'vs IA' : '2 jugadores'}, turno alternado normal de blancas/negras.`,
+        castle: (side: 'k' | 'q') => `♜ Enroque ${side === 'k' ? 'corto' : 'largo'}`,
       }
     : {
         modeBadge: isAIMode ? `Classic · ${diffMeta ? getDifficultyLabel(config.difficulty, language) : ''}` : 'Classic · 2 players',
         menu: '← Menu',
-      classicalCastle: (side: 'k' | 'q') => `♜ ${side === 'k' ? 'Kingside' : 'Queenside'} castling`,
-        rulesTitle: 'Classic Mode Rules',
-        rulesTitleDesktop: 'Classic Mode Rules',
-        rule1: '• Win by checkmate.',
-        rule2: '• Draw by stalemate, repetition, or insufficient material.',
-        rule2Desktop: '• Draw by stalemate, repetition, insufficient material, or technical draw.',
-        rule3: '• Pawns promote on the last rank.',
-        rule3Desktop: '• Pawns promote when they reach the last rank.',
-        rule4: `• Match in ${isAIMode ? 'vs AI' : '2 players'}.`,
-        rule4Desktop: `• In ${isAIMode ? 'vs AI' : '2 players'}, turns alternate normally between white and black.`,
+        castle: (side: 'k' | 'q') => `♜ ${side === 'k' ? 'Kingside' : 'Queenside'} castling`,
       }
 
   return (
-    <div className="bg-radial-orange flex min-h-screen flex-col bg-surface-0">
+    <div className="bg-atm-gold flex min-h-screen flex-col bg-surface-0">
       {/* Header */}
-      <motion.header
-        className="flex items-center justify-between border-b border-white/[0.04] px-4 py-3"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-xl">♛</span>
-          <span className="text-sm font-bold text-white">
-            Gambito de Dama <span className="text-accent">Cuántico</span>
-          </span>
-          <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
+      <header className="flex items-center justify-between border-b border-surface-4 px-4 py-3 lg:px-6">
+        <div className="flex items-center gap-3">
+          <span className="font-serif text-lg text-accent">♛</span>
+          <span className="hidden font-serif text-sm text-white sm:inline">GdD</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-500">
             {text.modeBadge}
           </span>
         </div>
-        <motion.button
+        <button
           onClick={onNewGame}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-neutral-400 lg:px-5 lg:py-2.5 lg:text-sm
-            transition-colors hover:bg-surface-3 hover:text-white"
+          className="rounded px-3 py-1.5 text-xs font-medium text-neutral-500 transition-colors hover:bg-surface-2 hover:text-white"
         >
           {text.menu}
-        </motion.button>
-      </motion.header>
+        </button>
+      </header>
 
-      {/* Contenido principal */}
-      <div className="flex flex-1 items-start justify-center gap-6 px-4 py-4 pb-2 lg:gap-8 lg:py-8">
-        {/* Columna del tablero */}
+      {/* Main content */}
+      <div className="flex flex-1 items-start justify-center gap-0 px-4 py-4 lg:py-8">
+        {/* Board column */}
         <motion.div
-          className="flex flex-col gap-2 lg:gap-3"
-          initial={{ opacity: 0, scale: 0.95 }}
+          className="flex flex-col"
+          initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
         >
-          {/* Barra superior */}
-          <PlayerBar
-            label={topBar.label}
-            elo={topBar.elo}
-            color={topBar.color}
-            isActive={topBar.isActive}
-            captures={topBar.captures}
-            materialDiff={topBar.materialDiff}
-            time={topBar.time}
-            isLow={topBar.isLow}
-          />
+          <PlayerBar {...topBar} />
 
-          {/* Tablero */}
           <Board
             fen={game.fen}
             selectedSquare={game.selectedSquare}
@@ -180,125 +134,84 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
             onDrop={game.handleDrop}
           />
 
-          {/* Barra inferior */}
-          <PlayerBar
-            label={bottomBar.label}
-            elo={bottomBar.elo}
-            color={bottomBar.color}
-            isActive={bottomBar.isActive}
-            captures={bottomBar.captures}
-            materialDiff={bottomBar.materialDiff}
-            time={bottomBar.time}
-            isLow={bottomBar.isLow}
-          />
+          <PlayerBar {...bottomBar} />
 
           {/* Status */}
-          <motion.div
-            className="flex items-center justify-center gap-2 py-1"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-          >
+          <div className="flex items-center justify-center gap-2 py-2">
             <div
               className={`h-1.5 w-1.5 rounded-full ${
-                game.status.type === 'player'
-                  ? 'bg-accent'
-                  : game.status.type === 'thinking'
-                    ? 'bg-yellow-500 animate-pulse'
-                    : game.status.type === 'over'
-                      ? 'bg-red-400'
-                      : 'bg-neutral-600'
+                game.status.type === 'player' ? 'bg-accent'
+                  : game.status.type === 'thinking' ? 'bg-yellow-500 animate-pulse'
+                  : game.status.type === 'over' ? 'bg-red-400'
+                  : 'bg-neutral-600'
               }`}
             />
-            <span className="text-xs text-neutral-500">{game.status.text}</span>
-          </motion.div>
+            <span className="text-[11px] text-neutral-500">{game.status.text}</span>
+          </div>
 
-            {game.classicalCastleOptions.length > 0 && !game.gameOver && !game.isThinking && (
-              <motion.div
-                className="flex gap-2"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                {game.classicalCastleOptions.map((side) => (
-                  <motion.button
-                    key={`classic-${side}`}
-                    onClick={() => game.doClassicalCastle(side)}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="flex-1 rounded-lg bg-accent/10 px-3 py-2 text-xs font-medium text-accent ring-1 ring-accent/30 transition-colors hover:bg-accent/20"
-                  >
-                    {text.classicalCastle(side)}
-                  </motion.button>
-                ))}
-              </motion.div>
-            )}
+          {/* Castle buttons */}
+          {game.classicalCastleOptions.length > 0 && !game.gameOver && !game.isThinking && (
+            <div className="flex gap-2" style={{ width: 'var(--board-size)' }}>
+              {game.classicalCastleOptions.map((side) => (
+                <button
+                  key={`classic-${side}`}
+                  onClick={() => game.doClassicalCastle(side)}
+                  className="flex-1 rounded border border-accent/25 bg-accent/5 px-3 py-2 text-xs font-medium text-accent transition-colors hover:bg-accent/15"
+                >
+                  {text.castle(side)}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {/* Panel móvil: evaluación + historial */}
-          <motion.div
-            className="mt-1 flex w-full flex-col gap-2 lg:hidden"
-            style={{ width: 'var(--board-size)' }}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
-          >
+          {/* Mobile panels */}
+          <div className="mt-2 flex w-full flex-col gap-2 lg:hidden" style={{ width: 'var(--board-size)' }}>
             <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
-            <details className="rounded-xl border border-white/[0.08] bg-surface-1/85 px-3 py-2 text-[11px] text-neutral-400">
-              <summary className="cursor-pointer text-xs font-semibold text-neutral-300">
-                {text.rulesTitle}
-              </summary>
-              <div className="mt-2 space-y-1">
-                <p>{text.rule1}</p>
-                <p>{text.rule2}</p>
-                <p>{text.rule3}</p>
-                <p>{text.rule4}</p>
-              </div>
-            </details>
             <MoveHistory history={game.history} language={language} />
-          </motion.div>
+          </div>
         </motion.div>
 
-        {/* Panel lateral (solo desktop) */}
+        {/* Desktop sidebar */}
         <motion.div
-          className="hidden w-80 flex-col gap-4 xl:w-96 lg:flex"
-          initial={{ opacity: 0, x: 30 }}
+          className="hidden w-72 flex-col border-l border-surface-4 lg:flex xl:w-80"
+          initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
         >
-          <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
-          <div className="rounded-xl border border-white/[0.08] bg-surface-1/80 p-3 text-[11px] text-neutral-400">
-            <p className="mb-2 text-xs font-semibold text-neutral-300">{text.rulesTitleDesktop}</p>
-            <p>{text.rule1}</p>
-            <p>{text.rule2Desktop}</p>
-            <p>{text.rule3Desktop}</p>
-            <p>{text.rule4Desktop}</p>
+          <div className="p-4">
+            <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
           </div>
-          <MoveHistory history={game.history} language={language} />
-          <ActionButtons
-            onUndo={game.undo}
-            onFlip={game.flip}
-            onResign={game.resign}
-            canUndo={game.history.length >= 2 && !game.isThinking}
-            gameOver={game.gameOver}
-            language={language}
-          />
-          <MusicPlayer
-            playing={music.playing}
-            volume={music.volume}
-            onToggle={music.toggle}
-            onVolumeChange={music.setVolume}
-            language={language}
-          />
+          <div className="rule" />
+          <div className="flex-1 overflow-hidden p-4">
+            <MoveHistory history={game.history} language={language} />
+          </div>
+          <div className="rule" />
+          <div className="p-4">
+            <ActionButtons
+              onUndo={game.undo}
+              onFlip={game.flip}
+              onResign={game.resign}
+              canUndo={game.history.length >= 2 && !game.isThinking}
+              gameOver={game.gameOver}
+              language={language}
+            />
+          </div>
+          <div className="rule" />
+          <div className="p-4">
+            <MusicPlayer
+              playing={music.playing}
+              volume={music.volume}
+              onToggle={music.toggle}
+              onVolumeChange={music.setVolume}
+              language={language}
+            />
+          </div>
         </motion.div>
       </div>
 
-      {/* Acciones rápidas móvil (solo sm) */}
-      <motion.div
-        className="mx-3 mb-3 mt-2 flex items-center gap-2 rounded-xl border border-white/[0.06] bg-surface-1/80 px-3 py-2 backdrop-blur-sm lg:hidden"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-      >
-        <div className="flex flex-1 gap-1.5">
+      {/* Mobile bottom bar */}
+      <div className="flex items-center gap-2 border-t border-surface-4 px-4 py-2.5 lg:hidden">
+        <div className="flex flex-1">
           <ActionButtons
             onUndo={game.undo}
             onFlip={game.flip}
@@ -308,17 +221,15 @@ export default function GameScreen({ config, onNewGame, language }: GameScreenPr
             language={language}
           />
         </div>
-        <motion.button
+        <button
           onClick={music.toggle}
-          whileTap={{ scale: 0.9 }}
-          className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition-colors
-            ${music.playing ? 'bg-accent text-white' : 'bg-surface-2 text-neutral-500'}`}
+          className={`flex h-8 w-8 items-center justify-center rounded text-sm transition-colors
+            ${music.playing ? 'bg-accent/15 text-accent' : 'text-neutral-600 hover:text-neutral-400'}`}
         >
           {music.playing ? '⏸' : '♫'}
-        </motion.button>
-      </motion.div>
+        </button>
+      </div>
 
-      {/* Modales */}
       <PromotionModal
         visible={!!game.promotionPending}
         color={config.playerColor}

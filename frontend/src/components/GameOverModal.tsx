@@ -1,19 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { translateGameOverInfo } from '../lib/i18n'
-import type { GameOverInfo } from '../lib/types'
-import type { Language } from '../lib/types'
+import type { GameOverInfo, Language } from '../lib/types'
 
 interface GameOverModalProps {
   info: GameOverInfo | null
   onNewGame: () => void
   onDismiss: () => void
   language: Language
-}
-
-const RESULT_ICON: Record<string, string> = {
-  win: '🏆',
-  lose: '💀',
-  draw: '🤝',
 }
 
 const RESULT_COLOR: Record<string, string> = {
@@ -24,61 +17,42 @@ const RESULT_COLOR: Record<string, string> = {
 
 export default function GameOverModal({ info, onNewGame, onDismiss, language }: GameOverModalProps) {
   const translatedInfo = info ? translateGameOverInfo(info, language) : null
+
   return (
     <AnimatePresence>
       {translatedInfo && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
           <motion.div
-            className="mx-4 w-full max-w-xs rounded-2xl bg-surface-1 p-8 text-center shadow-2xl ring-1 ring-white/10"
-            initial={{ scale: 0.7, opacity: 0, y: 30 }}
+            className="mx-4 w-full max-w-xs rounded-lg border border-surface-4 bg-surface-1 p-10 text-center"
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.7, opacity: 0, y: 30 }}
-            transition={{ type: 'spring', stiffness: 350, damping: 22 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
-            {/* Ícono */}
-            <motion.div
-              className="mb-4 text-6xl"
-              initial={{ scale: 0, rotate: -20 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.15 }}
-            >
-              {RESULT_ICON[translatedInfo.result] || '♟'}
-            </motion.div>
-
-            {/* Título */}
-            <h2 className={`mb-2 text-2xl font-extrabold ${RESULT_COLOR[translatedInfo.result]}`}>
+            <h2 className={`font-serif text-4xl ${RESULT_COLOR[translatedInfo.result]}`}>
               {translatedInfo.title}
             </h2>
+            <p className="mt-3 text-sm text-neutral-500">{translatedInfo.message}</p>
 
-            {/* Mensaje */}
-            <p className="mb-6 text-sm text-neutral-400">{translatedInfo.message}</p>
+            <div className="rule my-8" />
 
-            {/* Botones */}
-            <div className="flex flex-col gap-2">
-              <motion.button
-                onClick={onNewGame}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="btn-shine w-full rounded-xl bg-accent py-3 text-sm font-bold text-white
-                  shadow-glow transition-colors hover:bg-accent-hover"
-              >
-                {language === 'es' ? 'Nueva partida' : 'New game'}
-              </motion.button>
-              <motion.button
-                onClick={onDismiss}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="w-full rounded-xl bg-surface-2 py-2.5 text-sm font-medium text-neutral-400
-                  transition-colors hover:bg-surface-3 hover:text-white"
-              >
-                {language === 'es' ? 'Ver tablero' : 'View board'}
-              </motion.button>
-            </div>
+            <button
+              onClick={onNewGame}
+              className="w-full rounded border-2 border-accent bg-transparent py-3 text-xs font-semibold uppercase tracking-wider text-accent transition-colors hover:bg-accent hover:text-surface-0"
+            >
+              {language === 'es' ? 'Nueva partida' : 'New game'}
+            </button>
+            <button
+              onClick={onDismiss}
+              className="mt-3 w-full rounded bg-surface-2 py-2.5 text-xs font-medium text-neutral-500 transition-colors hover:text-white"
+            >
+              {language === 'es' ? 'Ver tablero' : 'View board'}
+            </button>
           </motion.div>
         </motion.div>
       )}

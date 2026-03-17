@@ -56,7 +56,7 @@ export default function QuantumBoard({
 
   return (
     <div
-      className="relative select-none overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/5"
+      className="relative select-none overflow-hidden rounded-sm shadow-board ring-1 ring-white/[0.06]"
       style={{ width: 'var(--board-size)', height: 'var(--board-size)' }}
       onDragEnd={handleDragEnd}
     >
@@ -218,7 +218,7 @@ export default function QuantumBoard({
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="rounded-full bg-surface-0/80 px-4 py-2 text-xs font-medium text-purple-400 backdrop-blur-sm"
+              className="rounded bg-surface-0/80 px-4 py-2 text-xs font-medium text-indigo-400 backdrop-blur-sm"
               animate={{ opacity: [0.6, 1, 0.6] }}
               transition={{ repeat: Infinity, duration: 1.5 }}
             >

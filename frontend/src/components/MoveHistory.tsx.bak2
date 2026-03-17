@@ -12,6 +12,7 @@ interface MoveHistoryProps {
 export default function MoveHistory({ history, language }: MoveHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Auto-scroll al último movimiento
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -20,29 +21,32 @@ export default function MoveHistory({ history, language }: MoveHistoryProps) {
 
   if (history.length === 0) {
     return (
-      <div className="flex h-28 items-center justify-center text-xs text-neutral-600">
+      <div className="flex h-32 items-center justify-center rounded-lg bg-surface-2 text-xs text-neutral-500">
         {language === 'es' ? 'Sin movimientos aún' : 'No moves yet'}
       </div>
     )
   }
 
   return (
-    <div ref={scrollRef} className="max-h-44 overflow-y-auto">
+    <div
+      ref={scrollRef}
+      className="max-h-44 overflow-y-auto rounded-lg bg-surface-2 p-2 scrollbar-thin"
+    >
       <AnimatePresence initial={false}>
         {history.map((move, i) => {
           const icon = PIECE_UNICODE[`${move.color}${move.piece.toUpperCase()}`] || ''
           const isWhite = move.color === 'w'
           const moveNum = Math.floor(i / 2) + 1
-          const isLast = i === history.length - 1
 
           return (
             <motion.div
               key={i}
-              initial={{ opacity: 0, x: -8 }}
+              initial={{ opacity: 0, x: -12 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.15 }}
-              className={`flex items-center gap-2 px-1 py-1 text-[11px]
-                ${isLast ? 'text-accent' : 'text-neutral-500'}
+              transition={{ duration: 0.2 }}
+              className={`flex items-center gap-2 rounded px-2 py-1 text-xs
+                ${i === history.length - 1 ? 'bg-accent/10 text-accent-light' : 'text-neutral-400'}
+                ${i % 2 === 0 ? '' : 'bg-surface-3/40'}
               `}
             >
               {isWhite && (
@@ -51,7 +55,7 @@ export default function MoveHistory({ history, language }: MoveHistoryProps) {
                 </span>
               )}
               {!isWhite && <span className="w-5" />}
-              <span className={`text-sm leading-none ${isWhite ? 'piece-white' : 'piece-black'}`}>
+              <span className={`text-base leading-none ${isWhite ? 'piece-white' : 'piece-black'}`}>
                 {icon}
               </span>
               <span className="truncate">{translateMoveDescription(move.description, language)}</span>

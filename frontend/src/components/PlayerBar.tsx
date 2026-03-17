@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { PIECE_UNICODE, PIECE_VALUES, CAPTURE_ORDER } from '../lib/constants'
 import { formatTime } from '../hooks/useTimer'
 import type { PieceColor, PieceType } from '../lib/types'
@@ -15,80 +14,59 @@ interface PlayerBarProps {
 }
 
 export default function PlayerBar({
-  label,
-  elo,
-  color,
-  isActive,
-  captures,
-  materialDiff,
-  time,
-  isLow,
+  label, elo, color, isActive, captures, materialDiff, time, isLow,
 }: PlayerBarProps) {
-  // Ordenar las piezas capturadas para mostrar
-  const sortedCaptures = [...captures].sort((a, b) => {
-    return CAPTURE_ORDER.indexOf(a) - CAPTURE_ORDER.indexOf(b)
-  })
-
+  const sortedCaptures = [...captures].sort(
+    (a, b) => CAPTURE_ORDER.indexOf(a) - CAPTURE_ORDER.indexOf(b)
+  )
   const capturedColor = color === 'w' ? 'b' : 'w'
 
   return (
-    <motion.div
-      className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-300
-        ${isActive ? 'bg-surface-2 ring-1 ring-accent/30' : 'bg-surface-1'}
-      `}
+    <div
+      className="flex items-center gap-2.5 px-1 py-2"
       style={{ width: 'var(--board-size)' }}
-      animate={isActive ? { boxShadow: '0 0 12px -4px rgba(249,115,22,0.2)' } : { boxShadow: 'none' }}
     >
-      {/* Avatar */}
+      {/* Color indicator */}
       <div
-        className={`flex h-8 w-8 items-center justify-center rounded-full text-sm
-          ${color === 'w' ? 'player-avatar player-avatar-white' : 'player-avatar player-avatar-black'}
-        `}
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px]
+          ${color === 'w' ? 'player-avatar-white' : 'player-avatar-black'}`}
       >
-        {label === 'Tú' ? '◆' : '⚙'}
+        {color === 'w' ? '♔' : '♚'}
       </div>
 
-      {/* Info */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-white">{label}</span>
-          <span className="text-[10px] font-mono text-neutral-500">{elo}</span>
-          {isActive && (
-            <motion.div
-              className="h-1.5 w-1.5 rounded-full bg-accent"
-              animate={{ opacity: [1, 0.4, 1] }}
-              transition={{ repeat: Infinity, duration: 1.2 }}
-            />
-          )}
-        </div>
-
-        {/* Piezas capturadas */}
-        <div className="flex items-center gap-0.5 overflow-hidden">
-          {sortedCaptures.map((p, i) => (
-            <span
-              key={i}
-              className={`text-xs leading-none ${capturedColor === 'w' ? 'piece-white' : 'piece-black'} opacity-70`}
-            >
-              {PIECE_UNICODE[`${capturedColor}${p.toUpperCase()}`] || ''}
-            </span>
-          ))}
-          {materialDiff > 0 && (
-            <span className="ml-1 text-[10px] font-mono text-accent">+{materialDiff}</span>
-          )}
-        </div>
+      {/* Name + ELO */}
+      <div className="flex items-baseline gap-1.5 min-w-0">
+        <span className={`text-sm font-semibold transition-colors ${isActive ? 'text-white' : 'text-neutral-500'}`}>
+          {label}
+        </span>
+        {elo && <span className="font-mono text-[10px] text-neutral-600">{elo}</span>}
+        {isActive && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
       </div>
 
-      {/* Reloj */}
+      {/* Captures */}
+      <div className="flex flex-1 items-center gap-0.5 overflow-hidden">
+        {sortedCaptures.map((p, i) => (
+          <span
+            key={i}
+            className={`text-[11px] leading-none opacity-60 ${capturedColor === 'w' ? 'piece-white' : 'piece-black'}`}
+          >
+            {PIECE_UNICODE[`${capturedColor}${p.toUpperCase()}`] || ''}
+          </span>
+        ))}
+        {materialDiff > 0 && (
+          <span className="ml-0.5 font-mono text-[10px] text-accent">+{materialDiff}</span>
+        )}
+      </div>
+
+      {/* Timer */}
       {time != null && (
-        <div
-          className={`rounded-md px-2.5 py-1 font-mono text-sm font-semibold
-            ${isActive ? 'bg-surface-3 text-white' : 'bg-surface-2 text-neutral-500'}
-            ${isLow ? 'text-red-400' : ''}
-          `}
+        <span
+          className={`font-mono text-sm font-semibold tabular-nums
+            ${isLow ? 'text-red-400' : isActive ? 'text-white' : 'text-neutral-600'}`}
         >
           {formatTime(time)}
-        </div>
+        </span>
       )}
-    </motion.div>
+    </div>
   )
 }

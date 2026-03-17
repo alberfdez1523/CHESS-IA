@@ -59,7 +59,7 @@ export default function Board({
 
   return (
     <div
-      className="relative select-none overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/5"
+      className="relative select-none overflow-hidden rounded-sm shadow-board ring-1 ring-white/[0.06]"
       style={{ width: 'var(--board-size)', height: 'var(--board-size)' }}
       onDragEnd={handleDragEnd}
     >

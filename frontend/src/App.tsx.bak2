@@ -37,21 +37,27 @@ export default function App() {
 
   return (
     <>
-      {/* Minimal floating controls */}
-      <div className="fixed bottom-3 right-3 z-[60] flex items-center gap-2 text-[10px] font-medium text-neutral-600">
-        <button
+      <div className="fixed bottom-4 right-4 z-[60] flex items-center gap-2">
+        <motion.button
           onClick={() => setLanguage(prev => (prev === 'es' ? 'en' : 'es'))}
-          className="rounded px-2 py-1 transition-colors hover:bg-surface-2 hover:text-neutral-300"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="floating-toggle-btn rounded-xl bg-surface-2/90 px-3.5 py-2.5 text-xs font-semibold text-neutral-300 ring-1 ring-white/10 backdrop-blur-sm transition-colors hover:bg-surface-3 lg:px-5 lg:py-3 lg:text-sm"
+          title={language === 'es' ? 'Translate to English' : 'Traducir al español'}
         >
-          {language === 'es' ? 'EN' : 'ES'}
-        </button>
-        <span className="text-surface-4">·</span>
-        <button
+          🌐 {language === 'es' ? 'EN' : 'ES'}
+        </motion.button>
+        <motion.button
           onClick={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}
-          className="rounded px-2 py-1 transition-colors hover:bg-surface-2 hover:text-neutral-300"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="floating-toggle-btn rounded-xl bg-surface-2/90 px-3.5 py-2.5 text-xs font-semibold text-neutral-300 ring-1 ring-white/10 backdrop-blur-sm transition-colors hover:bg-surface-3 lg:px-5 lg:py-3 lg:text-sm"
+          title={language === 'es' ? 'Cambiar tema' : 'Change theme'}
         >
-          {theme === 'dark' ? '☀' : '●'}
-        </button>
+          {theme === 'dark'
+            ? language === 'es' ? '☀ Claro' : '☀ Light'
+            : language === 'es' ? '🌙 Oscuro' : '🌙 Dark'}
+        </motion.button>
       </div>
 
       <AnimatePresence mode="wait">
@@ -61,7 +67,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            transition={{ duration: 0.3 }}
           >
             <StartMenu onPlay={handlePlay} onRules={() => setScreen('rules')} language={language} />
           </motion.div>
@@ -71,9 +77,9 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            transition={{ duration: 0.3 }}
           >
-            <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-surface-0"><span className="text-sm text-neutral-600">Loading…</span></div>}>
+            <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-surface-0"><div className="text-neutral-500">Loading…</div></div>}>
               <RulesScreen onBack={() => setScreen('menu')} language={language} />
             </Suspense>
           </motion.div>
@@ -83,7 +89,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            transition={{ duration: 0.3 }}
           >
             {gameConfig.gameMode === 'quantum' ? (
               <QuantumGameScreen config={gameConfig} onNewGame={handleNewGame} language={language} />
