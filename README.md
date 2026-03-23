@@ -1,5 +1,7 @@
 ﻿# Gambito de Dama Cuantico
 
+ https://gambito-dama-cuantico.onrender.com/
+
 Aplicacion web de ajedrez con dos modos de juego:
 
 - Modo clasico
@@ -8,20 +10,6 @@ Aplicacion web de ajedrez con dos modos de juego:
 - Modo cuantico
   - 2 jugadores locales (sin IA)
   - Superposicion, fusion, enroque cuantico, medicion y efecto tunel
-
-## Novedades recientes (Marzo 2026)
-
-- Rebranding completo a `Gambito de Dama Cuantico`.
-- Modo clasico con selector de oponente:
-  - `Vs IA` (Stockfish)
-  - `2 jugadores locales`
-- Modo cuantico orientado a `2 jugadores locales`.
-- Ruleta de medicion manual:
-  - el usuario decide cuando girar,
-  - muestra probabilidad vivo/muerto,
-  - conserva resultado ~1 segundo antes de cerrar.
-- Casuisticas de captura cuantica explicadas en UI y documentacion.
-- Paneles laterales adaptados a movil (reglas y casuisticas en `details`).
 
 ## Implementaciones actuales
 
