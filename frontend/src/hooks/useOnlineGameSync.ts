@@ -130,6 +130,8 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
               return
             }
 
+            // 12 s: rival sin presencia en Realtime (corte de red), no abandono en BD.
+            // La sala se borra con Menú, pagehide o cleanup_stale_rooms (15 min).
             clearOpponentGraceTimer()
             opponentGraceTimerRef.current = window.setTimeout(() => {
               setOpponentOnline(false)

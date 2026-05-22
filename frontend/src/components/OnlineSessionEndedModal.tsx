@@ -47,6 +47,7 @@ export default function OnlineSessionEndedModal({
               {t.onlineOpponentLeftTitle}
             </h2>
             <p className="mt-3 text-sm text-neutral-500">{t.onlineOpponentLeftMessage}</p>
+            <p className="mt-2 text-xs text-neutral-600">{t.onlineOpponentLeftHint}</p>
             <div className="rule my-8" />
             <button
               type="button"

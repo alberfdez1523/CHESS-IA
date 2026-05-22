@@ -141,11 +141,27 @@ Requisitos de la prueba de humo:
 
 ### Supabase
 
-Aplica las migraciones de `supabase/migrations/` antes de usar online:
+Aplica las migraciones de `supabase/migrations/` en el SQL Editor (orden `001` → `002` → `003`) antes de usar online:
 
 - `rooms`: estado actual de cada sala y control optimista por version.
 - `room_moves`: historial ligero de movimientos para depurar desincronizaciones.
-- `cleanup_stale_rooms(p_before)`: RPC de mantenimiento para borrar salas antiguas.
+- `abandon_room(p_room_id)`: borra la sala si eres jugador (Menú, cierre de pestaña vía `pagehide`).
+- `cleanup_stale_rooms(p_before)`: borra salas con `updated_at` anterior a `p_before` (por defecto **15 minutos**).
+
+**Limpieza automática**
+
+- El cliente llama a `cleanup_stale_rooms` al abrir el menú (salas huérfanas de sesiones anteriores).
+- En el servidor, programa un cron cada 10 min (requiere `pg_cron` en Supabase):
+
+```sql
+select cron.schedule(
+  'cleanup-stale-rooms',
+  '*/10 * * * *',
+  $$ select public.cleanup_stale_rooms(); $$
+);
+```
+
+Al cerrar la pestaña sin pulsar Menú, el rival ve el aviso de desconexión (~12 s); la fila en BD se elimina con `pagehide` (best-effort), al volver al menú, o tras 15 min sin actividad.
 
 ## Notas de uso
 

@@ -3,7 +3,12 @@ import { flushSync } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import StartMenu from './components/StartMenu'
 import OnlineLobby from './components/OnlineLobby'
-import { abandonOnlineRoom, parseRoomCodeFromUrl } from './lib/onlineRoom'
+import { abandonOnlineRoom, cleanupStaleRooms, isOnlineAvailable, parseRoomCodeFromUrl } from './lib/onlineRoom'
+import {
+  clearOnlineSession,
+  installOnlineUnloadHandlers,
+  registerOnlineSession,
+} from './lib/onlineSessionLifecycle'
 import SettingsPanel from './components/SettingsPanel'
 import BoardSkeleton from './components/BoardSkeleton'
 const RulesScreen = lazy(() => import('./components/RulesScreen'))
@@ -54,7 +59,13 @@ export default function App() {
 
   useEffect(() => {
     applyThemeToDom(settings.theme)
+    installOnlineUnloadHandlers()
   }, [])
+
+  useEffect(() => {
+    if (screen !== 'menu' || !isOnlineAvailable()) return
+    void cleanupStaleRooms(15)
+  }, [screen])
 
   useEffect(() => {
     const roomCode = parseRoomCodeFromUrl()
@@ -105,6 +116,7 @@ export default function App() {
   const handlePlay = useCallback((config: GameConfig) => {
     if (config.online?.roomId) {
       lobbyRoomIdRef.current = config.online.roomId
+      registerOnlineSession(config.online.roomId)
     }
     setGameConfig(config)
     setScreen('game')
@@ -134,6 +146,7 @@ export default function App() {
         console.error('[online] abandon on menu failed:', e)
       }
       lobbyRoomIdRef.current = null
+      clearOnlineSession()
     }
     setGameConfig(null)
     setLobbyPrefs(null)
@@ -195,6 +208,7 @@ export default function App() {
               onBack={() => void handleNewGame()}
               onRoomActive={(roomId) => {
                 lobbyRoomIdRef.current = roomId
+                registerOnlineSession(roomId)
               }}
               onStart={handlePlay}
             />

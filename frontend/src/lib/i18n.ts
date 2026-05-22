@@ -284,6 +284,8 @@ export const UI_STRINGS = {
     onlineSyncing: 'Sincronizando',
     onlineOpponentLeftTitle: 'Partida cerrada',
     onlineOpponentLeftMessage: 'Tu rival ha abandonado la partida o se ha desconectado.',
+    onlineOpponentLeftHint:
+      'Pulsa Menú para cerrar la sala. Si no lo haces, se eliminará sola tras 15 minutos sin actividad.',
     gameMode: 'Modo de juego',
   },
   en: {
@@ -382,6 +384,8 @@ export const UI_STRINGS = {
     onlineSyncing: 'Syncing',
     onlineOpponentLeftTitle: 'Game closed',
     onlineOpponentLeftMessage: 'Your opponent left the game or disconnected.',
+    onlineOpponentLeftHint:
+      'Press Menu to close the room. Otherwise it is removed automatically after 15 minutes of inactivity.',
     gameMode: 'Game mode',
   },
 } as const

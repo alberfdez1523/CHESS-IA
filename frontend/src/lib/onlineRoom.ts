@@ -296,6 +296,31 @@ export async function finishOnlineRoom(roomId: string): Promise<void> {
 }
 
 /** Elimina la sala de la BD (al salir al menú o desconectarse). */
+/** Borra salas sin actividad reciente (RPC cleanup_stale_rooms, por defecto 15 min). */
+export async function cleanupStaleRooms(maxAgeMinutes = 15): Promise<number> {
+  if (!isSupabaseConfigured()) return 0
+
+  const supabase = getSupabase()
+  const pBefore = new Date(Date.now() - maxAgeMinutes * 60_000).toISOString()
+
+  const { data, error } = await supabase.rpc('cleanup_stale_rooms', { p_before: pBefore })
+
+  if (error) {
+    const rpcMissing =
+      error.code === 'PGRST202' ||
+      error.message.includes('cleanup_stale_rooms') ||
+      error.message.includes('Could not find the function')
+    if (rpcMissing) {
+      console.warn('[online] cleanup_stale_rooms RPC not available')
+      return 0
+    }
+    console.warn('[online] cleanup_stale_rooms failed:', error.message)
+    return 0
+  }
+
+  return typeof data === 'number' ? data : 0
+}
+
 export async function abandonOnlineRoom(roomId: string): Promise<boolean> {
   const supabase = getSupabase()
   await ensureOnlineAuth()
