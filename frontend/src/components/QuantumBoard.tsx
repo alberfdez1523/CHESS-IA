@@ -17,6 +17,7 @@ interface QuantumBoardProps {
   boardFlipped: boolean
   isThinking: boolean
   playerColor: PieceColor
+  turnColor: PieceColor
   onSquareClick: (sq: string) => void
   onDrop: (from: string, to: string) => void
   language: Language
@@ -34,6 +35,7 @@ export default function QuantumBoard({
   boardFlipped,
   isThinking,
   playerColor,
+  turnColor,
   onSquareClick,
   onDrop,
   language,
@@ -168,7 +170,7 @@ export default function QuantumBoard({
           const isLastTo = lastMove?.to === square
           const hasCapturableEnemy = isLegal && cells.some((c) => c.color !== playerColor)
           const myCell = cells.find((c) => c.color === playerColor)
-          const canDrag = !isThinking && !!myCell && moveMode === 'classical'
+          const canDrag = !isThinking && !!myCell && playerColor === turnColor && moveMode === 'classical'
 
           const showFile = row === 7
           const showRank = col === 0
@@ -179,6 +181,8 @@ export default function QuantumBoard({
               key={square}
               id={`qsq-${square}`}
               data-square={square}
+              data-board-row={row}
+              data-board-col={col}
               type="button"
               role="gridcell"
               aria-rowindex={row + 1}
@@ -196,7 +200,7 @@ export default function QuantumBoard({
               `}
               onClick={() => handleSquareClick(square)}
             >
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence initial={false} mode="popLayout">
                 {cells.map((cell, idx) => {
                   const isQuantum = cell.probability < 1
                   const opacity = cell.probability
@@ -211,9 +215,9 @@ export default function QuantumBoard({
                         zIndex: zIdx,
                         transform: cells.length > 1 ? `translate(${idx * 3 - 2}px, ${idx * -3 + 2}px)` : undefined,
                       }}
-                      initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
+                      initial={false}
                       animate={{ scale: 1, opacity: Math.max(0.2, opacity) }}
-                      exit={reduceMotion ? undefined : { scale: 0.5, opacity: 0 }}
+                      exit={undefined}
                       transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 350, damping: 20 }}
                     >
                       {canDrag && cell.pieceId === myCell?.pieceId ? (
@@ -223,10 +227,10 @@ export default function QuantumBoard({
                             handlePiecePointerDown(square, { type: cell.type, color: cell.color }, e)
                           }
                         >
-                          <Piece type={cell.type} color={cell.color} animate={!reduceMotion} />
+                          <Piece type={cell.type} color={cell.color} animate={false} />
                         </motion.div>
                       ) : (
-                        <Piece type={cell.type} color={cell.color} animate={!reduceMotion} />
+                        <Piece type={cell.type} color={cell.color} animate={false} />
                       )}
                       {isQuantum && (
                         <span className="quantum-prob-badge">

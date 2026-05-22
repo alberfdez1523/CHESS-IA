@@ -17,6 +17,7 @@ import {
   isLegalMoveFromFen,
   pushRoomState,
   subscribeToRoom,
+  subscribeToRoomPresence,
 } from '../lib/onlineRoom'
 import type { QState } from '../lib/types'
 
@@ -33,11 +34,15 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
   const [room, setRoom] = useState<OnlineRoomRow | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [opponentLeft, setOpponentLeft] = useState(false)
+  const [opponentOnline, setOpponentOnline] = useState<boolean | null>(null)
+  const [isPushing, setIsPushing] = useState(false)
   const applyingRemote = useRef(false)
   const pushingRef = useRef(false)
   const lastAppliedVersion = useRef(-1)
   const hasAbandonedRef = useRef(false)
   const roomRef = useRef<OnlineRoomRow | null>(null)
+  const sawOpponentRef = useRef(false)
+  const opponentGraceTimerRef = useRef<number | null>(null)
 
   const isOnline = enabled && !!online
 
@@ -88,10 +93,19 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     if (!isOnline || !online?.roomId) return
     lastAppliedVersion.current = -1
     hasAbandonedRef.current = false
+    sawOpponentRef.current = false
     setOpponentLeft(false)
+    setOpponentOnline(null)
     syncRoom(null)
 
-    const unsub = subscribeToRoom(online.roomId, {
+    const clearOpponentGraceTimer = () => {
+      if (opponentGraceTimerRef.current != null) {
+        window.clearTimeout(opponentGraceTimerRef.current)
+        opponentGraceTimerRef.current = null
+      }
+    }
+
+    const unsubRoom = subscribeToRoom(online.roomId, {
       onRoom: (next) => syncRoom(next),
       onDeleted: () => {
         syncRoom(null)
@@ -99,16 +113,41 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
       },
     })
 
-    const onPageHide = () => {
-      void leaveRoom()
-    }
-    window.addEventListener('pagehide', onPageHide)
+    const unsubPresence = online.userId
+      ? subscribeToRoomPresence(online.roomId, online.userId, {
+          onPeers: (peerIds) => {
+            const hasOpponent = peerIds.some((id) => id !== online.userId)
+            if (hasOpponent) {
+              clearOpponentGraceTimer()
+              sawOpponentRef.current = true
+              setOpponentOnline(true)
+              setOpponentLeft(false)
+              return
+            }
+
+            if (!sawOpponentRef.current) {
+              setOpponentOnline(null)
+              return
+            }
+
+            clearOpponentGraceTimer()
+            opponentGraceTimerRef.current = window.setTimeout(() => {
+              setOpponentOnline(false)
+              const current = roomRef.current
+              if (current?.status === 'playing' && !hasAbandonedRef.current) {
+                setOpponentLeft(true)
+              }
+            }, 12_000)
+          },
+        })
+      : () => {}
 
     return () => {
-      window.removeEventListener('pagehide', onPageHide)
-      unsub()
+      clearOpponentGraceTimer()
+      unsubPresence()
+      unsubRoom()
     }
-  }, [isOnline, online?.roomId, leaveRoom, syncRoom])
+  }, [isOnline, online?.roomId, online?.userId, syncRoom])
 
   const serverClassicFen =
     room?.state && typeof room.state === 'object' && 'type' in room.state && room.state.type === 'classic'
@@ -158,7 +197,8 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     ? Boolean(
         room.white_player_id &&
           room.black_player_id &&
-          (room.status === 'playing' || room.status === 'finished'),
+          (room.status === 'playing' || room.status === 'finished') &&
+          opponentOnline !== false,
       )
     : false
 
@@ -170,32 +210,42 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
       pgn?: string,
     ) => {
       if (!online?.roomId || applyingRemote.current || pushingRef.current) return false
-      const active = await waitForRoom()
-      if (!active || active.state.type !== 'classic') {
-        setSyncError('ROOM_NOT_READY')
-        return false
-      }
-
-      const serverFen = active.state.fen
-      if (fen === serverFen) {
-        setSyncError(null)
-        return true
-      }
-
-      if (!lastMove || !isLegalMoveFromFen(serverFen, fen, lastMove)) {
-        await refreshRoomFromServer()
-        setSyncError('OUT_OF_SYNC')
-        return false
-      }
-
-      const state: ClassicRoomState = { type: 'classic', fen, lastMove, pgn: pgn ?? '' }
       pushingRef.current = true
+      setIsPushing(true)
       try {
-        const updated = await pushRoomState(active.id, active.version, { state, turn })
-        syncRoom(updated)
-        lastAppliedVersion.current = updated.version
-        setSyncError(null)
-        return true
+        let active = await waitForRoom()
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (!active || active.state.type !== 'classic') {
+            setSyncError('ROOM_NOT_READY')
+            return false
+          }
+
+          const serverFen = active.state.fen
+          if (fen === serverFen) {
+            setSyncError(null)
+            return true
+          }
+
+          if (!lastMove || !isLegalMoveFromFen(serverFen, fen, lastMove)) {
+            await refreshRoomFromServer()
+            setSyncError('OUT_OF_SYNC')
+            return false
+          }
+
+          const state: ClassicRoomState = { type: 'classic', fen, lastMove, pgn: pgn ?? '' }
+          try {
+            const updated = await pushRoomState(active.id, active.version, { state, turn })
+            syncRoom(updated)
+            lastAppliedVersion.current = updated.version
+            setSyncError(null)
+            return true
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Sync error'
+            if (msg !== 'VERSION_CONFLICT' || attempt === 1) throw e
+            active = await refreshRoomFromServer()
+          }
+        }
+        return false
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Sync error'
         if (msg === 'VERSION_CONFLICT') {
@@ -207,6 +257,7 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
         return false
       } finally {
         pushingRef.current = false
+        setIsPushing(false)
       }
     },
     [online?.roomId, refreshRoomFromServer, syncRoom, waitForRoom],
@@ -219,40 +270,41 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
       pending: QPendingMeasurement | null | undefined = undefined,
     ) => {
       if (!online?.roomId || applyingRemote.current || pushingRef.current) return false
-      const active = await waitForRoom()
-      if (!active) {
-        setSyncError('ROOM_NOT_READY')
-        return false
-      }
-
-      if (active.state.type !== 'quantum') {
-        setSyncError('ROOM_NOT_READY')
-        return false
-      }
-
-      const serverRoom = active.state
-      const nextRoom: QuantumRoomState = {
-        type: 'quantum',
-        qstate,
-        pendingMeasurement: pending === undefined ? (serverRoom.pendingMeasurement ?? null) : pending,
-      }
-      if (quantumRoomFingerprint(serverRoom) === quantumRoomFingerprint(nextRoom)) {
-        setSyncError(null)
-        return true
-      }
-
-      const onlyPendingChange =
-        quantumStateFingerprint(serverRoom.qstate) === quantumStateFingerprint(qstate) &&
-        quantumRoomFingerprint(serverRoom) !== quantumRoomFingerprint(nextRoom)
-
-      if (active.turn !== config.playerColor && !onlyPendingChange) {
-        await refreshRoomFromServer()
-        setSyncError('OUT_OF_SYNC')
-        return false
-      }
-
       pushingRef.current = true
+      setIsPushing(true)
       try {
+        const active = await waitForRoom()
+        if (!active) {
+          setSyncError('ROOM_NOT_READY')
+          return false
+        }
+
+        if (active.state.type !== 'quantum') {
+          setSyncError('ROOM_NOT_READY')
+          return false
+        }
+
+        const serverRoom = active.state
+        const nextRoom: QuantumRoomState = {
+          type: 'quantum',
+          qstate,
+          pendingMeasurement: pending === undefined ? (serverRoom.pendingMeasurement ?? null) : pending,
+        }
+        if (quantumRoomFingerprint(serverRoom) === quantumRoomFingerprint(nextRoom)) {
+          setSyncError(null)
+          return true
+        }
+
+        const onlyPendingChange =
+          quantumStateFingerprint(serverRoom.qstate) === quantumStateFingerprint(qstate) &&
+          quantumRoomFingerprint(serverRoom) !== quantumRoomFingerprint(nextRoom)
+
+        if (active.turn !== config.playerColor && !onlyPendingChange) {
+          await refreshRoomFromServer()
+          setSyncError('OUT_OF_SYNC')
+          return false
+        }
+
         const updated = await pushRoomState(active.id, active.version, {
           state: nextRoom,
           turn,
@@ -273,6 +325,7 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
         return false
       } finally {
         pushingRef.current = false
+        setIsPushing(false)
       }
     },
     [online?.roomId, config.playerColor, refreshRoomFromServer, syncRoom, waitForRoom],
@@ -293,7 +346,8 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     void navigator.clipboard?.writeText(url)
   }, [online?.code])
 
-  const shouldApplyRemote = isOnline && room && room.version > lastAppliedVersion.current
+  const shouldApplyRemote =
+    isOnline && room && !pushingRef.current && room.version > lastAppliedVersion.current
 
   const markRemoteApplied = useCallback((version: number) => {
     lastAppliedVersion.current = version
@@ -327,7 +381,9 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     pendingMeasurement,
     isMeasurementBlocking,
     opponentConnected,
+    opponentOnline,
     opponentLeft,
+    isPushing,
     syncError,
     pushClassicState,
     pushQuantumState,

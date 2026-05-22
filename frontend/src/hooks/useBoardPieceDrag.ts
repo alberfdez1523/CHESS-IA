@@ -9,9 +9,20 @@ function squareFromPoint(
   clientY: number,
 ): string | null {
   if (!boardEl) return null
-  const el = document.elementFromPoint(clientX, clientY)
-  const cell = el?.closest('[data-square]')
-  if (!cell || !boardEl.contains(cell)) return null
+  const rect = boardEl.getBoundingClientRect()
+  if (
+    clientX < rect.left ||
+    clientX > rect.right ||
+    clientY < rect.top ||
+    clientY > rect.bottom
+  ) {
+    return null
+  }
+
+  const col = Math.min(7, Math.max(0, Math.floor(((clientX - rect.left) / rect.width) * 8)))
+  const row = Math.min(7, Math.max(0, Math.floor(((clientY - rect.top) / rect.height) * 8)))
+  const cell = boardEl.querySelector(`[data-board-row="${row}"][data-board-col="${col}"]`)
+  if (!cell) return null
   return cell.getAttribute('data-square')
 }
 
@@ -31,6 +42,7 @@ export function useBoardPieceDrag(
     up: (e: PointerEvent) => void
     cancel: (e: PointerEvent) => void
   } | null>(null)
+  const pointerIdRef = useRef<number | null>(null)
 
   const clearHover = useCallback(() => {
     const board = boardRef.current
@@ -67,6 +79,7 @@ export function useBoardPieceDrag(
 
       startRef.current = null
       isDraggingRef.current = false
+      pointerIdRef.current = null
 
       if (listenersRef.current) {
         document.removeEventListener('pointermove', listenersRef.current.move)
@@ -99,8 +112,12 @@ export function useBoardPieceDrag(
       startRef.current = { x: e.clientX, y: e.clientY, sq }
       isDraggingRef.current = false
       suppressClickRef.current = false
+      pointerIdRef.current = e.pointerId
+      e.currentTarget.setPointerCapture?.(e.pointerId)
 
       const onPointerMove = (ev: PointerEvent) => {
+        if (pointerIdRef.current !== ev.pointerId) return
+        ev.preventDefault()
         const start = startRef.current
         if (!start) return
 
@@ -134,6 +151,7 @@ export function useBoardPieceDrag(
       }
 
       const onPointerUp = (ev: PointerEvent) => {
+        if (pointerIdRef.current !== ev.pointerId) return
         if (rafRef.current != null) {
           cancelAnimationFrame(rafRef.current)
           rafRef.current = null
@@ -142,7 +160,7 @@ export function useBoardPieceDrag(
       }
 
       listenersRef.current = { move: onPointerMove, up: onPointerUp, cancel: onPointerUp }
-      document.addEventListener('pointermove', onPointerMove)
+      document.addEventListener('pointermove', onPointerMove, { passive: false })
       document.addEventListener('pointerup', onPointerUp)
       document.addEventListener('pointercancel', onPointerUp)
     },

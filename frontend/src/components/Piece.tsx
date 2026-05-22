@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { motion } from 'framer-motion'
 import { PIECE_GLYPH } from '../lib/constants'
 import type { PieceColor, PieceType } from '../lib/types'
@@ -8,7 +9,7 @@ interface PieceProps {
   animate?: boolean
 }
 
-export default function Piece({ type, color, animate = true }: PieceProps) {
+function Piece({ type, color, animate = true }: PieceProps) {
   const symbol = PIECE_GLYPH[type]
   const className = `chess-piece ${color === 'w' ? 'piece-white' : 'piece-black'}`
 
@@ -32,3 +33,5 @@ export default function Piece({ type, color, animate = true }: PieceProps) {
     </motion.span>
   )
 }
+
+export default memo(Piece)

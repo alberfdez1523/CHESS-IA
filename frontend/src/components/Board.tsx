@@ -64,8 +64,7 @@ export default function Board({
       }
     }
     return result
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardFlipped, fen])
+  }, [boardFlipped])
 
   const squareIndex = useMemo(() => {
     const map = new Map<string, { row: number; col: number }>()
@@ -181,6 +180,8 @@ export default function Board({
               key={square}
               id={`sq-${square}`}
               data-square={square}
+              data-board-row={row}
+              data-board-col={col}
               type="button"
               role="gridcell"
               aria-rowindex={row + 1}
@@ -198,14 +199,14 @@ export default function Board({
               `}
               onClick={() => handleSquareClick(square)}
             >
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence initial={false} mode="popLayout">
                 {piece && (
                   <motion.div
                     key={`${square}-${piece.color}${piece.type}`}
                     className={`absolute inset-0 flex items-center justify-center ${canDrag ? 'pointer-events-auto touch-none' : 'pointer-events-none'}`}
-                    initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
+                    initial={false}
                     animate={{ scale: 1, opacity: 1 }}
-                    exit={reduceMotion ? undefined : { scale: 0.5, opacity: 0 }}
+                    exit={undefined}
                     transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 350, damping: 20 }}
                   >
                     <motion.div
@@ -216,7 +217,7 @@ export default function Board({
                           : undefined
                       }
                     >
-                      <Piece type={piece.type} color={piece.color} animate={!reduceMotion} />
+                      <Piece type={piece.type} color={piece.color} animate={false} />
                     </motion.div>
                   </motion.div>
                 )}

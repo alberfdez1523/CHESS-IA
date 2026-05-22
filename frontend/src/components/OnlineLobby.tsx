@@ -9,7 +9,6 @@ import {
   getInviteUrl,
   isOnlineAvailable,
   ensureOnlineAuth,
-  abandonOnlineRoom,
 } from '../lib/onlineRoom'
 import type { OnlineRoomRow } from '../lib/onlineTypes'
 import { ui } from '../lib/i18n'
@@ -193,15 +192,6 @@ export default function OnlineLobby({
   const handleBack = () => {
     onBack()
   }
-
-  useEffect(() => {
-    if (!room?.id || view === 'menu') return
-    const onPageHide = () => {
-      void abandonOnlineRoom(room.id).catch((e) => console.error('[online] pagehide abandon:', e))
-    }
-    window.addEventListener('pagehide', onPageHide)
-    return () => window.removeEventListener('pagehide', onPageHide)
-  }, [room?.id, view])
 
   if (!supabaseReady) {
     return (

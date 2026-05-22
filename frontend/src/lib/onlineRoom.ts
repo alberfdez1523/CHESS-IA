@@ -5,6 +5,7 @@ import { getSupabase, isSupabaseConfigured } from './supabase'
 import { QuantumChessEngine } from './quantumEngine'
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const PLAYER_ID_KEY = 'gdd-online-player-id'
 
 function generateRoomCode(): string {
   let code = ''
@@ -16,6 +17,37 @@ function generateRoomCode(): string {
 
 function randomSeed(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+}
+
+function fallbackUuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.floor(Math.random() * 16)
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
+function getTabPlayerId(): string {
+  if (typeof window === 'undefined') return fallbackUuid()
+
+  const createId = () =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : fallbackUuid()
+
+  try {
+    const existing = window.sessionStorage.getItem(PLAYER_ID_KEY)
+    if (existing) return existing
+    const next = createId()
+    window.sessionStorage.setItem(PLAYER_ID_KEY, next)
+    return next
+  } catch {
+    const existing = window.localStorage?.getItem(PLAYER_ID_KEY)
+    if (existing) return existing
+    const next = createId()
+    window.localStorage?.setItem(PLAYER_ID_KEY, next)
+    return next
+  }
 }
 
 export function initialClassicState(): ClassicRoomState {
@@ -44,13 +76,13 @@ export async function ensureOnlineAuth(): Promise<string> {
   const supabase = getSupabase()
   const { data: sessionData } = await supabase.auth.getSession()
   if (sessionData.session?.user?.id) {
-    return sessionData.session.user.id
+    return getTabPlayerId()
   }
   const { data, error } = await supabase.auth.signInAnonymously()
   if (error || !data.user?.id) {
     throw new Error(error?.message ?? 'No se pudo iniciar sesión anónima')
   }
-  return data.user.id
+  return getTabPlayerId()
 }
 
 export async function createOnlineRoom(
@@ -269,6 +301,53 @@ export function subscribeToRoom(roomId: string, handlers: RoomSubscriptionHandle
   })
 
   return () => {
+    void supabase.removeChannel(channel)
+  }
+}
+
+export interface RoomPresenceHandlers {
+  onPeers: (peerIds: string[]) => void
+}
+
+export function subscribeToRoomPresence(
+  roomId: string,
+  playerId: string,
+  handlers: RoomPresenceHandlers,
+): () => void {
+  const supabase = getSupabase()
+  const channel = supabase.channel(`presence:room:${roomId}`, {
+    config: {
+      presence: { key: playerId },
+    },
+  })
+
+  const emitPresence = () => {
+    const state = channel.presenceState() as Record<string, unknown[]>
+    handlers.onPeers(Object.keys(state).filter(Boolean))
+  }
+
+  channel.on('presence', { event: 'sync' }, emitPresence)
+  channel.on('presence', { event: 'join' }, emitPresence)
+  channel.on('presence', { event: 'leave' }, emitPresence)
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      void channel.track({
+        playerId,
+        onlineAt: new Date().toISOString(),
+      }).then(emitPresence)
+    }
+  })
+
+  const heartbeat = window.setInterval(() => {
+    void channel.track({
+      playerId,
+      onlineAt: new Date().toISOString(),
+    })
+  }, 20_000)
+
+  return () => {
+    window.clearInterval(heartbeat)
+    void channel.untrack()
     void supabase.removeChannel(channel)
   }
 }

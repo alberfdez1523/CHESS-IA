@@ -59,12 +59,6 @@ export default function GameScreen({
     }
   }, [onNewGame])
 
-  useEffect(() => {
-    if (!onlineSync.opponentLeft) return
-    const id = window.setTimeout(() => handleLeaveToMenu(), 2500)
-    return () => window.clearTimeout(id)
-  }, [onlineSync.opponentLeft, handleLeaveToMenu])
-
   const onMoveApplied = useCallback(
     async (
       fen: string,
@@ -174,6 +168,7 @@ export default function GameScreen({
       materialDiff:
         topColor === config.playerColor ? game.materialDiff : -game.materialDiff,
       isActive: game.turn === topColor && !game.gameOver,
+      turnLabel: game.turn === topColor && !game.gameOver ? (language === 'es' ? 'Mueve' : 'To move') : undefined,
       time: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
       isLow: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
     }
@@ -190,6 +185,7 @@ export default function GameScreen({
       materialDiff:
         bottomColor === config.playerColor ? game.materialDiff : -game.materialDiff,
       isActive: game.turn === bottomColor && !game.gameOver,
+      turnLabel: game.turn === bottomColor && !game.gameOver ? (language === 'es' ? 'Mueve' : 'To move') : undefined,
       time: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
       isLow: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
     }
@@ -213,6 +209,23 @@ export default function GameScreen({
           <span className="hidden font-serif text-sm text-white sm:inline">GdD</span>
           <span className="flex flex-wrap items-center gap-2 text-ui-xs font-medium uppercase tracking-wider text-neutral-500">
             {modeBadge}
+            {isOnline && (
+              <span
+                className={`rounded-sm border px-1.5 py-0.5 ${
+                  onlineSync.isPushing
+                    ? 'border-amber-400/30 text-amber-300'
+                    : onlineSync.opponentConnected
+                      ? 'border-emerald-400/30 text-emerald-300'
+                      : 'border-surface-4 text-neutral-500'
+                }`}
+              >
+                {onlineSync.isPushing
+                  ? t.onlineSyncing
+                  : onlineSync.opponentConnected
+                    ? t.onlineConnected
+                    : t.onlineReconnecting}
+              </span>
+            )}
             {isOnline && <OnlineBetaBadge language={language} />}
           </span>
         </div>

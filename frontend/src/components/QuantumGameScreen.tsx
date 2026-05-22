@@ -63,12 +63,6 @@ export default function QuantumGameScreen({
     }
   }, [onNewGame])
 
-  useEffect(() => {
-    if (!onlineSync.opponentLeft) return
-    const id = window.setTimeout(() => handleLeaveToMenu(), 2500)
-    return () => window.clearTimeout(id)
-  }, [onlineSync.opponentLeft, handleLeaveToMenu])
-
   const loadQuantumRef = useRef<(q: QState) => void>(() => {})
   const turnRef = useRef<PieceColor>('w')
   const exportQStateRef = useRef<() => QState>(() => ({} as QState))
@@ -230,6 +224,8 @@ export default function QuantumGameScreen({
     elo: '',
     color: topColor,
     isActive: game.turn === topColor && !game.gameOver,
+    turnLabel: game.turn === topColor && !game.gameOver ? (language === 'es' ? 'Mueve' : 'To move') : undefined,
+    accent: 'quantum' as const,
     captures: [] as any[],
     materialDiff: 0,
     time: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
@@ -241,6 +237,8 @@ export default function QuantumGameScreen({
     elo: '',
     color: bottomColor,
     isActive: game.turn === bottomColor && !game.gameOver,
+    turnLabel: game.turn === bottomColor && !game.gameOver ? (language === 'es' ? 'Mueve' : 'To move') : undefined,
+    accent: 'quantum' as const,
     captures: [] as any[],
     materialDiff: 0,
     time: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
@@ -299,6 +297,23 @@ export default function QuantumGameScreen({
             {isOnline
               ? `${t.onlineBadge}${config.online?.code ? ` · ${config.online.code}` : ''}`
               : t.quantumBadge}
+            {isOnline && (
+              <span
+                className={`rounded-sm border px-1.5 py-0.5 ${
+                  onlineSync.isPushing
+                    ? 'border-amber-400/30 text-amber-300'
+                    : onlineSync.opponentConnected
+                      ? 'border-emerald-400/30 text-emerald-300'
+                      : 'border-surface-4 text-neutral-500'
+                }`}
+              >
+                {onlineSync.isPushing
+                  ? t.onlineSyncing
+                  : onlineSync.opponentConnected
+                    ? t.onlineConnected
+                    : t.onlineReconnecting}
+              </span>
+            )}
             {isOnline && <OnlineBetaBadge language={language} />}
           </span>
         </div>
@@ -386,6 +401,7 @@ export default function QuantumGameScreen({
               boardFlipped={game.boardFlipped}
               isThinking={game.isThinking}
               playerColor={game.controlColor}
+              turnColor={game.turn}
               onSquareClick={game.handleSquareClick}
               onDrop={game.handleDrop}
               language={language}
