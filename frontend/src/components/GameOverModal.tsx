@@ -41,14 +41,14 @@ export default function GameOverModal({ info, onNewGame, onDismiss, language }: 
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="mx-4 w-full max-w-xs rounded-lg border border-surface-4 bg-surface-1 p-10 text-center"
+            className="mx-4 w-full max-w-xs rounded-lg border border-surface-4 bg-surface-1 p-6 text-center max-lg:max-h-[92dvh] sm:p-10"
             initial={reduceMotion ? false : { scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={reduceMotion ? undefined : { scale: 0.9, opacity: 0, y: 20 }}
             transition={reduceMotion ? { duration: 0 } : { duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id={titleId} className={`font-serif text-4xl ${RESULT_COLOR[translatedInfo.result]}`}>
+            <h2 id={titleId} className={`font-serif text-3xl sm:text-4xl ${RESULT_COLOR[translatedInfo.result]}`}>
               {translatedInfo.title}
             </h2>
             <p className="mt-3 text-sm text-neutral-500">{translatedInfo.message}</p>

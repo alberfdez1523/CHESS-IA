@@ -22,6 +22,7 @@ interface QuantumBoardProps {
   onDrop: (from: string, to: string) => void
   language: Language
   statusText?: string
+  checkSquare?: string | null
 }
 
 export default function QuantumBoard({
@@ -40,6 +41,7 @@ export default function QuantumBoard({
   onDrop,
   language,
   statusText,
+  checkSquare = null,
 }: QuantumBoardProps) {
   const [focusedSquare, setFocusedSquare] = useState('e4')
   const [ghostPiece, setGhostPiece] = useState<DragGhostPiece | null>(null)
@@ -99,8 +101,9 @@ export default function QuantumBoard({
     if (mergeTargets.has(square)) parts.push(language === 'es' ? 'fusión posible' : 'merge target')
     if (lastMove?.from === square) parts.push(t.lastMoveFrom)
     if (lastMove?.to === square) parts.push(t.lastMoveTo)
+    if (square === checkSquare) parts.push(t.check)
     return parts.join(', ')
-  }, [board, language, selectedPiece, legalTargets, mergeTargets, lastMove, t])
+  }, [board, language, selectedPiece, legalTargets, mergeTargets, lastMove, checkSquare, t])
 
   const moveFocus = useCallback((square: string) => {
     setFocusedSquare(square)
@@ -168,6 +171,7 @@ export default function QuantumBoard({
           const isFirstQt = firstQuantumTarget === square
           const isLastFrom = lastMove?.from === square
           const isLastTo = lastMove?.to === square
+          const isCheck = square === checkSquare
           const hasCapturableEnemy = isLegal && cells.some((c) => c.color !== playerColor)
           const myCell = cells.find((c) => c.color === playerColor)
           const canDrag = !isThinking && !!myCell && playerColor === turnColor && moveMode === 'classical'
@@ -197,6 +201,7 @@ export default function QuantumBoard({
                 ${isLastFrom ? 'sq-last-from' : ''}
                 ${isLastTo ? 'sq-last-to' : ''}
                 ${isFirstQt ? 'sq-quantum-first' : ''}
+                ${isCheck ? 'sq-check' : ''}
               `}
               onClick={() => handleSquareClick(square)}
             >

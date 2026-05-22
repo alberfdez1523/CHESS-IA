@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import Board from './Board'
 import BoardSkeleton from './BoardSkeleton'
@@ -11,6 +11,8 @@ import PromotionModal from './PromotionModal'
 import GameOverModal from './GameOverModal'
 import OnlineSessionEndedModal from './OnlineSessionEndedModal'
 import { OnlineBetaBadge } from './OnlineBetaNotice'
+import GameViewportShell from './GameViewportShell'
+import GameMobileStatsSheet from './GameMobileStatsSheet'
 import { useChessGame } from '../hooks/useChessGame'
 import { useOnlineGameSync } from '../hooks/useOnlineGameSync'
 import { useSoundFX } from '../hooks/useSoundFX'
@@ -201,9 +203,15 @@ export default function GameScreen({
     ? { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } }
     : { initial: { opacity: 0, scale: 0.97 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.4, delay: 0.1 } }
 
-  return (
-    <div className="bg-atm-gold flex min-h-screen flex-col bg-surface-0">
-      <header className="flex items-center justify-between border-b border-surface-4 px-4 py-3 lg:px-6">
+  const [mobileStatsOpen, setMobileStatsOpen] = useState(false)
+  const showSyncBanner = !!(onlineSync.syncError && isOnline)
+  const showEngineBanner = !!(game.engineError || game.evalError)
+  const bannerCount = (showSyncBanner ? 1 : 0) + (showEngineBanner ? 1 : 0) as 0 | 1 | 2
+  const hasCastleButtons =
+    game.classicalCastleOptions.length > 0 && !game.gameOver && !game.isThinking
+
+  const gameHeader = (
+    <header className="flex items-center justify-between border-b border-surface-4 px-3 py-2 max-lg:py-2 lg:px-6 lg:py-3">
         <div className="flex items-center gap-3">
           <span className="font-serif text-lg text-accent">♛</span>
           <span className="hidden font-serif text-sm text-white sm:inline">GdD</span>
@@ -247,9 +255,12 @@ export default function GameScreen({
           </button>
         </div>
       </header>
+  )
 
-      {onlineSync.syncError && isOnline && (
-        <motion.div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-center text-ui-sm text-amber-200">
+  const gameBanners = (
+    <>
+      {showSyncBanner && (
+        <motion.div className="border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-center text-ui-xs text-amber-200 max-lg:truncate lg:px-4 lg:py-2.5 lg:text-ui-sm">
           {onlineSync.syncError === 'CONFLICT' || onlineSync.syncError === 'OUT_OF_SYNC'
             ? language === 'es'
               ? 'Tablero resincronizado con el servidor.'
@@ -257,16 +268,15 @@ export default function GameScreen({
             : `${language === 'es' ? 'Error de sincronización: ' : 'Sync error: '}${onlineSync.syncError}`}
         </motion.div>
       )}
-
-      {(game.engineError || game.evalError) && (
-        <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2.5">
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-3 text-center text-ui-sm text-red-300">
-            <span>{game.engineError || game.evalError}</span>
+      {showEngineBanner && (
+        <div className="border-b border-red-500/20 bg-red-500/10 px-3 py-2 max-lg:py-2 lg:px-4 lg:py-2.5">
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-2 text-center text-ui-xs text-red-300 lg:gap-3 lg:text-ui-sm">
+            <span className="max-lg:line-clamp-2">{game.engineError || game.evalError}</span>
             {game.engineError && (
               <button
                 type="button"
                 onClick={game.retryAIMove}
-                className="min-h-[44px] rounded border border-red-400/40 px-3 py-1.5 font-semibold text-red-200 transition-colors hover:bg-red-500/20"
+                className="min-h-[44px] shrink-0 rounded border border-red-400/40 px-3 py-1.5 text-ui-xs font-semibold text-red-200 transition-colors hover:bg-red-500/20"
               >
                 {t.engineErrorRetry}
               </button>
@@ -274,9 +284,52 @@ export default function GameScreen({
           </div>
         </div>
       )}
+    </>
+  )
 
-      <div className="flex flex-1 items-start justify-center gap-0 px-4 py-4 lg:py-8">
-        <motion.div className="flex flex-col" {...boardMotion}>
+  return (
+    <GameViewportShell
+      variant="gold"
+      bannerCount={bannerCount}
+      hasCastleButtons={hasCastleButtons}
+      header={gameHeader}
+      banners={bannerCount > 0 ? gameBanners : undefined}
+      footer={(
+        <div
+          className="flex items-center gap-2 border-t border-surface-4 px-3 py-2 max-lg:py-2"
+          style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+        >
+          <button
+            type="button"
+            onClick={() => setMobileStatsOpen(true)}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-surface-4 text-ui-sm text-neutral-400 transition-colors hover:bg-surface-2 hover:text-white"
+            aria-label={language === 'es' ? 'Evaluación e historial' : 'Eval and history'}
+          >
+            📊
+          </button>
+          <div className="flex min-w-0 flex-1">
+            <ActionButtons
+              onUndo={game.undo}
+              onFlip={game.flip}
+              onResign={game.resign}
+              canUndo={game.history.length >= 2 && !game.isThinking}
+              gameOver={game.gameOver}
+              language={language}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={music.toggle}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded text-sm transition-colors
+              ${music.playing ? 'bg-accent/15 text-accent' : 'text-neutral-600 hover:text-neutral-400'}`}
+            aria-label={music.playing ? t.pause : t.play}
+          >
+            {music.playing ? '⏸' : '♫'}
+          </button>
+        </div>
+      )}
+    >
+        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:flex-none lg:px-0" {...boardMotion}>
           <PlayerBar {...topBar} />
 
           {!game.boardReady ? (
@@ -301,7 +354,7 @@ export default function GameScreen({
 
           <PlayerBar {...bottomBar} />
 
-          <div className="flex items-center justify-center gap-2 py-2" aria-live="polite" aria-atomic="true">
+          <div className="game-status-row flex shrink-0 items-center justify-center gap-2 py-1 max-lg:py-0.5" aria-live="polite" aria-atomic="true">
             <div
               className={`h-1.5 w-1.5 rounded-full ${
                 game.status.type === 'player' ? 'bg-accent'
@@ -313,25 +366,20 @@ export default function GameScreen({
             <span className="text-ui-sm text-neutral-500">{game.status.text}</span>
           </div>
 
-          {game.classicalCastleOptions.length > 0 && !game.gameOver && !game.isThinking && (
-            <div className="flex gap-2" style={{ width: 'var(--board-size)' }}>
+          {hasCastleButtons && (
+            <div className="flex shrink-0 gap-2" style={{ width: 'var(--board-size)' }}>
               {game.classicalCastleOptions.map((side) => (
                 <button
                   key={`classic-${side}`}
                   type="button"
                   onClick={() => game.doClassicalCastle(side)}
-                  className="min-h-[44px] flex-1 rounded border border-accent/25 bg-accent/5 px-3 py-2 text-ui-sm font-medium text-accent transition-colors hover:bg-accent/15"
+                  className="min-h-[40px] flex-1 rounded border border-accent/25 bg-accent/5 px-2 py-1.5 text-ui-xs font-medium text-accent transition-colors hover:bg-accent/15 max-lg:min-h-[36px] lg:min-h-[44px] lg:px-3 lg:py-2 lg:text-ui-sm"
                 >
                   {t.castleShort(side)}
                 </button>
               ))}
             </div>
           )}
-
-          <div className="mt-2 flex w-full flex-col gap-2 lg:hidden" style={{ width: 'var(--board-size)' }}>
-            <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
-            <MoveHistory history={game.history} language={language} pgn={game.pgn} showCopy />
-          </div>
         </motion.div>
 
         <motion.div
@@ -370,32 +418,15 @@ export default function GameScreen({
             />
           </div>
         </motion.div>
-      </div>
 
-      <div
-        className="flex items-center gap-2 border-t border-surface-4 px-4 py-2.5 lg:hidden"
-        style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}
+      <GameMobileStatsSheet
+        open={mobileStatsOpen}
+        onClose={() => setMobileStatsOpen(false)}
+        language={language}
       >
-        <div className="flex flex-1">
-          <ActionButtons
-            onUndo={game.undo}
-            onFlip={game.flip}
-            onResign={game.resign}
-            canUndo={game.history.length >= 2 && !game.isThinking}
-            gameOver={game.gameOver}
-            language={language}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={music.toggle}
-          className={`flex h-11 w-11 items-center justify-center rounded text-sm transition-colors
-            ${music.playing ? 'bg-accent/15 text-accent' : 'text-neutral-600 hover:text-neutral-400'}`}
-          aria-label={music.playing ? t.pause : t.play}
-        >
-          {music.playing ? '⏸' : '♫'}
-        </button>
-      </div>
+        <EvalBar chances={game.chances} playerColor={config.playerColor} language={language} />
+        <MoveHistory history={game.history} language={language} pgn={game.pgn} showCopy variant="sheet" />
+      </GameMobileStatsSheet>
 
       <PromotionModal
         visible={!!game.promotionPending}
@@ -414,6 +445,6 @@ export default function GameScreen({
         onMenu={handleLeaveToMenu}
         language={language}
       />
-    </div>
+    </GameViewportShell>
   )
 }

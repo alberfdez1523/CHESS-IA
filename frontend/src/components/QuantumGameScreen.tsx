@@ -12,6 +12,8 @@ import GameOverModal from './GameOverModal'
 import OnlineSessionEndedModal from './OnlineSessionEndedModal'
 import { OnlineBetaBadge } from './OnlineBetaNotice'
 import QuantumMeasurementRoulette from './QuantumMeasurementRoulette'
+import GameViewportShell from './GameViewportShell'
+import GameMobileStatsSheet from './GameMobileStatsSheet'
 import { useQuantumChess } from '../hooks/useQuantumChess'
 import { useOnlineGameSync } from '../hooks/useOnlineGameSync'
 import { useSoundFX } from '../hooks/useSoundFX'
@@ -106,6 +108,7 @@ export default function QuantumGameScreen({
   const reduceMotion = useReducedMotion()
   const [boardReady, setBoardReady] = useState(false)
   const [mobileModesOpen, setMobileModesOpen] = useState(false)
+  const [mobileStatsOpen, setMobileStatsOpen] = useState(false)
 
   const pending = onlineSync.pendingMeasurement
   const isInitiator = pending?.initiator === config.playerColor
@@ -287,9 +290,15 @@ export default function QuantumGameScreen({
     )
   }
 
-  return (
-    <div className="bg-atm-quantum flex min-h-screen flex-col bg-surface-0">
-      <header className="flex items-center justify-between border-b border-surface-4 px-4 py-3 lg:px-6">
+  const showMeasureBanner = isWaitingOpponentMeasurement
+  const showReleasedBanner = measurementReleased && isOnline && onlineSync.isMyTurn
+  const bannerCount = (showMeasureBanner ? 1 : 0) + (showReleasedBanner ? 1 : 0) as 0 | 1 | 2
+  const hasCastleButtons =
+    (game.classicalCastleOptions.length > 0 || game.quantumCastleOptions.length > 0)
+    && !game.gameOver && !game.isThinking
+
+  const gameHeader = (
+    <header className="flex items-center justify-between border-b border-surface-4 px-3 py-2 max-lg:py-2 lg:px-6 lg:py-3">
         <div className="flex items-center gap-3">
           <span className="font-serif text-lg text-indigo-400">⚛</span>
           <span className="hidden font-serif text-sm text-white sm:inline">GdD</span>
@@ -335,28 +344,75 @@ export default function QuantumGameScreen({
           </button>
         </div>
       </header>
+  )
 
-      {isWaitingOpponentMeasurement && (
+  const gameBanners = (
+    <>
+      {showMeasureBanner && (
         <motion.div
-          className="border-b border-indigo-500/25 bg-indigo-500/10 px-4 py-2.5 text-center text-ui-sm text-indigo-200"
+          className="border-b border-indigo-500/25 bg-indigo-500/10 px-3 py-2 text-center text-ui-xs text-indigo-200 max-lg:truncate lg:px-4 lg:py-2.5 lg:text-ui-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
           {t.measurementPending}
         </motion.div>
       )}
-
-      {measurementReleased && isOnline && onlineSync.isMyTurn && (
+      {showReleasedBanner && (
         <motion.div
-          className="border-b border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-center text-ui-sm text-emerald-200"
+          className="border-b border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-center text-ui-xs text-emerald-200 max-lg:truncate lg:px-4 lg:py-2.5 lg:text-ui-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
           {t.measurementCanMove}
         </motion.div>
       )}
+    </>
+  )
 
-      <div className="flex flex-1 items-start justify-center gap-0 px-4 py-4 lg:py-8">
+  return (
+    <GameViewportShell
+      variant="quantum"
+      bannerCount={bannerCount}
+      hasCastleButtons={hasCastleButtons}
+      header={gameHeader}
+      banners={bannerCount > 0 ? gameBanners : undefined}
+      footer={(
+        <div
+          className="flex items-center gap-2 border-t border-surface-4 px-3 py-2 max-lg:py-2"
+          style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+        >
+          <button
+            type="button"
+            onClick={() => setMobileStatsOpen(true)}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-surface-4 text-ui-sm text-neutral-400 transition-colors hover:bg-surface-2 hover:text-white"
+            aria-label={language === 'es' ? 'Evaluación e historial' : 'Eval and history'}
+          >
+            📊
+          </button>
+          <div className="flex min-w-0 flex-1">
+            <ActionButtons
+              onUndo={() => {}}
+              onFlip={game.flip}
+              onResign={game.resign}
+              canUndo={false}
+              gameOver={game.gameOver}
+              language={language}
+              showUndo={false}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={music.toggle}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded text-sm transition-colors
+              ${music.playing ? 'bg-indigo-500/15 text-indigo-400' : 'text-neutral-600 hover:text-neutral-400'}`}
+            aria-label={music.playing ? t.pause : t.play}
+          >
+            {music.playing ? '⏸' : '♫'}
+          </button>
+        </div>
+      )}
+    >
+      <div className="flex min-h-0 w-full flex-1 overflow-hidden lg:items-start lg:justify-center">
         <motion.div
           className="hidden w-56 flex-col border-r border-surface-4 pr-4 lg:flex xl:w-64"
           initial={reduceMotion ? false : { opacity: 0, x: -16 }}
@@ -384,7 +440,7 @@ export default function QuantumGameScreen({
           </p>
         </motion.div>
 
-        <motion.div className="flex flex-col lg:px-6" {...boardMotion}>
+        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:flex-none lg:px-6" {...boardMotion}>
           <PlayerBar {...topBar} />
 
           {!boardReady ? (
@@ -406,43 +462,43 @@ export default function QuantumGameScreen({
               onDrop={game.handleDrop}
               language={language}
               statusText={game.status.text}
+              checkSquare={game.checkSquare}
             />
           )}
 
           <PlayerBar {...bottomBar} />
 
-          <div className="py-2 lg:hidden">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2" aria-live="polite">
+          <div className="game-quantum-controls shrink-0 py-1 max-lg:w-full lg:hidden" style={{ width: 'var(--board-size)' }}>
+            <div className="game-status-row flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2" aria-live="polite">
                 <div
-                  className={`h-1.5 w-1.5 rounded-full ${
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                     game.status.type === 'player' ? 'bg-indigo-400'
                       : game.status.type === 'over' ? 'bg-red-400'
                       : 'bg-neutral-600'
                   }`}
                 />
-                <span className="text-ui-sm text-neutral-500">{game.status.text}</span>
+                <span className="truncate text-ui-xs text-neutral-500">{game.status.text}</span>
               </div>
               {!game.gameOver && (
                 <button
                   type="button"
-                  onClick={() => setMobileModesOpen((v) => !v)}
-                  className="min-h-[44px] rounded border border-surface-4 px-3 text-ui-xs font-semibold text-indigo-300"
+                  onClick={() => setMobileModesOpen(true)}
+                  className="min-h-[36px] shrink-0 rounded border border-surface-4 px-2.5 text-ui-xs font-semibold text-indigo-300"
                 >
                   {modeLabels[game.moveMode].icon} {modeLabels[game.moveMode].label}
                 </button>
               )}
             </div>
 
-            {!game.gameOver && (
-              <div className="-mx-1 mt-2 overflow-x-auto px-1 pb-1">
-                <div className="flex gap-2">
-                  {modeButtons.map((mode) => renderModeButton(mode, true))}
-                </div>
-              </div>
-            )}
-
             {mobileModesOpen && !game.gameOver && (
+              <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+                aria-label={t.cancel}
+                onClick={() => setMobileModesOpen(false)}
+              />
               <div
                 className="fixed inset-x-0 bottom-0 z-50 rounded-t-xl border border-surface-4 bg-surface-1 p-4 shadow-2xl lg:hidden"
                 style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
@@ -456,51 +512,34 @@ export default function QuantumGameScreen({
                   {modeButtons.map((mode) => renderModeButton(mode))}
                 </div>
               </div>
+              </>
             )}
           </div>
 
-          {(game.classicalCastleOptions.length > 0 || game.quantumCastleOptions.length > 0) && !game.gameOver && !game.isThinking && (
-            <div className="flex flex-col gap-2" style={{ width: 'var(--board-size)' }}>
-              {game.classicalCastleOptions.length > 0 && (
-                <div className="flex gap-2">
-                  {game.classicalCastleOptions.map((side) => (
-                    <button
-                      key={`classic-${side}`}
-                      type="button"
-                      onClick={() => game.doClassicalCastle(side)}
-                      className="min-h-[44px] flex-1 rounded border border-accent/25 bg-accent/5 px-3 py-2 text-ui-sm font-medium text-accent transition-colors hover:bg-accent/15"
-                    >
-                      {t.castleShort(side)}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {game.quantumCastleOptions.length > 0 && (
-                <div className="flex gap-2">
-                  {game.quantumCastleOptions.map((side) => (
-                    <button
-                      key={`quantum-${side}`}
-                      type="button"
-                      onClick={() => game.doQuantumCastle(side)}
-                      className="min-h-[44px] flex-1 rounded border border-indigo-500/25 bg-indigo-500/5 px-3 py-2 text-ui-sm font-medium text-indigo-400 transition-colors hover:bg-indigo-500/15"
-                    >
-                      {t.quantumCastle(side)}
-                    </button>
-                  ))}
-                </div>
-              )}
+          {hasCastleButtons && (
+            <div className="flex shrink-0 flex-wrap gap-1.5" style={{ width: 'var(--board-size)' }}>
+              {game.classicalCastleOptions.map((side) => (
+                <button
+                  key={`classic-${side}`}
+                  type="button"
+                  onClick={() => game.doClassicalCastle(side)}
+                  className="min-h-[36px] min-w-0 flex-1 rounded border border-accent/25 bg-accent/5 px-2 py-1 text-ui-xs font-medium text-accent transition-colors hover:bg-accent/15"
+                >
+                  {t.castleShort(side)}
+                </button>
+              ))}
+              {game.quantumCastleOptions.map((side) => (
+                <button
+                  key={`quantum-${side}`}
+                  type="button"
+                  onClick={() => game.doQuantumCastle(side)}
+                  className="min-h-[36px] min-w-0 flex-1 rounded border border-indigo-500/25 bg-indigo-500/5 px-2 py-1 text-ui-xs font-medium text-indigo-400 transition-colors hover:bg-indigo-500/15"
+                >
+                  {t.quantumCastle(side)}
+                </button>
+              ))}
             </div>
           )}
-
-          <div className="mt-2 flex w-full flex-col gap-2 lg:hidden" style={{ width: 'var(--board-size)' }}>
-            <EvalBar
-              chances={game.chances}
-              playerColor={config.playerColor}
-              language={language}
-              variant="quantum-heuristic"
-            />
-            <MoveHistory history={classicHistory} language={language} />
-          </div>
         </motion.div>
 
         <motion.div
@@ -547,31 +586,19 @@ export default function QuantumGameScreen({
         </motion.div>
       </div>
 
-      <div
-        className="flex items-center gap-2 border-t border-surface-4 px-4 py-2.5 lg:hidden"
-        style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))' }}
+      <GameMobileStatsSheet
+        open={mobileStatsOpen}
+        onClose={() => setMobileStatsOpen(false)}
+        language={language}
       >
-        <div className="flex flex-1">
-          <ActionButtons
-            onUndo={() => {}}
-            onFlip={game.flip}
-            onResign={game.resign}
-            canUndo={false}
-            gameOver={game.gameOver}
-            language={language}
-            showUndo={false}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={music.toggle}
-          className={`flex h-11 w-11 items-center justify-center rounded text-sm transition-colors
-            ${music.playing ? 'bg-indigo-500/15 text-indigo-400' : 'text-neutral-600 hover:text-neutral-400'}`}
-          aria-label={music.playing ? t.pause : t.play}
-        >
-          {music.playing ? '⏸' : '♫'}
-        </button>
-      </div>
+        <EvalBar
+          chances={game.chances}
+          playerColor={config.playerColor}
+          language={language}
+          variant="quantum-heuristic"
+        />
+        <MoveHistory history={classicHistory} language={language} variant="sheet" />
+      </GameMobileStatsSheet>
 
       <PromotionModal
         visible={!!game.promotionPending}
@@ -596,6 +623,6 @@ export default function QuantumGameScreen({
         onClose={handleDismissMeasurement}
         language={language}
       />
-    </div>
+    </GameViewportShell>
   )
 }

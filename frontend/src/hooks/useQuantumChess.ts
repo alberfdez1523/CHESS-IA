@@ -90,6 +90,18 @@ export function useQuantumChess(
   const turn = state.turn
   const gameOver = !!gameOverInfo || !!state.gameOver
 
+  const checkSquare = useMemo(() => {
+    void boardVersion
+    return engine.getCheckSquareForTurn()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardVersion])
+
+  const playCheckIfNeeded = useCallback(() => {
+    if (engine.isClassicalKingInCheck(engine.state.turn)) {
+      setTimeout(() => sounds.playCheck(), 80)
+    }
+  }, [engine, sounds])
+
   const history: QMoveRecord[] = useMemo(() => {
     void boardVersion
     return [...state.history]
@@ -205,10 +217,14 @@ export function useQuantumChess(
     setFirstQuantumTarget(null)
     setMoveMode('classical')
     setBoardVersion(v => v + 1)
-  }, [engine])
+    const qgo = engine.checkGameOverPublic()
+    if (qgo) {
+      setGameOverInfo(qGameOverToClassic(qgo, config.playerColor, language))
+    }
+  }, [engine, config.playerColor, language])
 
   const handleSquareClick = useCallback((sq: string) => {
-    if (gameOverInfo) return
+    if (gameOver) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
     const allowedColor = state.turn
 
@@ -263,7 +279,7 @@ export function useQuantumChess(
         if (record.measurement) setMeasurementEvent(record.measurement)
         if (record.captured) sounds.playCapture()
         else sounds.playMove()
-        if (record.measurement) sounds.playCheck()
+        playCheckIfNeeded()
 
         setSelectedPiece(null)
         setMoveMode('classical')
@@ -291,12 +307,12 @@ export function useQuantumChess(
       setFirstQuantumTarget(null)
     }
   }, [
-    board, engine, firstQuantumTarget, gameOverInfo,
+    board, engine, firstQuantumTarget, gameOver, playCheckIfNeeded,
     legalTargets, moveMode, refresh, selectedPiece, sounds, state.turn, isOnline, config.playerColor,
   ])
 
   const handleDrop = useCallback((from: string, to: string) => {
-    if (gameOverInfo) return
+    if (gameOver) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
     if (moveMode !== 'classical') return
     const allowedColor = state.turn
@@ -323,11 +339,12 @@ export function useQuantumChess(
     if (record.measurement) setMeasurementEvent(record.measurement)
     if (record.captured) sounds.playCapture()
     else sounds.playMove()
+    playCheckIfNeeded()
 
     setSelectedPiece(null)
     setLastMove({ from: record.from, to: record.to })
     refresh()
-  }, [board, engine, gameOverInfo, moveMode, refresh, sounds, state.turn, isOnline, config.playerColor])
+  }, [board, engine, gameOver, moveMode, refresh, sounds, playCheckIfNeeded, state.turn, isOnline, config.playerColor])
 
   const handlePromotion = useCallback((pieceType: string) => {
     if (!promotionPending) return
@@ -338,14 +355,15 @@ export function useQuantumChess(
     if (record.measurement) setMeasurementEvent(record.measurement)
     if (record.captured) sounds.playCapture()
     else sounds.playMove()
+    playCheckIfNeeded()
     setPromotionPending(null)
     setSelectedPiece(null)
     setLastMove({ from: record.from, to: record.to })
     refresh()
-  }, [promotionPending, engine, sounds, refresh])
+  }, [promotionPending, engine, sounds, refresh, playCheckIfNeeded])
 
   const doQuantumCastle = useCallback((side: 'k' | 'q') => {
-    if (gameOverInfo) return
+    if (gameOver) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
     const allowedColor = state.turn
 
@@ -354,10 +372,10 @@ export function useQuantumChess(
     setSelectedPiece(null)
     setLastMove(null)
     refresh()
-  }, [engine, gameOverInfo, refresh, sounds, state.turn, isOnline, config.playerColor])
+  }, [engine, gameOver, refresh, sounds, state.turn, isOnline, config.playerColor])
 
   const doClassicalCastle = useCallback((side: 'k' | 'q') => {
-    if (gameOverInfo) return
+    if (gameOver) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
 
     const allowedColor = state.turn
@@ -369,12 +387,13 @@ export function useQuantumChess(
     const record = engine.doClassicalMove(kingId, from, to)
     if (record.measurement) setMeasurementEvent(record.measurement)
     sounds.playMove()
+    playCheckIfNeeded()
     setSelectedPiece(null)
     setFirstQuantumTarget(null)
     setMoveMode('classical')
     setLastMove({ from: record.from, to: record.to })
     refresh()
-  }, [engine, gameOverInfo, refresh, sounds, state.turn])
+  }, [engine, gameOver, refresh, sounds, playCheckIfNeeded, state.turn, isOnline, config.playerColor])
 
   const chooseMoveMode = useCallback((mode: QMoveMode) => {
     if (!availableMoveModes.includes(mode)) return
@@ -420,6 +439,7 @@ export function useQuantumChess(
     turn,
     gameOver,
     gameOverInfo,
+    checkSquare,
     promotionPending: promotionPending ? { from: promotionPending.from, to: promotionPending.to } : null,
     chances,
     history,

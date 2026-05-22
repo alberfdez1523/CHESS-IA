@@ -9,9 +9,13 @@ interface MoveHistoryProps {
   language: Language
   pgn?: string
   showCopy?: boolean
+  /** En sheet móvil: ocupa altura disponible con scroll interno */
+  variant?: 'default' | 'sheet'
 }
 
-export default function MoveHistory({ history, language, pgn, showCopy = false }: MoveHistoryProps) {
+export default function MoveHistory({
+  history, language, pgn, showCopy = false, variant = 'default',
+}: MoveHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState<'moves' | 'pgn' | null>(null)
   const t = ui(language)
@@ -48,7 +52,7 @@ export default function MoveHistory({ history, language, pgn, showCopy = false }
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={`flex flex-col gap-2 ${variant === 'sheet' ? 'min-h-0 flex-1' : ''}`}>
       {showCopy && (
         <div className="flex gap-2">
           <button
@@ -70,7 +74,10 @@ export default function MoveHistory({ history, language, pgn, showCopy = false }
         </div>
       )}
 
-      <div ref={scrollRef} className="max-h-44 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        className={variant === 'sheet' ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain' : 'max-h-44 overflow-y-auto'}
+      >
         <AnimatePresence initial={false}>
           {history.map((move, i) => {
             const icon = pieceGlyph(move.color, move.piece as PieceType)

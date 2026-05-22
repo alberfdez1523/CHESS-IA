@@ -51,39 +51,43 @@ export default function QuantumMeasurementRoulette({
   const titleId = 'quantum-measurement-title'
 
   const outcomeAlive = target === 'attacker'
-    ? (es ? 'La atacante existe en esa casilla y la jugada puede continuar.' : 'The attacker exists on that square and the move can continue.')
-    : (es ? 'La objetivo existe en esa casilla y la captura se completa.' : 'The target exists on that square and the capture is completed.')
+    ? (es ? 'La atacante existe y la jugada continúa.' : 'The attacker exists and the move continues.')
+    : (es ? 'La objetivo existe y la captura se completa.' : 'The target exists and the capture completes.')
   const outcomeDead = target === 'attacker'
-    ? (es ? 'La atacante no estaba realmente en esa casilla; la captura falla y la pieza colapsa en su otra posición.' : 'The attacker was not actually on that square; the capture fails and the piece collapses to its other position.')
-    : (es ? 'La objetivo no estaba realmente en esa casilla; la captura falla y la pieza objetivo colapsa en su otra posición.' : 'The target was not actually on that square; the capture fails and the target piece collapses to its other position.')
+    ? (es ? 'La atacante no estaba ahí; la captura falla.' : 'The attacker was not there; capture fails.')
+    : (es ? 'La objetivo no estaba ahí; la captura falla.' : 'The target was not there; capture fails.')
 
   const scenarioText = useMemo(() => {
     switch (scenario) {
       case 'q-vs-q': return {
-        title: es ? 'Captura cuántica contra cuántica' : 'Quantum vs quantum capture',
-        text: es ? 'Primero se comprueba si la atacante existe. Si sobrevive, se mide la objetivo.' : 'First check if the attacker exists. If it survives, measure the target.',
+        title: es ? 'Captura cuántica vs cuántica' : 'Quantum vs quantum capture',
+        text: es ? 'Primero la atacante; si vive, se mide la objetivo.' : 'Attacker first; if alive, measure target.',
       }
       case 'q-vs-c': return {
-        title: es ? 'Captura cuántica contra clásica' : 'Quantum vs classic capture',
-        text: es ? 'Solo se mide la atacante. Si existe, captura normalmente.' : 'Only the attacker is measured. If it exists, it captures normally.',
+        title: es ? 'Captura cuántica vs clásica' : 'Quantum vs classic capture',
+        text: es ? 'Solo se mide la atacante.' : 'Only the attacker is measured.',
       }
       default: return {
-        title: es ? 'Captura clásica contra cuántica' : 'Classic vs quantum capture',
-        text: es ? 'Solo se mide la pieza objetivo para decidir si la captura ocurre.' : 'Only the target piece is measured to decide if the capture occurs.',
+        title: es ? 'Captura clásica vs cuántica' : 'Classic vs quantum capture',
+        text: es ? 'Se mide la pieza objetivo.' : 'The target piece is measured.',
       }
     }
   }, [scenario, es])
 
   const active = visible && !!measurement
-  const { containerRef } = useModalA11y(active)
+  const { containerRef } = useModalA11y(active, undefined, false)
 
   if (!active || !measurement) return null
+
+  const outcomeLine = revealResult
+    ? (isAlive ? outcomeAlive : outcomeDead)
+    : null
 
   return (
     <AnimatePresence>
       {visible && (
         <motion.div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 px-0 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-sm lg:items-center lg:px-4 lg:pb-0"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -94,12 +98,34 @@ export default function QuantumMeasurementRoulette({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="w-full max-w-sm overflow-hidden rounded-lg border border-indigo-500/20 bg-surface-1 text-center"
-            initial={reduceMotion ? false : { scale: 0.93, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={reduceMotion ? undefined : { scale: 0.93, opacity: 0 }}
+            className="flex max-h-[92dvh] w-full max-w-none flex-col rounded-t-xl border border-indigo-500/20 bg-surface-1 text-center lg:max-h-none lg:max-w-sm lg:rounded-lg"
+            initial={reduceMotion ? false : { y: 40, scale: 0.98, opacity: 0 }}
+            animate={{ y: 0, scale: 1, opacity: 1 }}
+            exit={reduceMotion ? undefined : { y: 40, scale: 0.98, opacity: 0 }}
           >
-            <div className="border-b border-surface-4 px-5 py-4 text-left">
+            {/* Móvil: cabecera compacta */}
+            <div className="shrink-0 border-b border-surface-4 px-4 py-3 text-left lg:hidden">
+              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-surface-4" aria-hidden />
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400">
+                    {es ? 'Medición' : 'Measurement'}
+                  </p>
+                  <h3 id={titleId} className="truncate font-serif text-sm text-white">
+                    {scenarioText.title}
+                  </h3>
+                </div>
+                <span className="shrink-0 rounded border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+                  {step}/{totalSteps}
+                </span>
+              </div>
+              <p className="mt-1 truncate text-[11px] text-neutral-500">
+                {measuredTitle} · {alivePct}% {es ? 'vivo' : 'alive'}
+              </p>
+            </div>
+
+            {/* Escritorio: cabecera completa */}
+            <div className="hidden border-b border-surface-4 px-5 py-4 text-left lg:block">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-indigo-400">
@@ -123,78 +149,88 @@ export default function QuantumMeasurementRoulette({
                   <p className="text-[9px] uppercase tracking-wider text-neutral-500">{es ? 'Contexto' : 'Context'}</p>
                   <p className="mt-1 text-neutral-400">
                     {priorStepResult
-                      ? es ? `Antes: ${priorStepResult.target === 'attacker' ? 'atacante' : 'objetivo'} salió ${priorStepResult.result === 'alive' ? 'viva' : 'muerta'}.`
-                           : `Before: ${priorStepResult.target === 'attacker' ? 'attacker' : 'target'} came out ${priorStepResult.result}.`
+                      ? es ? `Antes: ${priorStepResult.target === 'attacker' ? 'atacante' : 'objetivo'} ${priorStepResult.result === 'alive' ? 'viva' : 'muerta'}.`
+                           : `Before: ${priorStepResult.target === 'attacker' ? 'attacker' : 'target'} ${priorStepResult.result}.`
                       : es ? 'Tirada directa.' : 'Direct spin.'}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="px-5 py-4">
-              <div className="relative mx-auto h-48 w-48">
-                <motion.div
-                  className="relative h-full w-full rounded-full p-2.5"
-                  animate={{ rotate: finalWheelRotation }}
-                  transition={reduceMotion ? { duration: 0 } : { duration: 1.35, ease: [0.1, 0.9, 0.2, 1] }}
-                  onAnimationComplete={() => { if (spun) setSpinDone(true) }}
-                >
-                  <div
-                    className="h-full w-full rounded-full border border-white/[0.06]"
-                    style={{
-                      background: `conic-gradient(
-                        rgba(34,197,94,0.92) 0deg ${alivePct * 3.6}deg,
-                        rgba(239,68,68,0.92) ${alivePct * 3.6}deg 360deg
-                      )`,
-                    }}
-                  />
-                  <div className="pointer-events-none absolute inset-[28%] flex flex-col items-center justify-center rounded-full bg-surface-0/95 ring-1 ring-white/[0.06]">
-                    <span className="text-[9px] font-semibold uppercase tracking-widest text-neutral-600">
-                      {es ? 'Resultado' : 'Result'}
-                    </span>
-                    <span className={`mt-0.5 text-sm font-bold ${revealResult ? (isAlive ? 'text-emerald-400' : 'text-red-400') : 'text-neutral-400'}`}>
-                      {revealResult ? (isAlive ? (es ? 'VIVO' : 'ALIVE') : (es ? 'MUERTO' : 'DEAD')) : '—'}
-                    </span>
-                    <span className="mt-0.5 text-[10px] text-neutral-500">{measuredTitle}</span>
+            <div className="flex min-h-0 flex-1 flex-col px-4 py-3 lg:px-5 lg:py-4">
+              <div className="flex flex-1 flex-col items-center justify-center">
+                <div className="relative mx-auto h-[min(36vw,28dvh)] w-[min(36vw,28dvh)] min-h-[7.5rem] min-w-[7.5rem] lg:h-48 lg:w-48 lg:min-h-0 lg:min-w-0">
+                  <motion.div
+                    className="relative h-full w-full rounded-full p-2 lg:p-2.5"
+                    animate={{ rotate: finalWheelRotation }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 1.35, ease: [0.1, 0.9, 0.2, 1] }}
+                    onAnimationComplete={() => { if (spun) setSpinDone(true) }}
+                  >
+                    <div
+                      className="h-full w-full rounded-full border border-white/[0.06]"
+                      style={{
+                        background: `conic-gradient(
+                          rgba(34,197,94,0.92) 0deg ${alivePct * 3.6}deg,
+                          rgba(239,68,68,0.92) ${alivePct * 3.6}deg 360deg
+                        )`,
+                      }}
+                    />
+                    <div className="pointer-events-none absolute inset-[28%] flex flex-col items-center justify-center rounded-full bg-surface-0/95 ring-1 ring-white/[0.06]">
+                      <span className="text-[9px] font-semibold uppercase tracking-widest text-neutral-600">
+                        {es ? 'Resultado' : 'Result'}
+                      </span>
+                      <span className={`mt-0.5 text-sm font-bold ${revealResult ? (isAlive ? 'text-emerald-400' : 'text-red-400') : 'text-neutral-400'}`}>
+                        {revealResult ? (isAlive ? (es ? 'VIVO' : 'ALIVE') : (es ? 'MUERTO' : 'DEAD')) : '—'}
+                      </span>
+                      <span className="mt-0.5 text-[10px] text-neutral-500">{measuredTitle}</span>
+                    </div>
+                  </motion.div>
+                  <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2">
+                    <div className="rounded bg-white px-1.5 py-0.5 text-[9px] font-bold text-surface-0">▼</div>
                   </div>
-                </motion.div>
-                <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2">
-                  <div className="rounded bg-white px-1.5 py-0.5 text-[9px] font-bold text-surface-0">▼</div>
+                </div>
+
+                {/* Móvil: resultado en una línea tras girar */}
+                {outcomeLine && (
+                  <p className={`mt-3 max-w-full px-1 text-left text-[11px] leading-snug lg:hidden ${isAlive ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
+                    {outcomeLine}
+                  </p>
+                )}
+
+                {/* Escritorio: grids detallados */}
+                <div className="mt-4 hidden w-full grid-cols-2 gap-2 text-left text-[11px] lg:grid">
+                  <div className="rounded border border-emerald-500/15 bg-emerald-500/5 px-3 py-2">
+                    <p className="font-semibold uppercase tracking-wider text-emerald-400">{es ? 'Si vivo' : 'If alive'}</p>
+                    <p className="mt-1 text-neutral-400">{outcomeAlive}</p>
+                    <p className="mt-1.5 font-mono text-emerald-300">{alivePct}%</p>
+                  </div>
+                  <div className="rounded border border-red-500/15 bg-red-500/5 px-3 py-2">
+                    <p className="font-semibold uppercase tracking-wider text-red-400">{es ? 'Si muerto' : 'If dead'}</p>
+                    <p className="mt-1 text-neutral-400">{outcomeDead}</p>
+                    <p className="mt-1.5 font-mono text-red-300">{deadPct}%</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 hidden w-full rounded border border-surface-4 bg-surface-2 px-3 py-2 text-left text-[11px] lg:block">
+                  <div className="flex items-center justify-between text-neutral-500">
+                    <span>{es ? 'Tirada' : 'Roll'}</span>
+                    <span className="font-mono font-semibold text-white">
+                      {revealResult ? `${Math.round(roll * 100)} / 100` : '—'}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-neutral-500">
+                    <span>{es ? 'Umbral vivo' : 'Alive threshold'}</span>
+                    <span className="font-mono font-semibold text-indigo-300">&lt; {alivePct}</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2 text-left text-[11px]">
-                <div className="rounded border border-emerald-500/15 bg-emerald-500/5 px-3 py-2">
-                  <p className="font-semibold uppercase tracking-wider text-emerald-400">{es ? 'Si vivo' : 'If alive'}</p>
-                  <p className="mt-1 text-neutral-400">{outcomeAlive}</p>
-                  <p className="mt-1.5 font-mono text-emerald-300">{alivePct}%</p>
-                </div>
-                <div className="rounded border border-red-500/15 bg-red-500/5 px-3 py-2">
-                  <p className="font-semibold uppercase tracking-wider text-red-400">{es ? 'Si muerto' : 'If dead'}</p>
-                  <p className="mt-1 text-neutral-400">{outcomeDead}</p>
-                  <p className="mt-1.5 font-mono text-red-300">{deadPct}%</p>
-                </div>
-              </div>
-
-              <div className="mt-3 rounded border border-surface-4 bg-surface-2 px-3 py-2 text-left text-[11px]">
-                <div className="flex items-center justify-between text-neutral-500">
-                  <span>{es ? 'Tirada' : 'Roll'}</span>
-                  <span className="font-mono font-semibold text-white">
-                    {revealResult ? `${Math.round(roll * 100)} / 100` : '—'}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center justify-between text-neutral-500">
-                  <span>{es ? 'Umbral vivo' : 'Alive threshold'}</span>
-                  <span className="font-mono font-semibold text-indigo-300">&lt; {alivePct}</span>
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-center gap-2">
+              <div className="mt-3 flex shrink-0 items-center justify-center gap-2 pb-1 lg:mt-4">
                 <button
                   type="button"
                   onClick={() => { if (!spun) setSpun(true) }}
                   disabled={spun}
-                  className={`min-h-[44px] rounded px-4 py-2 text-xs font-semibold transition-colors
+                  className={`min-h-[44px] flex-1 rounded px-4 py-2 text-xs font-semibold transition-colors lg:flex-none
                     ${spun
                       ? 'cursor-not-allowed border border-surface-4 bg-surface-2 text-neutral-600'
                       : 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
@@ -206,7 +242,7 @@ export default function QuantumMeasurementRoulette({
                   type="button"
                   onClick={onClose}
                   disabled={!spinDone}
-                  className={`min-h-[44px] rounded px-4 py-2 text-xs font-semibold transition-colors
+                  className={`min-h-[44px] flex-1 rounded px-4 py-2 text-xs font-semibold transition-colors lg:flex-none
                     ${spinDone
                       ? 'border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20'
                       : 'cursor-not-allowed border border-surface-4 bg-surface-2 text-neutral-700'

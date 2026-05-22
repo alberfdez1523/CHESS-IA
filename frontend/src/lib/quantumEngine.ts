@@ -84,9 +84,48 @@ export class QuantumChessEngine {
     return !!p && Object.keys(p.positions).length > 1
   }
 
+  /** Pieza al 100% en una sola casilla */
+  isClassicalPiece(piece: QPiece): boolean {
+    const sqs = Object.keys(piece.positions)
+    return sqs.length === 1 && (piece.positions[sqs[0]] ?? 0) >= 1
+  }
+
+  /** Casilla del rey si está vivo y 100% clásico */
+  getClassicalKingSquare(color: PieceColor): string | null {
+    const king = this.state.pieces[`${color}_k`]
+    if (!king?.alive || !this.isClassicalPiece(king)) return null
+    return Object.keys(king.positions)[0]
+  }
+
+  /** Casilla atacada solo por piezas enemigas clásicas (100%) */
+  isSquareAttackedByClassical(square: string, defenderColor: PieceColor, board?: Record<string, QBoardCell[]>): boolean {
+    const b = board ?? this.getBoard()
+    const attackerColor: PieceColor = defenderColor === 'w' ? 'b' : 'w'
+    for (const p of Object.values(this.state.pieces)) {
+      if (!p.alive || p.color !== attackerColor || !this.isClassicalPiece(p)) continue
+      const fromSq = Object.keys(p.positions)[0]
+      if (this._classicalPieceAttacksSquare(p, fromSq, square, b)) return true
+    }
+    return false
+  }
+
+  isClassicalKingInCheck(color: PieceColor): boolean {
+    const kingSq = this.getClassicalKingSquare(color)
+    if (!kingSq) return false
+    return this.isSquareAttackedByClassical(kingSq, color)
+  }
+
+  /** Rey del bando al turno en jaque clásico (para UI) */
+  getCheckSquareForTurn(): string | null {
+    const kingSq = this.getClassicalKingSquare(this.state.turn)
+    if (!kingSq || !this.isClassicalKingInCheck(this.state.turn)) return null
+    return kingSq
+  }
+
   // ─── Generación de movimientos legales ───
 
   getLegalMoves(pieceId: string, fromSquare: string): MoveTarget[] {
+    if (this.state.gameOver) return []
     const piece = this.state.pieces[pieceId]
     if (!piece || !piece.alive || !(fromSquare in piece.positions)) return []
     if (piece.color !== this.state.turn) return []
@@ -94,15 +133,17 @@ export class QuantumChessEngine {
     const board = this.getBoard()
     const myColor = piece.color
 
+    let moves: MoveTarget[]
     switch (piece.type) {
-      case 'p': return this._pawnMoves(piece, fromSquare, board)
-      case 'n': return this._jumpMoves(fromSquare, KNIGHT_OFFSETS, myColor, board, pieceId)
-      case 'b': return this._sliderMoves(fromSquare, BISHOP_DIRS, myColor, board, pieceId)
-      case 'r': return this._sliderMoves(fromSquare, ROOK_DIRS, myColor, board, pieceId)
-      case 'q': return this._sliderMoves(fromSquare, QUEEN_DIRS, myColor, board, pieceId)
-      case 'k': return this._kingMoves(piece, fromSquare, board)
+      case 'p': moves = this._pawnMoves(piece, fromSquare, board); break
+      case 'n': moves = this._jumpMoves(fromSquare, KNIGHT_OFFSETS, myColor, board, pieceId); break
+      case 'b': moves = this._sliderMoves(fromSquare, BISHOP_DIRS, myColor, board, pieceId); break
+      case 'r': moves = this._sliderMoves(fromSquare, ROOK_DIRS, myColor, board, pieceId); break
+      case 'q': moves = this._sliderMoves(fromSquare, QUEEN_DIRS, myColor, board, pieceId); break
+      case 'k': moves = this._kingMoves(piece, fromSquare, board); break
       default: return []
     }
+    return this._applyCheckFilters(piece, fromSquare, moves, board)
   }
 
   /** Casillas de fusión: reachable desde TODAS las posiciones del quantum piece */
@@ -179,6 +220,7 @@ export class QuantumChessEngine {
   // ─── Ejecución de movimientos ───
 
   doClassicalMove(pieceId: string, from: string, to: string, promotion?: PieceType): QMoveRecord {
+    if (this.state.gameOver) throw new Error('La partida ha terminado')
     const piece = this.state.pieces[pieceId]
     const legalMoves = this.getLegalMoves(pieceId, from)
     const moveInfo = legalMoves.find(m => m.square === to)
@@ -370,13 +412,14 @@ export class QuantumChessEngine {
     }
     this.state.history.push(record)
     this._checkGameOver()
-    this._endTurn()
+    if (!this.state.gameOver) this._endTurn()
     return record
   }
 
   private _cachedMoves: MoveTarget[] | null = null
 
   doQuantumMove(pieceId: string, from: string, toA: string, toB: string): QMoveRecord {
+    if (this.state.gameOver) throw new Error('La partida ha terminado')
     const piece = this.state.pieces[pieceId]
     if (piece.type === 'p') throw new Error('Los peones no pueden hacer movimientos cuánticos')
 
@@ -408,6 +451,7 @@ export class QuantumChessEngine {
   }
 
   doMergeFrom(pieceId: string, from: string, to: string): QMoveRecord {
+    if (this.state.gameOver) throw new Error('La partida ha terminado')
     const piece = this.state.pieces[pieceId]
     if (!piece || !piece.alive || piece.positions[from] === undefined) {
       throw new Error('Estado cuántico inválido para fusión')
@@ -456,6 +500,7 @@ export class QuantumChessEngine {
   }
 
   doQuantumCastle(color: PieceColor, side: 'k' | 'q'): QMoveRecord {
+    if (this.state.gameOver) throw new Error('La partida ha terminado')
     const rank = color === 'w' ? '1' : '8'
     const kingId = `${color}_k`
     const rookId = side === 'k' ? `${color}_r_h` : `${color}_r_a`
@@ -614,6 +659,156 @@ export class QuantumChessEngine {
   // ═══════════════════════════════════════════════════════════════════
   //  Métodos privados
   // ═══════════════════════════════════════════════════════════════════
+
+  private _classicalPieceAttacksSquare(
+    piece: QPiece,
+    from: string,
+    target: string,
+    board: Record<string, QBoardCell[]>,
+  ): boolean {
+    const [f, r] = sq2rc(from)
+    const [tf, tr] = sq2rc(target)
+
+    switch (piece.type) {
+      case 'p': {
+        const dir = piece.color === 'w' ? 1 : -1
+        return Math.abs(tf - f) === 1 && tr === r + dir
+      }
+      case 'n': {
+        const df = Math.abs(tf - f)
+        const dr = Math.abs(tr - r)
+        return (df === 2 && dr === 1) || (df === 1 && dr === 2)
+      }
+      case 'k':
+        return Math.max(Math.abs(tf - f), Math.abs(tr - r)) === 1
+      case 'b':
+        return this._classicalSliderAttacks(from, target, BISHOP_DIRS, board)
+      case 'r':
+        return this._classicalSliderAttacks(from, target, ROOK_DIRS, board)
+      case 'q':
+        return this._classicalSliderAttacks(from, target, QUEEN_DIRS, board)
+      default:
+        return false
+    }
+  }
+
+  private _classicalSliderAttacks(
+    from: string,
+    target: string,
+    dirs: Dir[],
+    board: Record<string, QBoardCell[]>,
+  ): boolean {
+    const [f, r] = sq2rc(from)
+
+    for (const [df, dr] of dirs) {
+      let cf = f + df
+      let cr = r + dr
+      while (cf >= 0 && cf < 8 && cr >= 0 && cr < 8) {
+        const sq = rc2sq(cf, cr)!
+        if (sq === target) return true
+        if ((board[sq] || []).length > 0) break
+        cf += df
+        cr += dr
+      }
+    }
+    return false
+  }
+
+  private _isCastleMove(color: PieceColor, from: string, to: string): boolean {
+    const rank = color === 'w' ? '1' : '8'
+    return from === `e${rank}` && (to === `g${rank}` || to === `c${rank}`)
+  }
+
+  private _isCastleLegalUnderCheck(
+    color: PieceColor,
+    from: string,
+    to: string,
+    board: Record<string, QBoardCell[]>,
+  ): boolean {
+    if (this.isSquareAttackedByClassical(from, color, board)) return false
+    const side = to[0] === 'g' ? 'k' : 'q'
+    const rank = color === 'w' ? '1' : '8'
+    const kingPath = side === 'k' ? [`f${rank}`, `g${rank}`] : [`d${rank}`, `c${rank}`]
+    return kingPath.every((sq) => !this.isSquareAttackedByClassical(sq, color, board))
+  }
+
+  private _applyCheckFilters(
+    piece: QPiece,
+    from: string,
+    moves: MoveTarget[],
+    board: Record<string, QBoardCell[]>,
+  ): MoveTarget[] {
+    if (piece.type === 'k' && this.isClassicalPiece(piece)) {
+      return moves.filter((m) => {
+        if (this._isCastleMove(piece.color, from, m.square)) {
+          return this._isCastleLegalUnderCheck(piece.color, from, m.square, board)
+        }
+        return !this.isSquareAttackedByClassical(m.square, piece.color, board)
+      })
+    }
+
+    if (piece.type === 'k') return moves
+
+    const kingSq = this.getClassicalKingSquare(piece.color)
+    if (!kingSq) return moves
+
+    return moves.filter((m) => !this._wouldLeaveKingInCheck(piece, from, m, kingSq))
+  }
+
+  private _wouldLeaveKingInCheck(
+    piece: QPiece,
+    from: string,
+    move: MoveTarget,
+    kingSq: string,
+  ): boolean {
+    const snapshot = new Map<string, { positions: Record<string, number>; alive: boolean }>()
+    for (const [id, p] of Object.entries(this.state.pieces)) {
+      snapshot.set(id, { positions: { ...p.positions }, alive: p.alive })
+    }
+
+    this._applyMoveForCheckTest(piece, from, move)
+    const board = this.getBoard()
+    const newKingSq = piece.type === 'k' ? move.square : kingSq
+    const inCheck = this.isSquareAttackedByClassical(newKingSq, piece.color, board)
+
+    for (const [id, snap] of snapshot) {
+      const p = this.state.pieces[id]
+      if (p) {
+        p.positions = snap.positions
+        p.alive = snap.alive
+      }
+    }
+    return inCheck
+  }
+
+  private _applyMoveForCheckTest(piece: QPiece, from: string, move: MoveTarget): void {
+    const board = this.getBoard()
+    const targetCells = board[move.square] || []
+    const enemyClassical = targetCells.find(
+      (c) => c.color !== piece.color && c.probability >= 1,
+    )
+    if (enemyClassical) {
+      const ep = this.state.pieces[enemyClassical.pieceId]
+      if (ep) ep.alive = false
+    }
+
+    delete piece.positions[from]
+    piece.positions[move.square] = 1
+
+    if (piece.type === 'k' && Math.abs(from.charCodeAt(0) - move.square.charCodeAt(0)) === 2) {
+      const color = piece.color
+      const rank = color === 'w' ? '1' : '8'
+      const side = move.square[0] === 'g' ? 'k' : 'q'
+      const rookId = side === 'k' ? `${color}_r_h` : `${color}_r_a`
+      const rookFrom = side === 'k' ? `h${rank}` : `a${rank}`
+      const rookTo = side === 'k' ? `f${rank}` : `d${rank}`
+      const rook = this.state.pieces[rookId]
+      if (rook) {
+        delete rook.positions[rookFrom]
+        rook.positions[rookTo] = 1
+      }
+    }
+  }
 
   /** Movimientos de peón */
   private _pawnMoves(piece: QPiece, from: string, board: Record<string, QBoardCell[]>): MoveTarget[] {

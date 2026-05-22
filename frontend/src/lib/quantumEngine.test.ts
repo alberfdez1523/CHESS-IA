@@ -45,4 +45,86 @@ describe('QuantumChessEngine', () => {
     expect(engine.getPiece('b_p_d')?.alive).toBe(false)
     expect(engine.getPiece('w_p_e')?.positions.d5).toBe(1)
   })
+
+  it('blocks classical king from moving to square attacked by classical piece', () => {
+    const engine = new QuantumChessEngine()
+    for (const p of Object.values(engine.state.pieces)) p.alive = false
+
+    engine.state.pieces['w_k'].alive = true
+    engine.state.pieces['w_k'].positions = { e4: 1 }
+    engine.state.pieces['b_r_h'].alive = true
+    engine.state.pieces['b_r_h'].positions = { e8: 1 }
+    engine.state.turn = 'w'
+
+    const moves = engine.getLegalMoves('w_k', 'e4').map((m) => m.square)
+    expect(moves).not.toContain('e5')
+    expect(moves).toContain('d4')
+  })
+
+  it('allows classical king to move to square only threatened by quantum piece', () => {
+    const engine = new QuantumChessEngine()
+    for (const p of Object.values(engine.state.pieces)) p.alive = false
+
+    engine.state.pieces['w_k'].alive = true
+    engine.state.pieces['w_k'].positions = { e4: 1 }
+    engine.state.pieces['b_n_g'].alive = true
+    engine.state.pieces['b_n_g'].positions = { f6: 0.5, h4: 0.5 }
+    engine.state.turn = 'w'
+
+    const moves = engine.getLegalMoves('w_k', 'e4').map((m) => m.square)
+    expect(moves).toContain('f5')
+  })
+
+  it('allows quantum king to move to classically attacked square', () => {
+    const engine = new QuantumChessEngine()
+    for (const p of Object.values(engine.state.pieces)) p.alive = false
+
+    engine.state.pieces['w_k'].alive = true
+    engine.state.pieces['w_k'].positions = { e1: 0.5, e2: 0.5 }
+    engine.state.pieces['b_r_h'].alive = true
+    engine.state.pieces['b_r_h'].positions = { e8: 1 }
+    engine.state.turn = 'w'
+
+    const moves = engine.getLegalMoves('w_k', 'e1').map((m) => m.square)
+    expect(moves).toContain('e2')
+  })
+
+  it('detects classical king in check', () => {
+    const engine = new QuantumChessEngine()
+    for (const p of Object.values(engine.state.pieces)) p.alive = false
+
+    engine.state.pieces['w_k'].alive = true
+    engine.state.pieces['w_k'].positions = { e1: 1 }
+    engine.state.pieces['b_r_h'].alive = true
+    engine.state.pieces['b_r_h'].positions = { e8: 1 }
+    engine.state.turn = 'w'
+
+    expect(engine.isClassicalKingInCheck('w')).toBe(true)
+    expect(engine.getCheckSquareForTurn()).toBe('e1')
+  })
+
+  it('ends game on king capture without advancing turn', () => {
+    const engine = new QuantumChessEngine()
+    for (const p of Object.values(engine.state.pieces)) p.alive = false
+
+    engine.state.pieces['w_r_h'].alive = true
+    engine.state.pieces['w_r_h'].positions = { e4: 1 }
+    engine.state.pieces['b_k'].alive = true
+    engine.state.pieces['b_k'].positions = { e8: 1 }
+    engine.state.turn = 'w'
+
+    engine.doClassicalMove('w_r_h', 'e4', 'e8')
+
+    expect(engine.state.gameOver?.winner).toBe('w')
+    expect(engine.state.turn).toBe('w')
+    expect(engine.getLegalMoves('w_r_h', 'e8')).toEqual([])
+  })
+
+  it('rejects moves after game over', () => {
+    const engine = new QuantumChessEngine()
+    engine.state.gameOver = { winner: 'w', reason: 'Rey negro capturado' }
+
+    expect(engine.getLegalMoves('w_k', 'e1')).toEqual([])
+    expect(() => engine.doClassicalMove('w_k', 'e1', 'e2')).toThrow()
+  })
 })

@@ -32,14 +32,14 @@ export default function PlayerBar({
 
   return (
     <div
-      className={`flex items-center gap-2.5 rounded border px-2 py-2 transition-colors ${
+      className={`game-playerbar-compact flex items-center gap-2.5 rounded border px-2 py-2 transition-colors max-lg:gap-1.5 max-lg:py-1.5 ${
         isActive ? activeTone : 'border-transparent'
       }`}
       style={{ width: 'var(--board-size)' }}
     >
       {/* Color indicator */}
       <div
-        className={`flex h-7 w-7 items-center justify-center rounded-full text-ui-xs
+        className={`flex h-7 w-7 max-lg:h-6 max-lg:w-6 items-center justify-center rounded-full text-ui-xs
           ${color === 'w' ? 'player-avatar-white' : 'player-avatar-black'}`}
       >
         {color === 'w' ? '♔' : '♚'}
