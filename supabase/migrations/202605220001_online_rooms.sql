@@ -6,8 +6,8 @@ create table if not exists public.rooms (
   mode text not null check (mode in ('classic', 'quantum')),
   status text not null default 'waiting' check (status in ('waiting', 'playing', 'finished')),
   host_color text not null check (host_color in ('w', 'b')),
-  white_player_id uuid,
-  black_player_id uuid,
+  white_player_id uuid references auth.users(id) on delete set null,
+  black_player_id uuid references auth.users(id) on delete set null,
   state jsonb not null,
   version integer not null default 0,
   turn text not null default 'w' check (turn in ('w', 'b')),
@@ -54,7 +54,9 @@ security definer
 set search_path = public
 as $$
 begin
-  delete from public.rooms where id = p_room_id;
+  delete from public.rooms
+  where id = p_room_id
+    and (white_player_id = auth.uid() or black_player_id = auth.uid());
   return found;
 end;
 $$;

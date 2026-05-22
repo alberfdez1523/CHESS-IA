@@ -48,6 +48,7 @@ export default function OnlineLobby({
   const [joinCode, setJoinCode] = useState(initialJoinCode ?? '')
   const [room, setRoom] = useState<OnlineRoomRow | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [assignedColor, setAssignedColor] = useState<PieceColor | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -82,11 +83,14 @@ export default function OnlineLobby({
 
   const buildMeta = useCallback(
     (r: OnlineRoomRow, uid: string): OnlineMeta => {
-      const isHost =
-        (r.host_color === 'w' && r.white_player_id === uid) ||
-        (r.host_color === 'b' && r.black_player_id === uid)
       const myColor: PieceColor =
-        r.white_player_id === uid ? 'w' : r.black_player_id === uid ? 'b' : r.host_color
+        assignedColor ??
+        r.client_color ??
+        (r.white_player_id === uid ? 'w' : r.black_player_id === uid ? 'b' : r.host_color)
+      const isHost =
+        myColor === r.host_color &&
+        ((myColor === 'w' && r.white_player_id === uid) ||
+          (myColor === 'b' && r.black_player_id === uid))
       return {
         roomId: r.id,
         code: r.code,
@@ -95,7 +99,7 @@ export default function OnlineLobby({
         userId: uid,
       }
     },
-    [],
+    [assignedColor],
   )
 
   const tryStartGame = useCallback(
@@ -136,6 +140,7 @@ export default function OnlineLobby({
         gameMode,
       }
       const created = await createOnlineRoom(gameMode, hostColor, config)
+      setAssignedColor(hostColor)
       setRoom(created)
       setView('waiting')
     } catch (e) {
@@ -151,6 +156,10 @@ export default function OnlineLobby({
     setError(null)
     try {
       const joined = await joinOnlineRoom(joinCode)
+      const joinedColor =
+        joined.client_color ??
+        (joined.white_player_id === userId && joined.black_player_id !== userId ? 'w' : 'b')
+      setAssignedColor(joinedColor)
       setRoom(joined)
       if (joined.status === 'playing') {
         tryStartGame(joined, userId)

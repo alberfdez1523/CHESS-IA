@@ -69,4 +69,6 @@ export interface OnlineRoomRow {
   measurement_seed: string | null
   created_at: string
   updated_at: string
+  /** Color asignado por la accion local de crear/unirse; no viene de la BD. */
+  client_color?: PieceColor
 }

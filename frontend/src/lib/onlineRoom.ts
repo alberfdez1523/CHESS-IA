@@ -5,7 +5,6 @@ import { getSupabase, isSupabaseConfigured } from './supabase'
 import { QuantumChessEngine } from './quantumEngine'
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-const PLAYER_ID_KEY = 'gdd-online-player-id'
 
 function generateRoomCode(): string {
   let code = ''
@@ -17,37 +16,6 @@ function generateRoomCode(): string {
 
 function randomSeed(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-}
-
-function fallbackUuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.floor(Math.random() * 16)
-    const v = c === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
-  })
-}
-
-function getTabPlayerId(): string {
-  if (typeof window === 'undefined') return fallbackUuid()
-
-  const createId = () =>
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : fallbackUuid()
-
-  try {
-    const existing = window.sessionStorage.getItem(PLAYER_ID_KEY)
-    if (existing) return existing
-    const next = createId()
-    window.sessionStorage.setItem(PLAYER_ID_KEY, next)
-    return next
-  } catch {
-    const existing = window.localStorage?.getItem(PLAYER_ID_KEY)
-    if (existing) return existing
-    const next = createId()
-    window.localStorage?.setItem(PLAYER_ID_KEY, next)
-    return next
-  }
 }
 
 export function initialClassicState(): ClassicRoomState {
@@ -76,13 +44,13 @@ export async function ensureOnlineAuth(): Promise<string> {
   const supabase = getSupabase()
   const { data: sessionData } = await supabase.auth.getSession()
   if (sessionData.session?.user?.id) {
-    return getTabPlayerId()
+    return sessionData.session.user.id
   }
   const { data, error } = await supabase.auth.signInAnonymously()
   if (error || !data.user?.id) {
     throw new Error(error?.message ?? 'No se pudo iniciar sesión anónima')
   }
-  return getTabPlayerId()
+  return data.user.id
 }
 
 export async function createOnlineRoom(
@@ -133,7 +101,27 @@ export async function joinOnlineRoom(code: string): Promise<OnlineRoomRow> {
 
   const r = room as OnlineRoomRow
   if (r.white_player_id === userId || r.black_player_id === userId) {
-    return r
+    const missingColor: PieceColor | null = !r.white_player_id ? 'w' : !r.black_player_id ? 'b' : null
+    const currentColor: PieceColor = r.white_player_id === userId ? 'w' : 'b'
+
+    if (r.status === 'waiting' && missingColor) {
+      const { data: updated, error: upErr } = await supabase
+        .from('rooms')
+        .update({
+          [missingColor === 'w' ? 'white_player_id' : 'black_player_id']: userId,
+          status: 'playing',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', r.id)
+        .eq('version', r.version)
+        .select()
+        .single()
+
+      if (upErr || !updated) throw new Error(upErr?.message ?? 'No se pudo unir a la sala')
+      return { ...(updated as OnlineRoomRow), client_color: missingColor }
+    }
+
+    return { ...r, client_color: currentColor }
   }
 
   if (r.status !== 'waiting') {
@@ -158,7 +146,8 @@ export async function joinOnlineRoom(code: string): Promise<OnlineRoomRow> {
     .single()
 
   if (upErr || !updated) throw new Error(upErr?.message ?? 'No se pudo unir a la sala')
-  return updated as OnlineRoomRow
+  const joinedColor = patch.white_player_id ? 'w' : 'b'
+  return { ...(updated as OnlineRoomRow), client_color: joinedColor }
 }
 
 export async function startOnlineRoom(roomId: string): Promise<OnlineRoomRow> {
