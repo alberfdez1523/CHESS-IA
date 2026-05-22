@@ -113,7 +113,11 @@ export function useBoardPieceDrag(
       isDraggingRef.current = false
       suppressClickRef.current = false
       pointerIdRef.current = e.pointerId
-      e.currentTarget.setPointerCapture?.(e.pointerId)
+      try {
+        e.currentTarget.setPointerCapture?.(e.pointerId)
+      } catch {
+        // Synthetic or older browser pointer events can reject capture; document listeners still drive the drag.
+      }
 
       const onPointerMove = (ev: PointerEvent) => {
         if (pointerIdRef.current !== ev.pointerId) return

@@ -6,6 +6,64 @@ import { QuantumChessEngine } from './quantumEngine'
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
+interface PushRoomStatePatch {
+  state: RoomGameState
+  turn: PieceColor
+  status?: OnlineRoomRow['status']
+  measurement_seed?: string | null
+  actorColor?: PieceColor
+  move?: Record<string, unknown> | null
+}
+
+function summarizeMove(state: RoomGameState): Record<string, unknown> | null {
+  if (state.type === 'classic') {
+    if (!state.lastMove) return { type: 'classic' }
+    return {
+      type: 'classic',
+      from: state.lastMove.from,
+      to: state.lastMove.to,
+    }
+  }
+
+  const last = state.qstate.history[state.qstate.history.length - 1]
+  if (!last) return { type: 'quantum' }
+
+  return {
+    type: 'quantum',
+    pieceId: last.pieceId,
+    pieceType: last.pieceType,
+    moveType: last.moveType,
+    from: last.from,
+    to: last.to,
+    secondTo: last.secondTo ?? null,
+    captured: last.captured ?? null,
+    measured: Boolean(last.measurement),
+  }
+}
+
+async function logRoomMove(
+  supabase: ReturnType<typeof getSupabase>,
+  row: {
+    room_id: string
+    version: number
+    actor_color: PieceColor | null
+    mode: GameMode
+    move: Record<string, unknown> | null
+    state: RoomGameState
+  },
+): Promise<void> {
+  const { error } = await supabase.from('room_moves').insert(row)
+
+  if (
+    error &&
+    error.code !== '23505' &&
+    error.code !== '42P01' &&
+    !error.message.includes('room_moves')
+  ) {
+    console.warn('[online] room move log failed:', error.message)
+  }
+}
+
 function generateRoomCode(): string {
   let code = ''
   for (let i = 0; i < 6; i++) {
@@ -176,12 +234,7 @@ export async function fetchOnlineRoom(roomId: string): Promise<OnlineRoomRow | n
 export async function pushRoomState(
   roomId: string,
   expectedVersion: number,
-  patch: {
-    state: RoomGameState
-    turn: PieceColor
-    status?: OnlineRoomRow['status']
-    measurement_seed?: string | null
-  },
+  patch: PushRoomStatePatch,
 ): Promise<OnlineRoomRow> {
   const supabase = getSupabase()
   const updatePayload: Record<string, unknown> = {
@@ -203,7 +256,16 @@ export async function pushRoomState(
 
   if (error) throw new Error(error.message)
   if (!data) throw new Error('VERSION_CONFLICT')
-  return data as OnlineRoomRow
+  const updated = data as OnlineRoomRow
+  void logRoomMove(supabase, {
+    room_id: updated.id,
+    version: updated.version,
+    actor_color: patch.actorColor ?? null,
+    mode: updated.mode,
+    move: patch.move === undefined ? summarizeMove(patch.state) : patch.move,
+    state: patch.state,
+  })
+  return updated
 }
 
 /** Comprueba que `targetFen` sea un solo movimiento legal desde `baseFen`. */

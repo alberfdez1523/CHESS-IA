@@ -64,6 +64,7 @@ Aplicacion web de ajedrez con dos modos de juego:
 - Motor clasico: `chess.js`
 - Backend: FastAPI (`server.py`)
 - IA: Stockfish via `python-chess`
+- Multijugador online: Supabase Auth anonimo, Postgres, Realtime y Presence
 
 ## Estructura relevante
 
@@ -108,13 +109,43 @@ py server.py
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run build
 ```
 
 La app se sirve en `http://localhost:8000` desde FastAPI usando `frontend/dist`.
 
 Nota: el frontend legado de la raíz fue eliminado. Si `frontend/dist` no existe, compílalo antes de arrancar el backend o usa `npm run dev` dentro de `frontend/`.
+
+### Pruebas
+
+```bash
+pytest -q
+cd frontend
+npm test
+npm run build
+```
+
+Para probar una partida multijugador real en dos navegadores Chromium/Edge contra la app local:
+
+```bash
+cd frontend
+npm run smoke:multiplayer
+```
+
+Requisitos de la prueba de humo:
+
+- Backend local levantado en `http://localhost:8000` o `APP_URL` apuntando a otra URL.
+- Build del frontend generado con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
+- Chrome o Edge instalado; si no esta en una ruta comun, define `CHROME_PATH`.
+
+### Supabase
+
+Aplica las migraciones de `supabase/migrations/` antes de usar online:
+
+- `rooms`: estado actual de cada sala y control optimista por version.
+- `room_moves`: historial ligero de movimientos para depurar desincronizaciones.
+- `cleanup_stale_rooms(p_before)`: RPC de mantenimiento para borrar salas antiguas.
 
 ## Notas de uso
 

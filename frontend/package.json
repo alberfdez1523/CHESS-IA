@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && node ./node_modules/vite/bin/vite.js build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:smoke": "node --check ../scripts/multiplayer-smoke.mjs",
+    "smoke:multiplayer": "node ../scripts/multiplayer-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",

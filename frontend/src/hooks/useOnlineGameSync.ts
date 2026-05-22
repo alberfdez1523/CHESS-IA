@@ -234,7 +234,11 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
 
           const state: ClassicRoomState = { type: 'classic', fen, lastMove, pgn: pgn ?? '' }
           try {
-            const updated = await pushRoomState(active.id, active.version, { state, turn })
+            const updated = await pushRoomState(active.id, active.version, {
+              state,
+              turn,
+              actorColor: config.playerColor,
+            })
             syncRoom(updated)
             lastAppliedVersion.current = updated.version
             setSyncError(null)
@@ -309,6 +313,7 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
           state: nextRoom,
           turn,
           measurement_seed: active.measurement_seed,
+          actorColor: config.playerColor,
         })
         syncRoom(updated)
         lastAppliedVersion.current = updated.version

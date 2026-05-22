@@ -18,5 +18,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('@supabase')) return 'vendor-supabase'
+          if (id.includes('framer-motion')) return 'vendor-motion'
+          if (id.includes('chess.js')) return 'vendor-chess'
+          if (id.includes('react') || id.includes('scheduler')) return 'vendor-react'
+          return 'vendor'
+        },
+      },
+    },
   },
 })
