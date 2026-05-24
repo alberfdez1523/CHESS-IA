@@ -2,8 +2,10 @@ import type { GameConfig, GameMode, PieceColor, QMeasurementEvent, QState } from
 
 export interface QPendingMeasurement {
   event: QMeasurementEvent
-  /** Jugador que debe girar la ruleta (autor del último movimiento con medición). */
+  /** Jugador que realizó el movimiento con medición (debe cerrar la ruleta en online). */
   initiator: PieceColor
+  /** Tablero antes de aplicar el colapso; ambos jugadores lo ven hasta cerrar la ruleta. */
+  preMoveState: QState
 }
 
 export type RoomStatus = 'waiting' | 'playing' | 'finished'
@@ -46,13 +48,14 @@ export function quantumRoomFingerprint(room: QuantumRoomState): string {
 /** Tras un movimiento local con medición, empaqueta el evento para sincronizar la ruleta. */
 export function pendingMeasurementFromLastMove(
   qstate: QState,
-  playerColor: PieceColor,
+  initiatorColor: PieceColor,
+  preMoveState: QState,
 ): QPendingMeasurement | null {
   const last = qstate.history[qstate.history.length - 1]
   if (!last?.measurement) return null
   const initiator = qstate.turn === 'w' ? 'b' : 'w'
-  if (initiator !== playerColor) return null
-  return { event: last.measurement, initiator }
+  if (initiator !== initiatorColor) return null
+  return { event: last.measurement, initiator, preMoveState }
 }
 
 export interface OnlineRoomRow {

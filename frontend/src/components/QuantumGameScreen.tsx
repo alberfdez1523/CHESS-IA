@@ -23,7 +23,6 @@ import { useTimer } from '../hooks/useTimer'
 import { getPlayerLabel, ui } from '../lib/i18n'
 import type { AppSettings } from '../lib/settings'
 import {
-  pendingMeasurementFromLastMove,
   quantumRoomFingerprint,
   quantumStateFingerprint,
 } from '../lib/onlineTypes'
@@ -70,26 +69,28 @@ export default function QuantumGameScreen({
   const turnRef = useRef<PieceColor>('w')
   const exportQStateRef = useRef<() => QState>(() => ({} as QState))
   const measurementEventRef = useRef(false)
+  const measurementBlockingRef = useRef(false)
   const hadPendingRef = useRef(false)
   const [measurementReleased, setMeasurementReleased] = useState(false)
 
   const onStateChange = useCallback(
-    (engine: import('../lib/quantumEngine').QuantumChessEngine) => {
+    (engine: import('../lib/quantumEngine').QuantumChessEngine, meta?: import('../hooks/useQuantumChess').QuantumStateChangeMeta) => {
       if (config.opponentMode !== 'online') return
       const qstate = engine.exportState()
-      const pending = pendingMeasurementFromLastMove(qstate, config.playerColor)
+      const pending = meta?.pendingMeasurement ?? null
       void onlineSync.pushQuantumState(qstate, engine.state.turn, pending).then((ok) => {
         if (!ok && onlineSync.remoteState?.type === 'quantum') {
           loadQuantumRef.current(onlineSync.remoteState.qstate)
         }
       })
     },
-    [config.opponentMode, config.playerColor, onlineSync],
+    [config.opponentMode, onlineSync],
   )
 
   const game = useQuantumChess(config, sounds, language, {
     onStateChange,
     canMove: () => {
+      if (measurementBlockingRef.current) return false
       if (config.opponentMode !== 'online') return true
       if (measurementEventRef.current) return false
       return onlineSync.canPlayQuantumMove(turnRef.current, exportQStateRef.current())
@@ -98,25 +99,25 @@ export default function QuantumGameScreen({
   loadQuantumRef.current = game.loadQuantumState
   turnRef.current = game.turn
   exportQStateRef.current = game.exportState
-  measurementEventRef.current = !!game.measurementEvent
+  measurementEventRef.current = !!game.measurementEvent || game.isMeasurementBlocking
+  measurementBlockingRef.current = game.isMeasurementBlocking
   const isOnline = game.isOnline
-
-  const handleDismissMeasurement = useCallback(() => {
-    game.dismissMeasurement()
-    if (config.opponentMode !== 'online') return
-    void onlineSync.pushQuantumState(game.exportState(), game.turn, null)
-  }, [config.opponentMode, game, onlineSync])
+  const isAIMode = config.opponentMode === 'ai'
   const reduceMotion = useReducedMotion()
   const [boardReady, setBoardReady] = useState(false)
   const [mobileStatsOpen, setMobileStatsOpen] = useState(false)
 
   const pending = onlineSync.pendingMeasurement
-  const isInitiator = pending?.initiator === config.playerColor
-  const isWaitingOpponentMeasurement =
-    isOnline && !!pending && !isInitiator
-  const rouletteMeasurement =
-    game.measurementEvent ??
-    (isInitiator && pending ? pending.event : null)
+  const isInitiator = !pending || pending.initiator === config.playerColor
+  const rouletteMeasurement = game.measurementEvent ?? pending?.event ?? null
+  const showMeasurementRoulette = !!rouletteMeasurement && (game.isMeasurementBlocking || !!pending)
+
+  const handleDismissMeasurement = useCallback(() => {
+    if (isOnline && pending && pending.initiator !== config.playerColor) return
+    game.dismissMeasurement()
+    if (config.opponentMode !== 'online') return
+    void onlineSync.pushQuantumState(game.exportState(), game.turn, null)
+  }, [config.opponentMode, config.playerColor, game, onlineSync, isOnline, pending])
 
   useEffect(() => {
     if (!isOnline) return
@@ -173,6 +174,7 @@ export default function QuantumGameScreen({
 
     onlineSync.beginRemoteApply()
     game.loadQuantumState(remoteRoom.qstate)
+    game.syncRemotePendingMeasurement(remoteRoom.pendingMeasurement ?? null)
     onlineSync.markRemoteApplied(onlineSync.remoteVersion)
     onlineSync.endRemoteApply()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,6 +190,7 @@ export default function QuantumGameScreen({
 
     onlineSync.beginRemoteApply()
     game.loadQuantumState(remote.qstate)
+    game.syncRemotePendingMeasurement(remote.pendingMeasurement ?? null)
     onlineSync.markRemoteApplied(onlineSync.remoteVersion)
     onlineSync.endRemoteApply()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,6 +208,7 @@ export default function QuantumGameScreen({
 
   const labelForColor = (c: PieceColor) => {
     if (isOnline) return c === config.playerColor ? t.you : (language === 'es' ? 'Rival' : 'Opponent')
+    if (isAIMode) return c === config.playerColor ? t.you : (language === 'es' ? 'IA cuántica' : 'Quantum AI')
     return getPlayerLabel(c, language)
   }
 
@@ -312,12 +316,17 @@ export default function QuantumGameScreen({
     )
   }
 
-  const showMeasureBanner = isWaitingOpponentMeasurement
-  const showReleasedBanner = measurementReleased && isOnline && onlineSync.isMyTurn
-  const bannerCount = (showMeasureBanner ? 1 : 0) + (showReleasedBanner ? 1 : 0) as 0 | 1 | 2
+  const showMeasureBanner = showMeasurementRoulette
+  const showReleasedBanner = measurementReleased && isOnline && onlineSync.isMyTurn && !pending
+  const showAiErrorBanner = isAIMode && !!game.engineError
+  const bannerCount = (
+    (showMeasureBanner ? 1 : 0)
+    + (showReleasedBanner ? 1 : 0)
+    + (showAiErrorBanner ? 1 : 0)
+  ) as 0 | 1 | 2 | 3
   const hasCastleButtons =
     (game.classicalCastleOptions.length > 0 || game.quantumCastleOptions.length > 0)
-    && !game.gameOver && !game.isThinking
+    && !game.gameOver && !game.isThinking && !game.isMeasurementBlocking
 
   const gameHeader = (
     <header className="flex items-center justify-between border-b border-surface-4 px-3 py-2 max-lg:py-2 lg:px-6 lg:py-3">
@@ -327,7 +336,9 @@ export default function QuantumGameScreen({
           <span className="flex flex-wrap items-center gap-2 text-ui-xs font-medium uppercase tracking-wider text-neutral-500">
             {isOnline
               ? `${t.onlineBadge}${config.online?.code ? ` · ${config.online.code}` : ''}`
-              : t.quantumBadge}
+              : isAIMode
+                ? (language === 'es' ? `Cuántico vs IA · ${config.difficulty}` : `Quantum vs AI · ${config.difficulty}`)
+                : t.quantumBadge}
             {isOnline && (
               <span
                 className={`rounded-sm border px-1.5 py-0.5 ${onlineStatusClass}`}
@@ -366,7 +377,9 @@ export default function QuantumGameScreen({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          {t.measurementPending}
+          {isInitiator
+            ? (language === 'es' ? 'Medición en curso — gira la ruleta para revelar el movimiento.' : 'Measurement in progress — spin the roulette to reveal the move.')
+            : (language === 'es' ? '¡Medición en curso! Gira la ruleta y vive el resultado con tu rival.' : 'Measurement in progress! Spin the roulette and share the moment with your opponent.')}
         </motion.div>
       )}
       {showReleasedBanner && (
@@ -376,6 +389,17 @@ export default function QuantumGameScreen({
           animate={{ opacity: 1 }}
         >
           {t.measurementCanMove}
+        </motion.div>
+      )}
+      {showAiErrorBanner && (
+        <motion.div
+          className="border-b border-amber-500/25 bg-amber-500/10 px-3 py-2 text-center text-ui-xs text-amber-200 max-lg:truncate lg:px-4 lg:py-2.5 lg:text-ui-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          {language === 'es'
+            ? 'La IA cuántica está usando modo seguro/heurístico.'
+            : 'Quantum AI is using safe/heuristic fallback mode.'}
         </motion.div>
       )}
     </>
@@ -602,9 +626,10 @@ export default function QuantumGameScreen({
         language={language}
       />
       <QuantumMeasurementRoulette
-        visible={!!rouletteMeasurement}
+        visible={showMeasurementRoulette}
         measurement={rouletteMeasurement}
         onClose={handleDismissMeasurement}
+        canDismiss={!isOnline || isInitiator}
         language={language}
       />
     </GameViewportShell>

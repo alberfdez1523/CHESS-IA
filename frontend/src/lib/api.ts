@@ -88,6 +88,41 @@ export async function requestEval(fen: string): Promise<{ evaluation: number; ma
   return res.json()
 }
 
+export interface QuantumEvalResponse {
+  evaluation: number
+  mate: number | null
+  universeCount: number
+}
+
+export async function requestQuantumEval(
+  quantumState: object,
+  depth = 8,
+): Promise<QuantumEvalResponse> {
+  const res = await apiFetch('/quantum/eval', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantum_state: quantumState, depth }),
+  })
+
+  if (!res.ok) throw new Error(await parseAPIError(res))
+  return res.json()
+}
+
+export async function requestQuantumEvalBatch(
+  quantumStates: object[],
+  depth = 8,
+): Promise<QuantumEvalResponse[]> {
+  const res = await apiFetch('/quantum/eval-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantum_states: quantumStates, depth }),
+  })
+
+  if (!res.ok) throw new Error(await parseAPIError(res))
+  const data = await res.json() as { results: QuantumEvalResponse[] }
+  return data.results
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
     const res = await apiFetch('/health', { signal: AbortSignal.timeout(5000) })

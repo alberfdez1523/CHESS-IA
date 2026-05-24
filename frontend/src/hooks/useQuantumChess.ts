@@ -1,5 +1,13 @@
-﻿import { useState, useRef, useCallback, useMemo } from 'react'
+﻿import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { QuantumChessEngine } from '../lib/quantumEngine'
+import {
+  chooseQuantumAIMove,
+  chooseFallbackLegalQAction,
+  applyQAIAction,
+  isActionStillLegal,
+} from '../lib/quantumAi'
+import { pendingMeasurementFromLastMove } from '../lib/onlineTypes'
+import type { QPendingMeasurement } from '../lib/onlineTypes'
 import { getColorName, translateGameOverInfo } from '../lib/i18n'
 import type {
   GameConfig, Language, PieceColor, PieceType, Chances, QBoardCell,
@@ -56,8 +64,12 @@ function cloneQState<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+export interface QuantumStateChangeMeta {
+  pendingMeasurement: QPendingMeasurement | null
+}
+
 export interface UseQuantumChessOptions {
-  onStateChange?: (engine: QuantumChessEngine) => void
+  onStateChange?: (engine: QuantumChessEngine, meta?: QuantumStateChangeMeta) => void
   canMove?: () => boolean
 }
 
@@ -79,11 +91,19 @@ export function useQuantumChess(
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null)
   const [boardFlipped, setBoardFlipped] = useState(config.playerColor === 'b')
   const [measurementEvent, setMeasurementEvent] = useState<QMeasurementEvent | null>(null)
+  const [measurementBoardState, setMeasurementBoardState] = useState<import('../lib/types').QState | null>(null)
+  const [isMeasurementBlocking, setIsMeasurementBlocking] = useState(false)
+  const syncMetaRef = useRef<QuantumStateChangeMeta | null>(null)
   const [promotionPending, setPromotionPending] = useState<{
     pieceId: string; from: string; to: string
   } | null>(null)
 
   const isOnline = config.opponentMode === 'online'
+  const isAIMode = config.opponentMode === 'ai'
+  const isThinkingRef = useRef(false)
+  const lastAiHistoryLengthRef = useRef(-1)
+  const [isThinking, setIsThinking] = useState(false)
+  const [engineError, setEngineError] = useState<string | null>(null)
   const canMoveRef = useRef(options.canMove)
   canMoveRef.current = options.canMove
   const engine = engineRef.current
@@ -91,9 +111,14 @@ export function useQuantumChess(
 
   const board: Record<string, QBoardCell[]> = useMemo(() => {
     void boardVersion
+    if (measurementBoardState) {
+      const preview = new QuantumChessEngine()
+      preview.loadState(measurementBoardState)
+      return preview.getBoard()
+    }
     return engine.getBoard()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardVersion])
+  }, [boardVersion, measurementBoardState])
 
   const turn = state.turn
   const gameOver = !!gameOverInfo || !!state.gameOver
@@ -200,6 +225,17 @@ export function useQuantumChess(
 
   const status = useMemo(() => {
     if (gameOverInfo) return { text: translateGameOverInfo(gameOverInfo, language).title, type: 'over' as const }
+    if (isMeasurementBlocking) {
+      return {
+        text: language === 'es' ? 'Medición — gira la ruleta' : 'Measurement — spin the roulette',
+        type: 'thinking' as const,
+      }
+    }
+    if (isAIMode) {
+      if (isThinking) return { text: language === 'es' ? 'IA pensando…' : 'AI thinking…', type: 'thinking' as const }
+      if (turn === config.playerColor) return { text: language === 'es' ? 'Tu turno' : 'Your turn', type: 'player' as const }
+      return { text: language === 'es' ? 'Turno de la IA' : 'AI turn', type: 'ai' as const }
+    }
     if (isOnline) {
       if (turn === config.playerColor) {
         return { text: language === 'es' ? 'Tu turno' : 'Your turn', type: 'player' as const }
@@ -207,17 +243,76 @@ export function useQuantumChess(
       return { text: language === 'es' ? 'Turno del rival' : "Opponent's turn", type: 'ai' as const }
     }
     return { text: language === 'es' ? `Turno: ${getColorName(turn, language)}` : `${getColorName(turn, language)} to move`, type: 'player' as const }
-  }, [gameOverInfo, turn, language, isOnline, config.playerColor])
+  }, [gameOverInfo, turn, language, isOnline, isAIMode, isThinking, isMeasurementBlocking, config.playerColor])
 
   const refresh = useCallback(() => {
+    setBoardVersion(v => v + 1)
+    const qgo = engine.checkGameOverPublic()
+    if (qgo && !gameOverInfo && !isMeasurementBlocking) {
+      sounds.playGameEnd()
+      setGameOverInfo(qGameOverToClassic(qgo, config.playerColor, language))
+    }
+    const meta = syncMetaRef.current
+    syncMetaRef.current = null
+    options.onStateChange?.(engine, meta ?? undefined)
+  }, [engine, sounds, config.playerColor, gameOverInfo, language, options, isMeasurementBlocking])
+
+  const beginMeasurementReveal = useCallback((
+    preMoveState: import('../lib/types').QState,
+    event: QMeasurementEvent,
+    moverColor: PieceColor,
+  ) => {
+    setMeasurementBoardState(cloneQState(preMoveState))
+    setMeasurementEvent(event)
+    setIsMeasurementBlocking(true)
+    setSelectedPiece(null)
+    setFirstQuantumTarget(null)
+    setMoveMode('classical')
+    setLastMove(null)
+    if (isOnline) {
+      syncMetaRef.current = {
+        pendingMeasurement: pendingMeasurementFromLastMove(
+          engine.exportState(),
+          moverColor,
+          preMoveState,
+        ),
+      }
+    }
+  }, [engine, isOnline])
+
+  const finalizeMeasurementReveal = useCallback(() => {
+    setMeasurementBoardState(null)
+    setMeasurementEvent(null)
+    setIsMeasurementBlocking(false)
+    const last = engine.state.history[engine.state.history.length - 1]
+    if (last) setLastMove({ from: last.from, to: last.to })
+    if (last?.captured) sounds.playCapture()
+    else sounds.playMove()
+    playCheckIfNeeded()
     setBoardVersion(v => v + 1)
     const qgo = engine.checkGameOverPublic()
     if (qgo && !gameOverInfo) {
       sounds.playGameEnd()
       setGameOverInfo(qGameOverToClassic(qgo, config.playerColor, language))
     }
-    options.onStateChange?.(engine)
-  }, [engine, sounds, config.playerColor, gameOverInfo, language, options])
+  }, [engine, sounds, playCheckIfNeeded, gameOverInfo, config.playerColor, language])
+
+  const applyClassicalMoveRecord = useCallback((
+    record: QMoveRecord,
+    preMoveState: import('../lib/types').QState,
+    moverColor: PieceColor,
+  ) => {
+    if (record.measurement) {
+      beginMeasurementReveal(preMoveState, record.measurement, moverColor)
+      refresh()
+      return
+    }
+    if (record.captured) sounds.playCapture()
+    else sounds.playMove()
+    playCheckIfNeeded()
+    setLastMove({ from: record.from, to: record.to })
+    refresh()
+  }, [beginMeasurementReveal, refresh, sounds, playCheckIfNeeded])
 
   const pushUndoSnapshot = useCallback(() => {
     if (isOnline) return
@@ -230,6 +325,33 @@ export function useQuantumChess(
     if (undoStackRef.current.length > 80) undoStackRef.current.shift()
     setUndoDepth(undoStackRef.current.length)
   }, [engine, gameOverInfo, isOnline, lastMove, moveMode])
+
+  const syncRemotePendingMeasurement = useCallback((pending: QPendingMeasurement | null) => {
+    if (pending) {
+      setMeasurementBoardState(cloneQState(pending.preMoveState))
+      setMeasurementEvent(pending.event)
+      setIsMeasurementBlocking(true)
+      setLastMove(null)
+      setBoardVersion(v => v + 1)
+      return
+    }
+    setMeasurementBoardState(null)
+    setMeasurementEvent(null)
+    setIsMeasurementBlocking(false)
+    const last = engine.state.history[engine.state.history.length - 1]
+    if (last) {
+      setLastMove({ from: last.from, to: last.to })
+      if (last.captured) sounds.playCapture()
+      else sounds.playMove()
+      playCheckIfNeeded()
+    }
+    setBoardVersion(v => v + 1)
+    const qgo = engine.checkGameOverPublic()
+    if (qgo && !gameOverInfo) {
+      sounds.playGameEnd()
+      setGameOverInfo(qGameOverToClassic(qgo, config.playerColor, language))
+    }
+  }, [engine, sounds, playCheckIfNeeded, gameOverInfo, config.playerColor, language])
 
   const loadQuantumState = useCallback((qstate: import('../lib/types').QState) => {
     engine.loadState(qstate)
@@ -245,7 +367,73 @@ export function useQuantumChess(
     }
   }, [engine, config.playerColor, language])
 
+  useEffect(() => {
+    if (!isAIMode) return
+    if (gameOver) return
+    if (isMeasurementBlocking) return
+    if (isThinkingRef.current) return
+    if (state.turn === config.playerColor) return
+
+    const historyLen = state.history.length
+    if (lastAiHistoryLengthRef.current === historyLen) return
+
+    const timer = window.setTimeout(async () => {
+      isThinkingRef.current = true
+      setIsThinking(true)
+
+      try {
+        let action = await chooseQuantumAIMove(engine, config.difficulty, { useStockfish: true })
+
+        if (!action || !isActionStillLegal(engine, action)) {
+          action = chooseFallbackLegalQAction(engine)
+        }
+
+        if (!action || !isActionStillLegal(engine, action)) return
+
+        const preMove = cloneQState(engine.exportState())
+        const aiColor = preMove.turn
+        const record = applyQAIAction(engine, action)
+        lastAiHistoryLengthRef.current = engine.state.history.length
+        setEngineError(null)
+        applyClassicalMoveRecord(record, preMove, aiColor)
+        setSelectedPiece(null)
+        setFirstQuantumTarget(null)
+        setMoveMode('classical')
+      } catch (err) {
+        console.error('Error IA cuántica:', err)
+        setEngineError(
+          language === 'es'
+            ? 'La IA cuántica no pudo calcular una jugada.'
+            : 'Quantum AI could not calculate a move.',
+        )
+      } finally {
+        isThinkingRef.current = false
+        setIsThinking(false)
+      }
+    }, 450)
+
+    return () => window.clearTimeout(timer)
+  }, [
+    boardVersion,
+    isAIMode,
+    gameOver,
+    config.playerColor,
+    engine,
+    refresh,
+    sounds,
+    playCheckIfNeeded,
+    language,
+    state.history.length,
+    state.turn,
+    isMeasurementBlocking,
+    config.difficulty,
+    applyClassicalMoveRecord,
+  ])
+
   const undo = useCallback(() => {
+    if (isMeasurementBlocking) return
+    if (isThinkingRef.current) return
+    if (isAIMode && state.turn !== config.playerColor) return
     if (isOnline || undoStackRef.current.length === 0) return
     const entry = undoStackRef.current.pop()
     if (!entry) return
@@ -264,6 +452,9 @@ export function useQuantumChess(
 
   const handleSquareClick = useCallback((sq: string) => {
     if (gameOver) return
+    if (isMeasurementBlocking) return
+    if (isThinkingRef.current) return
+    if (isAIMode && state.turn !== config.playerColor) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
     const allowedColor = state.turn
 
@@ -317,16 +508,12 @@ export function useQuantumChess(
         }
 
         pushUndoSnapshot()
+        const preMove = cloneQState(engine.exportState())
+        const mover = state.turn
         const record = engine.doClassicalMove(selectedPiece.id, selectedPiece.square, sq)
-        if (record.measurement) setMeasurementEvent(record.measurement)
-        if (record.captured) sounds.playCapture()
-        else sounds.playMove()
-        playCheckIfNeeded()
-
         setSelectedPiece(null)
         setMoveMode('classical')
-        setLastMove({ from: record.from, to: record.to })
-        refresh()
+        applyClassicalMoveRecord(record, preMove, mover)
         return
       }
 
@@ -350,11 +537,14 @@ export function useQuantumChess(
     }
   }, [
     board, engine, firstQuantumTarget, gameOver, playCheckIfNeeded,
-    legalTargets, moveMode, pushUndoSnapshot, refresh, selectedPiece, sounds, state.turn, isOnline, config.playerColor,
+    legalTargets, moveMode, pushUndoSnapshot, applyClassicalMoveRecord, selectedPiece, sounds, state.turn, isOnline, isAIMode, isMeasurementBlocking, config.playerColor,
   ])
 
   const handleDrop = useCallback((from: string, to: string) => {
     if (gameOver) return
+    if (isMeasurementBlocking) return
+    if (isThinkingRef.current) return
+    if (isAIMode && state.turn !== config.playerColor) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
     if (moveMode !== 'classical') return
     const allowedColor = state.turn
@@ -378,36 +568,35 @@ export function useQuantumChess(
     }
 
     pushUndoSnapshot()
+    const preMove = cloneQState(engine.exportState())
+    const mover = state.turn
     const record = engine.doClassicalMove(myPiece.pieceId, from, to)
-    if (record.measurement) setMeasurementEvent(record.measurement)
-    if (record.captured) sounds.playCapture()
-    else sounds.playMove()
-    playCheckIfNeeded()
-
     setSelectedPiece(null)
-    setLastMove({ from: record.from, to: record.to })
-    refresh()
-  }, [board, engine, gameOver, moveMode, pushUndoSnapshot, refresh, sounds, playCheckIfNeeded, state.turn, isOnline, config.playerColor])
+    applyClassicalMoveRecord(record, preMove, mover)
+  }, [board, engine, gameOver, moveMode, pushUndoSnapshot, applyClassicalMoveRecord, state.turn, isOnline, isAIMode, isMeasurementBlocking, config.playerColor])
 
   const handlePromotion = useCallback((pieceType: string) => {
     if (!promotionPending) return
+    if (isMeasurementBlocking) return
+    if (isThinkingRef.current) return
+    if (isAIMode && state.turn !== config.playerColor) return
     pushUndoSnapshot()
+    const preMove = cloneQState(engine.exportState())
+    const mover = state.turn
     const record = engine.doClassicalMove(
       promotionPending.pieceId, promotionPending.from, promotionPending.to,
       pieceType as PieceType
     )
-    if (record.measurement) setMeasurementEvent(record.measurement)
-    if (record.captured) sounds.playCapture()
-    else sounds.playMove()
-    playCheckIfNeeded()
     setPromotionPending(null)
     setSelectedPiece(null)
-    setLastMove({ from: record.from, to: record.to })
-    refresh()
-  }, [promotionPending, engine, sounds, refresh, playCheckIfNeeded, pushUndoSnapshot])
+    applyClassicalMoveRecord(record, preMove, mover)
+  }, [promotionPending, engine, applyClassicalMoveRecord, pushUndoSnapshot, isAIMode, isMeasurementBlocking, state.turn, config.playerColor])
 
   const doQuantumCastle = useCallback((side: 'k' | 'q') => {
     if (gameOver) return
+    if (isMeasurementBlocking) return
+    if (isThinkingRef.current) return
+    if (isAIMode && state.turn !== config.playerColor) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
     const allowedColor = state.turn
 
@@ -417,10 +606,13 @@ export function useQuantumChess(
     setSelectedPiece(null)
     setLastMove(null)
     refresh()
-  }, [engine, gameOver, pushUndoSnapshot, refresh, sounds, state.turn, isOnline, config.playerColor])
+  }, [engine, gameOver, pushUndoSnapshot, refresh, sounds, state.turn, isOnline, isAIMode, config.playerColor])
 
   const doClassicalCastle = useCallback((side: 'k' | 'q') => {
     if (gameOver) return
+    if (isMeasurementBlocking) return
+    if (isThinkingRef.current) return
+    if (isAIMode && state.turn !== config.playerColor) return
     if (isOnline && (canMoveRef.current ? !canMoveRef.current() : state.turn !== config.playerColor)) return
 
     const allowedColor = state.turn
@@ -430,16 +622,14 @@ export function useQuantumChess(
     const to = side === 'k' ? `g${rank}` : `c${rank}`
 
     pushUndoSnapshot()
+    const preMove = cloneQState(engine.exportState())
+    const mover = allowedColor
     const record = engine.doClassicalMove(kingId, from, to)
-    if (record.measurement) setMeasurementEvent(record.measurement)
-    sounds.playMove()
-    playCheckIfNeeded()
     setSelectedPiece(null)
     setFirstQuantumTarget(null)
     setMoveMode('classical')
-    setLastMove({ from: record.from, to: record.to })
-    refresh()
-  }, [engine, gameOver, pushUndoSnapshot, refresh, sounds, playCheckIfNeeded, state.turn, isOnline, config.playerColor])
+    applyClassicalMoveRecord(record, preMove, mover)
+  }, [engine, gameOver, pushUndoSnapshot, applyClassicalMoveRecord, state.turn, isOnline, isAIMode, isMeasurementBlocking, config.playerColor])
 
   const chooseMoveMode = useCallback((mode: QMoveMode) => {
     if (!availableMoveModes.includes(mode)) return
@@ -470,7 +660,9 @@ export function useQuantumChess(
   }, [gameOverInfo, sounds, language])
 
   const dismissGameOver = useCallback(() => setGameOverInfo(null), [])
-  const dismissMeasurement = useCallback(() => setMeasurementEvent(null), [])
+  const dismissMeasurement = useCallback(() => {
+    finalizeMeasurementReveal()
+  }, [finalizeMeasurementReveal])
 
   return {
     board,
@@ -481,7 +673,8 @@ export function useQuantumChess(
     firstQuantumTarget,
     lastMove,
     boardFlipped,
-    isThinking: false,
+    isThinking,
+    engineError,
     turn,
     gameOver,
     gameOverInfo,
@@ -494,6 +687,8 @@ export function useQuantumChess(
     quantumCastleOptions,
     availableMoveModes,
     measurementEvent,
+    isMeasurementBlocking,
+    syncRemotePendingMeasurement,
     handleSquareClick,
     handleDrop,
     handlePromotion,
@@ -509,8 +704,8 @@ export function useQuantumChess(
     exportState: () => engine.exportState(),
     dismissMeasurement,
     playerColor: config.playerColor,
-    controlColor: isOnline ? config.playerColor : turn,
-    isAIMode: false,
+    controlColor: isOnline || isAIMode ? config.playerColor : turn,
+    isAIMode,
     isOnline,
     loadQuantumState,
     difficulty: config.difficulty,

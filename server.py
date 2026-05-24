@@ -286,6 +286,34 @@ class QuantumMoveResponse(BaseModel):
     universeCount: int
 
 
+class QuantumEvalRequest(BaseModel):
+    quantum_state: QuantumStatePayload
+    depth: int = 8
+    max_boards: int = 128
+
+
+class QuantumEvalResponse(BaseModel):
+    evaluation: float
+    mate: int | None
+    universeCount: int
+
+
+class QuantumEvalBatchRequest(BaseModel):
+    quantum_states: list[QuantumStatePayload]
+    depth: int = 8
+    max_boards: int = 128
+
+
+class QuantumEvalBatchItem(BaseModel):
+    evaluation: float
+    mate: int | None
+    universeCount: int
+
+
+class QuantumEvalBatchResponse(BaseModel):
+    results: list[QuantumEvalBatchItem]
+
+
 # ---------------------------------------------------------------------------
 # Generador de tableros clásicos desde estado cuántico (Enfoque Multiverso)
 # ---------------------------------------------------------------------------
@@ -614,13 +642,101 @@ def _quantum_move_sync(req: QuantumMoveRequest):
     }
 
 
+def _quantum_eval_sync(req: QuantumEvalRequest) -> QuantumEvalResponse:
+    boards = _generate_classical_boards(req.quantum_state, max_boards=req.max_boards)
+    if not boards:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "No valid classical boards could be generated", "code": "BAD_REQUEST"},
+        )
+
+    depth = min(req.depth, 10)
+
+    def _run_eval(active_engine: chess.engine.SimpleEngine):
+        weighted_eval = 0.0
+        total_prob = 0.0
+        mate = None
+
+        for b in boards:
+            try:
+                board = chess.Board(b["fen"])
+            except ValueError:
+                continue
+
+            if board.is_game_over():
+                continue
+
+            info = active_engine.analyse(
+                board,
+                chess.engine.Limit(depth=depth, time=0.2),
+            )
+
+            if "score" not in info:
+                continue
+
+            ev, local_mate = _score_to_eval(info["score"])
+            weighted_eval += b["probability"] * ev
+            total_prob += b["probability"]
+
+            if local_mate is not None:
+                mate = local_mate
+
+        if total_prob <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "No evaluable boards", "code": "BAD_REQUEST"},
+            )
+
+        return QuantumEvalResponse(
+            evaluation=round(weighted_eval / total_prob, 1),
+            mate=mate,
+            universeCount=len(boards),
+        )
+
+    return _with_engine_lock(_run_eval)
+
+
+@app.post("/api/quantum/eval", response_model=QuantumEvalResponse)
+async def quantum_eval(req: QuantumEvalRequest):
+    """Evalúa un estado cuántico ponderando universos clásicos (sin decidir jugadas)."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, partial(_quantum_eval_sync, req))
+
+
+def _quantum_eval_batch_sync(req: QuantumEvalBatchRequest) -> QuantumEvalBatchResponse:
+    if not req.quantum_states:
+        raise HTTPException(status_code=400, detail={"error": "No quantum states provided", "code": "BAD_REQUEST"})
+    if len(req.quantum_states) > 24:
+        raise HTTPException(status_code=400, detail={"error": "Too many states (max 24)", "code": "BAD_REQUEST"})
+
+    results: list[QuantumEvalBatchItem] = []
+    for state in req.quantum_states:
+        item = _quantum_eval_sync(
+            QuantumEvalRequest(quantum_state=state, depth=req.depth, max_boards=req.max_boards),
+        )
+        results.append(
+            QuantumEvalBatchItem(
+                evaluation=item.evaluation,
+                mate=item.mate,
+                universeCount=item.universeCount,
+            ),
+        )
+    return QuantumEvalBatchResponse(results=results)
+
+
+@app.post("/api/quantum/eval-batch", response_model=QuantumEvalBatchResponse)
+async def quantum_eval_batch(req: QuantumEvalBatchRequest):
+    """Evalúa varios estados cuánticos en una sola petición."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, partial(_quantum_eval_batch_sync, req))
+
+
 @app.post("/api/quantum/move")
 async def quantum_move(req: QuantumMoveRequest):
-    """Endpoint experimental interno.
+    """Endpoint experimental: voto de bestmove clásico por universo.
 
-    La UI no ofrece IA cuántica: el modo cuántico se mantiene para 2 jugadores
-    local u online. Este endpoint queda disponible para análisis/manual QA sin
-    formar parte del flujo de producto.
+    La IA de producto usa quantumAi.ts + /api/quantum/eval. Este endpoint queda
+  para análisis/manual QA.
     """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, partial(_quantum_move_sync, req))

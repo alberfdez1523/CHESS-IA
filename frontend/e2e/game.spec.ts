@@ -22,7 +22,8 @@ async function openClassicLocal(page: Page) {
 async function openQuantumLocal(page: Page) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Cuántico' }).click()
-  await page.getByRole('button', { name: 'Mismo dispositivo' }).click()
+  await page.getByRole('button', { name: '2 jugadores' }).click()
+  await page.getByRole('button', { name: /Iniciar cuántico/i }).click()
   await expect(page.locator('.board-root')).toBeVisible()
 }
 

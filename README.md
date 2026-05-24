@@ -1,72 +1,98 @@
-﻿# Gambito de Dama Cuantico
+﻿# Gambito de Dama Cuántico
 
- https://gambito-dama-cuantico.onrender.com/
+https://gambito-dama-cuantico.onrender.com/
 
-Aplicacion web de ajedrez con dos modos de juego:
+Aplicación web de ajedrez con dos modos de juego:
 
-- Modo clasico
-  - Vs IA (Stockfish)
-  - 2 jugadores locales (sin IA)
-- Modo cuantico
-  - 2 jugadores locales (sin IA)
-  - Superposicion, fusion, enroque cuantico, medicion y efecto tunel
+| Modo | Opciones |
+|------|----------|
+| **Clásico** | Vs IA (Stockfish), 2 jugadores local, online |
+| **Cuántico** | Vs IA cuántica, 2 jugadores local, online |
 
-## Implementaciones actuales
+El modo cuántico añade superposición, fusión, enroque cuántico, medición probabilística y efecto túnel.
 
-### Modo Clasico
+---
 
-- Reglas completas via `chess.js`
-- 5 niveles de dificultad contra Stockfish (`beginner` a `master`)
-- Opcion de partida local 2 jugadores
-- Historial de jugadas descriptivo
-- Barra de evaluacion (vs IA)
-- Reloj opcional por color
-- Promocion, enroque, deteccion de jaque mate y tablas
+## Modo clásico
 
-### Modo Cuantico (2 jugadores)
+- Reglas completas vía `chess.js`
+- 5 niveles de dificultad contra Stockfish (`beginner` → `master`)
+- Partida local a 2 jugadores, multijugador online (Supabase)
+- Historial descriptivo, barra de evaluación (vs IA), reloj opcional
+- Promoción, enroque, jaque, mate y tablas
 
-- Movimiento cuantico (split): piezas no peon pueden dividirse en 2 casillas
-- Divisiones sucesivas: probabilidades 50/50, 25/25, etc.
-- Fusion: estados de una misma pieza se reunen en una casilla
-- Enroque cuantico con entrelazamiento
-- Efecto tunel al atravesar estados cuanticos
-- Medicion probabilistica al capturar entre estados clasicos/cuanticos
-- Ruleta visual de medicion con:
-  - porcentaje vivo/muerto
-  - giro animado
-  - resultado del colapso
+---
 
-#### Casuisticas de captura (cuantico)
+## Modo cuántico
 
-- Clasica -> Clasica: captura normal, sin medicion.
-- Clasica -> Cuantica: se mide la pieza objetivo.
-  - Si existe en esa casilla, la captura ocurre.
-  - Si no existe, la captura falla y la pieza objetivo colapsa en su otra posicion.
-- Cuantica -> Clasica: se mide la pieza atacante.
-  - Si existe, captura y colapsa a estado clasico.
-  - Si no existe, la captura falla, pierde turno y colapsa en la otra casilla.
-- Cuantica -> Cuantica:
-  - Primero se mide la atacante.
-  - Si la atacante existe, se mide la objetivo con la misma logica.
+### Reglas principales
 
-## UI / UX
+- **Movimiento cuántico (split):** piezas no peón en dos casillas (probabilidades repartidas).
+- **Fusión:** reunir fragmentos de la misma pieza en una casilla al 100 %.
+- **Enroque cuántico:** con entrelazamiento rey/torre.
+- **Efecto túnel:** atravesar piezas cuánticas en línea.
+- **Medición:** al capturar entre estados clásico/cuántico, una ruleta decide el colapso.
 
-- Frontend React + TypeScript + Vite
-- Animaciones con Framer Motion
-- Sonidos de jugada/captura/jaque/fin
-- Musica ambiente con control de volumen
-- Tema visual oscuro/claro
-- Panel lateral con reglas claras por modo
+### Capturas y medición
 
-## Stack tecnico
+| Atacante | Defensor | Comportamiento |
+|----------|----------|----------------|
+| Clásica | Clásica | Captura normal |
+| Clásica | Cuántica | Se mide la defensora |
+| Cuántica | Clásica | Se mide la atacante |
+| Cuántica | Cuántica | Primero atacante, luego defensora |
 
-- Frontend: React 18, TypeScript, Vite, Tailwind CSS, Framer Motion
-- Motor clasico: `chess.js`
-- Backend: FastAPI (`server.py`)
-- IA: Stockfish via `python-chess`
-- Multijugador online: Supabase Auth anonimo, Postgres, Realtime y Presence
+**Experiencia de medición (local y online):**
 
-## Estructura relevante
+1. El tablero **no muestra el resultado** del movimiento hasta cerrar la ruleta.
+2. **Ambos jugadores** ven la ruleta y pueden girarla (suspense compartido).
+3. En online, quien hizo el movimiento cierra la ruleta y libera el turno; el rival puede girar antes pero espera el cierre del iniciador.
+
+### Modo Cuántico vs IA
+
+La IA **no** usa `bestmove` clásico de Stockfish como jugada cuántica. Flujo:
+
+```
+QuantumChessEngine → acciones legales → simular → heurística + eval Stockfish opcional → elegir → ejecutar
+```
+
+- **5 niveles de dificultad** (`beginner` … `master`): más aleatoriedad en niveles bajos, más precisión en `hard`/`master`.
+- **Heurística local** siempre activa; **Stockfish** solo evalúa posiciones simuladas (`/api/quantum/eval` o batch) si el servidor está disponible.
+- Movimientos legales: clásicos, splits, fusiones, enroque cuántico, capturas con medición.
+
+Archivos clave:
+
+```txt
+frontend/src/lib/quantumEngine.ts   # Motor de reglas
+frontend/src/lib/quantumAi.ts       # IA cuántica
+frontend/src/hooks/useQuantumChess.ts
+```
+
+---
+
+## API backend
+
+| Endpoint | Uso |
+|----------|-----|
+| `POST /api/move` | Mejor jugada clásica (FEN) |
+| `POST /api/eval` | Evaluación clásica |
+| `POST /api/quantum/eval` | Evaluación ponderada de estado cuántico |
+| `POST /api/quantum/eval-batch` | Varias evaluaciones en una petición (IA) |
+| `POST /api/quantum/move` | Experimental (no usado por la UI) |
+| `GET /api/health` | Estado del motor |
+
+---
+
+## Stack técnico
+
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Framer Motion
+- **Clásico:** `chess.js`
+- **Cuántico:** motor propio `QuantumChessEngine`
+- **Backend:** FastAPI (`server.py`)
+- **IA clásica:** Stockfish vía `python-chess`
+- **Online:** Supabase (Auth anónimo, Postgres, Realtime, Presence)
+
+## Estructura del proyecto
 
 ```txt
 frontend/
@@ -76,24 +102,31 @@ frontend/
       GameScreen.tsx
       QuantumGameScreen.tsx
       QuantumMeasurementRoulette.tsx
-      Board.tsx
-      QuantumBoard.tsx
     hooks/
       useChessGame.ts
       useQuantumChess.ts
+      useOnlineGameSync.ts
     lib/
       quantumEngine.ts
-      types.ts
+      quantumAi.ts
+      api.ts
+  e2e/
+    game.spec.ts
+    quantum-ai.spec.ts
 server.py
+tests/
+supabase/migrations/
 ```
 
-## Instalacion
+---
+
+## Instalación
 
 ### Requisitos
 
 - Python 3.10+
 - Node.js 18+
-- Stockfish (en PATH o dentro de `engine/`)
+- Stockfish (en `PATH` o en `engine/`)
 
 ### Backend
 
@@ -105,71 +138,84 @@ pip install -r requirements.txt
 py server.py
 ```
 
-### Frontend (build)
+### Frontend
 
 ```bash
 cd frontend
 npm ci
-npm run build
+npm run build   # genera frontend/dist
 ```
 
-La app se sirve en `http://localhost:8000` desde FastAPI usando `frontend/dist`.
+La app se sirve en `http://localhost:8000` desde FastAPI con `frontend/dist`.
 
-Nota: el frontend legado de la raíz fue eliminado. Si `frontend/dist` no existe, compílalo antes de arrancar el backend o usa `npm run dev` dentro de `frontend/`.
-
-### Pruebas
+Desarrollo con hot reload:
 
 ```bash
-pytest -q
 cd frontend
-npm test
-npm run e2e
-npm run build
+npm run dev     # http://localhost:5173
 ```
 
-Para probar una partida multijugador real en dos navegadores Chromium/Edge contra la app local:
+### Variables de entorno (online)
+
+En `frontend/.env` o build:
+
+```env
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+VITE_API_BASE=          # opcional; por defecto /api o localhost:8000 en dev
+```
+
+---
+
+## Pruebas
+
+```bash
+# Backend
+pytest -q
+
+# Frontend unitario
+cd frontend
+npm test
+
+# Build
+npm run build
+
+# E2E (Playwright)
+npm run e2e
+```
+
+Prueba de humo multijugador (dos navegadores):
 
 ```bash
 cd frontend
 npm run smoke:multiplayer
 ```
 
-Requisitos de la prueba de humo:
+Requisitos smoke: backend en `http://localhost:8000`, build con Supabase configurado, Chrome/Edge.
 
-- Backend local levantado en `http://localhost:8000` o `APP_URL` apuntando a otra URL.
-- Build del frontend generado con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
-- Chrome o Edge instalado; si no esta en una ruta comun, define `CHROME_PATH`.
+La suite E2E valida flujos clásico/cuántico, IA cuántica y viewports `390×844`, `768×1024`, `1280×720`, `1440×900`.
 
-La suite `npm run e2e` usa Playwright para validar los flujos principales y que el tablero no quede recortado en `390x844`, `768x1024`, `1280x720` y `1440x900`.
+En CI, `SKIP_STOCKFISH=1` desactiva el motor; los tests de eval devuelven `503` controlado.
 
-### Supabase
+---
 
-Aplica las migraciones de `supabase/migrations/` en el SQL Editor (orden `001` → `002` → `003`) antes de usar online:
+## Supabase (multijugador)
 
-- `rooms`: estado actual de cada sala y control optimista por version.
-- `room_moves`: historial ligero de movimientos para depurar desincronizaciones.
-- `abandon_room(p_room_id)`: borra la sala si eres jugador (Menú, cierre de pestaña vía `pagehide`).
-- `cleanup_stale_rooms(p_before)`: borra salas con `updated_at` anterior a `p_before` (por defecto **15 minutos**).
+Aplica migraciones en `supabase/migrations/` (`001` → `003`):
 
-**Limpieza automática**
+- `rooms`: estado y versión optimista
+- `room_moves`: historial ligero
+- `abandon_room`, `cleanup_stale_rooms`
 
-- El cliente llama a `cleanup_stale_rooms` al abrir el menú (salas huérfanas de sesiones anteriores).
-- En el servidor, programa un cron cada 10 min (requiere `pg_cron` en Supabase):
+Limpieza de salas huérfanas: al abrir menú + cron cada 10 min (ver SQL en migraciones).
 
-```sql
-select cron.schedule(
-  'cleanup-stale-rooms',
-  '*/10 * * * *',
-  $$ select public.cleanup_stale_rooms(); $$
-);
-```
-
-Al cerrar la pestaña sin pulsar Menú, el rival ve el aviso de desconexión (~12 s); la fila en BD se elimina con `pagehide` (best-effort), al volver al menú, o tras 15 min sin actividad.
+---
 
 ## Notas de uso
 
-- En modo clasico 2 jugadores y en modo cuantico no hace falta motor IA para jugar.
-- Si quieres usar modo clasico vs IA, asegurate de que Stockfish este detectado.
+- **Clásico vs IA** y **cuántico vs IA** mejoran con Stockfish en marcha; sin motor, la IA cuántica sigue con heurística local.
+- **Cuántico 2 jugadores** y **online** no requieren Stockfish.
+- El endpoint `/api/quantum/move` queda para QA; la UI no lo usa como jugador principal.
 
 ## Licencia
 

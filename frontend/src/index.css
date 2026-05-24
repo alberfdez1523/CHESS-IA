@@ -76,6 +76,10 @@
     --game-banner-h: 5.5rem;
   }
 
+  .game-viewport.has-game-banner-triple {
+    --game-banner-h: 8.25rem;
+  }
+
   .game-viewport.has-castle-buttons {
     --game-castle-h: 3rem;
     --game-board-chrome-h: 11.5rem;
@@ -142,6 +146,10 @@
 
   .game-viewport.has-game-banner-double {
     --game-banner-h: 4.5rem;
+  }
+
+  .game-viewport.has-game-banner-triple {
+    --game-banner-h: 6.75rem;
   }
 
   .game-viewport.has-castle-buttons {

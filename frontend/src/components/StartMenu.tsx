@@ -44,7 +44,7 @@ export default function StartMenu({
 
   const t = language === 'es'
     ? {
-        subtitle: isQuantum ? 'Modo cuántico local · 2 jugadores' : 'Clásico vs Stockfish o 2 jugadores',
+        subtitle: isQuantum ? 'Modo cuántico: local, online o contra IA' : 'Clásico vs Stockfish o 2 jugadores',
         tagline: 'Donde el ajedrez se encuentra con la física cuántica',
         gameMode: 'Modo de juego',
         classic: 'Clásico',
@@ -59,7 +59,8 @@ export default function StartMenu({
         online: 'En línea',
         playOnline: 'Multijugador en línea',
         playLocal: 'Mismo dispositivo',
-        quantumInfo: 'Modo cuántico: 2 jugadores en el mismo tablero o en línea con código de sala.',
+        quantumInfo: 'Modo cuántico: juega local, online o contra IA experimental intermedia.',
+        quantumAiInfo: 'IA cuántica: elige la dificultad (usa heurística local y Stockfish si está disponible).',
         difficulty: 'Dificultad',
         diffUnused: 'En 2 jugadores la dificultad no se usa.',
         clock: 'Reloj',
@@ -74,7 +75,7 @@ export default function StartMenu({
         settings: 'Ajustes',
       }
     : {
-        subtitle: isQuantum ? 'Local quantum mode · 2 players' : 'Classic vs Stockfish or 2 players',
+        subtitle: isQuantum ? 'Quantum mode: local, online, or vs AI' : 'Classic vs Stockfish or 2 players',
         tagline: 'Where chess meets quantum physics',
         gameMode: 'Game mode',
         classic: 'Classic',
@@ -89,7 +90,8 @@ export default function StartMenu({
         online: 'Online',
         playOnline: 'Online multiplayer',
         playLocal: 'Same device',
-        quantumInfo: 'Quantum mode: 2 players on one device or online with a room code.',
+        quantumInfo: 'Quantum mode: play locally, online, or against experimental medium AI.',
+        quantumAiInfo: 'Quantum AI: pick a difficulty (local heuristic + Stockfish when available).',
         difficulty: 'Difficulty',
         diffUnused: 'Difficulty is not used in 2-player mode.',
         clock: 'Clock',
@@ -137,8 +139,14 @@ export default function StartMenu({
     }
     const playerColor: PieceColor =
       color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : color
-    const mode = gameMode === 'quantum' ? 'local' : opponentMode
-    onPlay({ playerColor, difficulty, opponentMode: mode, useTimer, timerMinutes, gameMode })
+    onPlay({
+      playerColor,
+      difficulty,
+      opponentMode,
+      useTimer,
+      timerMinutes,
+      gameMode,
+    })
   }, [
     color,
     difficulty,
@@ -223,7 +231,7 @@ export default function StartMenu({
                     key={opt.value}
                     onClick={() => {
                       setGameMode(opt.value)
-                      if (opt.value === 'quantum') { setOpponentMode('local'); setColor('w') }
+                      if (opt.value === 'quantum') setDifficulty('medium')
                     }}
                     className={`flex-1 py-3 text-center text-ui-sm font-semibold uppercase tracking-wider transition-colors
                       ${i > 0 ? 'border-l border-surface-4' : ''}
@@ -266,51 +274,45 @@ export default function StartMenu({
             </motion.div>
 
             {/* Opponent */}
-            {!isQuantum ? (
-              <motion.div className="mb-7" custom={2} variants={stagger} initial="hidden" animate="show">
-                <Label>{t.opponent}</Label>
-                <div className="flex overflow-hidden rounded border border-surface-4">
-                  {([
-                    { value: 'ai' as OpponentMode, label: t.vsAi, beta: false },
-                    { value: 'local' as OpponentMode, label: t.twoPlayers, beta: false },
-                    { value: 'online' as OpponentMode, label: t.online, beta: true },
-                  ] as const).map((opt, i) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setOpponentMode(opt.value)}
-                      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-center text-ui-sm font-semibold transition-colors
-                        ${i > 0 ? 'border-l border-surface-4' : ''}
-                        ${opponentMode === opt.value
-                          ? 'bg-accent/10 text-accent'
-                          : 'bg-transparent text-neutral-500 hover:bg-surface-2 hover:text-neutral-300'
-                        }`}
-                    >
-                      <span>{opt.label}</span>
-                      {opt.beta && <OnlineBetaBadge language={language} className="scale-90" />}
-                    </button>
-                  ))}
-                </div>
-                {opponentMode === 'online' && (
-                  <div className="mt-3">
-                    <OnlineBetaNotice language={language} variant="compact" />
-                  </div>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div className="mb-7 space-y-3" custom={2} variants={stagger} initial="hidden" animate="show">
-                <p className="rounded border border-indigo-500/20 bg-indigo-500/5 px-4 py-3 text-ui-sm text-indigo-300">
+            <motion.div className="mb-7" custom={2} variants={stagger} initial="hidden" animate="show">
+              <Label>{t.opponent}</Label>
+              <div className="flex overflow-hidden rounded border border-surface-4">
+                {([
+                  { value: 'ai' as OpponentMode, label: t.vsAi, beta: false },
+                  { value: 'local' as OpponentMode, label: t.twoPlayers, beta: false },
+                  { value: 'online' as OpponentMode, label: t.online, beta: true },
+                ] as const).map((opt, i) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setOpponentMode(opt.value)}
+                    className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-center text-ui-sm font-semibold transition-colors
+                      ${i > 0 ? 'border-l border-surface-4' : ''}
+                      ${opponentMode === opt.value
+                        ? isQuantum
+                          ? 'bg-indigo-500/10 text-indigo-400'
+                          : 'bg-accent/10 text-accent'
+                        : 'bg-transparent text-neutral-500 hover:bg-surface-2 hover:text-neutral-300'
+                      }`}
+                  >
+                    <span>{opt.label}</span>
+                    {opt.beta && <OnlineBetaBadge language={language} className="scale-90" />}
+                  </button>
+                ))}
+              </div>
+              {isQuantum && (
+                <p className="mt-3 rounded border border-indigo-500/20 bg-indigo-500/5 px-4 py-3 text-ui-sm text-indigo-300">
                   ⚛ {t.quantumInfo}
                 </p>
-                <OnlineBetaNotice language={language} variant="compact" />
-                <button
-                  type="button"
-                  onClick={openOnlineLobby}
-                  className="flex w-full items-center justify-center gap-2 rounded border border-indigo-400/40 py-3 text-ui-sm font-semibold text-indigo-300 hover:bg-indigo-500/10"
-                >
-                  <span>🌐 {tu.onlineBetaTitle}</span>
-                </button>
-              </motion.div>
-            )}
+              )}
+              {isQuantum && opponentMode === 'ai' && (
+                <p className="mt-2 text-ui-sm text-neutral-500">{t.quantumAiInfo}</p>
+              )}
+              {opponentMode === 'online' && (
+                <div className="mt-3">
+                  <OnlineBetaNotice language={language} variant="compact" />
+                </div>
+              )}
+            </motion.div>
 
             {/* Difficulty */}
             <motion.div className="mb-7" custom={3} variants={stagger} initial="hidden" animate="show">
@@ -318,17 +320,22 @@ export default function StartMenu({
               {gameMode === 'classic' && opponentMode === 'local' && (
                 <p className="mb-2 text-ui-sm text-neutral-600">{t.diffUnused}</p>
               )}
+              {isQuantum && opponentMode === 'ai' && (
+                <p className="mb-2 text-ui-sm text-neutral-600">{t.quantumAiInfo}</p>
+              )}
               <div className="flex overflow-hidden rounded border border-surface-4">
                 {DIFFICULTIES.map((d, i) => (
                   <button
                     key={d.key}
                     onClick={() => setDifficulty(d.key)}
-                    disabled={!requiresEngine}
+                    disabled={!requiresEngine && !(isQuantum && opponentMode === 'ai')}
                     className={`flex flex-1 flex-col items-center gap-1.5 py-3 transition-colors
                       ${i > 0 ? 'border-l border-surface-4' : ''}
-                      ${difficulty === d.key && requiresEngine
-                        ? 'bg-accent/10 text-accent'
-                        : requiresEngine
+                      ${difficulty === d.key && (requiresEngine || (isQuantum && opponentMode === 'ai'))
+                        ? isQuantum && opponentMode === 'ai'
+                          ? 'bg-indigo-500/10 text-indigo-400'
+                          : 'bg-accent/10 text-accent'
+                        : (requiresEngine || (isQuantum && opponentMode === 'ai'))
                           ? 'bg-transparent text-neutral-500 hover:bg-surface-2 hover:text-neutral-300'
                           : 'cursor-not-allowed bg-surface-1/60 text-neutral-700'
                       }`}
@@ -339,7 +346,9 @@ export default function StartMenu({
                           key={bar}
                           className={`w-[2.5px] rounded-[0.5px] transition-colors
                             ${bar <= d.bars
-                              ? difficulty === d.key && requiresEngine ? 'bg-accent' : 'bg-neutral-600'
+                              ? difficulty === d.key && (requiresEngine || (isQuantum && opponentMode === 'ai'))
+                                ? isQuantum && opponentMode === 'ai' ? 'bg-indigo-400' : 'bg-accent'
+                                : 'bg-neutral-600'
                               : 'bg-surface-4'
                             }`}
                           style={{ height: `${5 + bar * 2}px` }}
@@ -422,7 +431,9 @@ export default function StartMenu({
                   ? isOnlineMode
                     ? `🌐  ${tu.onlineBetaTitle}`
                     : isQuantum
-                      ? `⚛  ${t.playLocal}`
+                      ? opponentMode === 'ai'
+                        ? `⚛  ${language === 'es' ? 'Cuántico vs IA' : 'Quantum vs AI'}`
+                        : `⚛  ${t.playQuantum}`
                       : `▸  ${t.playClassic}`
                   : checking
                     ? t.connecting

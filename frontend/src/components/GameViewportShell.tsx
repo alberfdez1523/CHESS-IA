@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 
 interface GameViewportShellProps {
   variant?: 'gold' | 'quantum'
-  /** Número de banners bajo el header (0–2) para ajustar --game-banner-h */
-  bannerCount?: 0 | 1 | 2
+  /** Número de banners bajo el header (0–3) para ajustar --game-banner-h */
+  bannerCount?: 0 | 1 | 2 | 3
   /** Botones de enroque visibles bajo el tablero en móvil */
   hasCastleButtons?: boolean
   header: ReactNode
@@ -22,9 +22,10 @@ export default function GameViewportShell({
   footer,
 }: GameViewportShellProps) {
   const bannerClass =
-    bannerCount === 2 ? 'has-game-banner-double'
-      : bannerCount === 1 ? 'has-game-banner'
-        : ''
+    bannerCount >= 3 ? 'has-game-banner-triple'
+      : bannerCount === 2 ? 'has-game-banner-double'
+        : bannerCount === 1 ? 'has-game-banner'
+          : ''
 
   return (
     <div

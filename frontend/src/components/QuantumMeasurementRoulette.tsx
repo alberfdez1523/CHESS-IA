@@ -7,11 +7,13 @@ interface QuantumMeasurementRouletteProps {
   visible: boolean
   measurement: QMeasurementEvent | null
   onClose: () => void
+  /** En online solo el iniciador cierra y libera el turno; el rival puede girar la ruleta. */
+  canDismiss?: boolean
   language: Language
 }
 
 export default function QuantumMeasurementRoulette({
-  visible, measurement, onClose, language,
+  visible, measurement, onClose, canDismiss = true, language,
 }: QuantumMeasurementRouletteProps) {
   const [spun, setSpun] = useState(false)
   const [spinDone, setSpinDone] = useState(false)
@@ -241,14 +243,16 @@ export default function QuantumMeasurementRoulette({
                 <button
                   type="button"
                   onClick={onClose}
-                  disabled={!spinDone}
+                  disabled={!spinDone || !canDismiss}
                   className={`min-h-[44px] flex-1 rounded px-4 py-2 text-xs font-semibold transition-colors lg:flex-none
-                    ${spinDone
+                    ${spinDone && canDismiss
                       ? 'border border-accent/30 bg-accent/10 text-accent hover:bg-accent/20'
                       : 'cursor-not-allowed border border-surface-4 bg-surface-2 text-neutral-700'
                     }`}
                 >
-                  {es ? 'Cerrar' : 'Close'}
+                  {canDismiss
+                    ? (es ? 'Cerrar' : 'Close')
+                    : (es ? 'Espera al rival' : 'Wait for opponent')}
                 </button>
               </div>
             </div>

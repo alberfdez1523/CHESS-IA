@@ -87,3 +87,37 @@ def test_generate_classical_boards_all_classical():
     assert len(boards) == 1
     assert boards[0]["probability"] == pytest.approx(1.0)
     assert "fen" in boards[0]
+
+
+def test_quantum_eval_invalid_request_body(client):
+    r = client.post("/api/quantum/eval", json={"depth": 8})
+    assert r.status_code == 422
+
+
+def test_quantum_eval_batch_invalid_body(client):
+    r = client.post('/api/quantum/eval-batch', json={'depth': 8})
+    assert r.status_code == 422
+
+
+def test_quantum_eval_unavailable_without_engine(client):
+    qs = QuantumStatePayload(
+        pieces=[
+            QuantumPieceInfo(
+                id="wk",
+                type="k",
+                color="w",
+                squares=[QuantumPieceSquare(square="e1", probability=1.0)],
+            ),
+            QuantumPieceInfo(
+                id="bk",
+                type="k",
+                color="b",
+                squares=[QuantumPieceSquare(square="e8", probability=1.0)],
+            ),
+        ],
+        turn="w",
+        castling=QuantumCastling(w={"k": True, "q": True}, b={"k": True, "q": True}),
+    )
+    r = client.post("/api/quantum/eval", json={"quantum_state": qs.model_dump(), "depth": 8})
+    assert r.status_code == 503
+    assert r.json()["code"] == "ENGINE_UNAVAILABLE"
