@@ -64,9 +64,19 @@ test('classic AI flow works with mocked Stockfish', async ({ page }) => {
 })
 
 test('quantum local board is fully visible and supports local undo', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 720 })
-  await openQuantumLocal(page)
-  await expectBoardInsideViewport(page)
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1280, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await openQuantumLocal(page)
+    await expectBoardInsideViewport(page)
+    const controls = page.locator('.game-quantum-controls')
+    await expect(controls).toBeVisible()
+    const controlsBox = await controls.boundingBox()
+    expect(controlsBox).not.toBeNull()
+    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(viewport.height)
+  }
 
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.getByTestId('quantum-mode-quantum').click()

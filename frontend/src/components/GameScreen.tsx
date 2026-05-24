@@ -342,7 +342,7 @@ export default function GameScreen({
         </div>
       )}
     >
-        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:w-auto lg:flex-none lg:px-0" {...boardMotion}>
+        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-start overflow-hidden max-lg:pt-0.5 lg:justify-center lg:w-auto lg:flex-none lg:px-0" {...boardMotion}>
           <PlayerBar {...topBar} />
 
           {!game.boardReady ? (

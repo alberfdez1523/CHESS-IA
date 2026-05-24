@@ -64,6 +64,10 @@
     );
   }
 
+  .game-viewport--quantum {
+    --game-board-chrome-h: 10rem;
+  }
+
   .game-viewport.has-game-banner {
     --game-banner-h: 2.75rem;
   }
@@ -87,6 +91,10 @@
     --game-header-h: 4.5rem;
     --game-main-vpad: 0.75rem;
     --game-board-chrome-h: 7.5rem;
+  }
+
+  .game-viewport--quantum {
+    --game-board-chrome-h: 9rem;
   }
 
   .game-viewport.has-castle-buttons {
@@ -113,7 +121,8 @@
       var(--game-header-h) + var(--game-footer-h)
       + 2 * var(--game-playerbar-h) + var(--game-status-h)
       + var(--game-quantum-extra-h) + var(--game-castle-h) + var(--game-banner-h)
-      + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px) + 0.5rem
+      + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)
+      + 1.25rem
     );
     --board-size: min(
       calc(100vw - 1rem),
@@ -122,7 +131,9 @@
   }
 
   .game-viewport--quantum {
-    --game-quantum-extra-h: 5rem;
+    /* Estado incluido en controles cuánticos; no duplicar --game-status-h */
+    --game-status-h: 0px;
+    --game-quantum-extra-h: 6.75rem;
   }
 
   .game-viewport.has-game-banner {
@@ -151,6 +162,10 @@
 
   .game-status-row {
     min-height: var(--game-status-h);
+  }
+
+  .game-quantum-controls .game-status-row {
+    min-height: 0;
   }
 
   .game-viewport {
@@ -268,10 +283,10 @@ body {
 .chess-piece {
   /* Noto primero: misma silueta en móvil, tablet y PC (evita emoji de color del sistema). */
   font-family: 'Noto Sans Symbols 2', 'Segoe UI Symbol', sans-serif;
-  font-size: calc(var(--sq-size) * 0.82);
+  font-size: calc(var(--sq-size) * 0.74);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  line-height: 0.88;
+  line-height: 1;
   user-select: none;
   cursor: grab;
   display: flex;
@@ -279,14 +294,19 @@ body {
   justify-content: center;
   width: 100%;
   height: 100%;
+  max-width: 88%;
+  max-height: 88%;
   text-align: center;
   transform-origin: center center;
   filter:
     drop-shadow(0 1px 0 rgba(255, 255, 255, 0.1))
-    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5))
-    drop-shadow(0 6px 10px rgba(0, 0, 0, 0.2));
+    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
   transition: transform 80ms ease;
   will-change: transform;
+}
+
+.board-root [data-square] {
+  overflow: hidden;
 }
 .chess-piece:active { cursor: grabbing; }
 .chess-piece-draggable {

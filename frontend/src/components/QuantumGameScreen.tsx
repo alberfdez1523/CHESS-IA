@@ -302,11 +302,11 @@ export default function QuantumGameScreen({
         aria-label={`${info.label}: ${info.desc}`}
         onClick={() => game.chooseMoveMode(mode)}
         disabled={!enabled || game.gameOver}
-        className={`${compact ? 'min-h-[36px] min-w-0 flex-1 px-2 py-2 text-center' : 'w-full px-3.5 py-3 text-left'} rounded border text-ui-sm transition-colors
+        className={`${compact ? 'min-h-[36px] min-w-0 flex-1 flex-row items-center justify-center gap-1 px-1.5 py-1.5' : 'w-full px-3.5 py-3 text-left'} rounded border text-ui-sm transition-colors
           ${active ? modeColor(mode, true) : enabled && !game.gameOver ? modeColor(mode, false) : 'cursor-not-allowed border-surface-4 bg-surface-1 text-neutral-700'}`}
       >
-        <span className={compact ? 'block text-sm' : 'mr-2 text-sm'}>{info.icon}</span>
-        <span className={`font-semibold ${compact ? 'mt-0.5 block truncate text-[10px] leading-tight' : ''}`}>{info.label}</span>
+        <span className={compact ? 'text-sm leading-none' : 'mr-2 text-sm'}>{info.icon}</span>
+        <span className={`font-semibold ${compact ? 'truncate text-[10px] leading-tight' : ''}`}>{info.label}</span>
         {!compact && <span className="mt-0.5 block text-ui-sm text-neutral-500">{info.desc}</span>}
       </button>
     )
@@ -449,7 +449,7 @@ export default function QuantumGameScreen({
           </div>
         </motion.div>
 
-        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:w-auto lg:flex-none lg:px-6" {...boardMotion}>
+        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-start overflow-hidden max-lg:pt-0.5 lg:justify-center lg:w-auto lg:flex-none lg:px-6" {...boardMotion}>
           <PlayerBar {...topBar} />
 
           {!boardReady ? (
@@ -477,16 +477,16 @@ export default function QuantumGameScreen({
 
           <PlayerBar {...bottomBar} />
 
-          <div className="game-quantum-controls shrink-0 space-y-2 py-1 max-lg:w-full lg:hidden" style={{ width: 'var(--board-size)' }}>
+          <div className="game-quantum-controls shrink-0 space-y-1.5 py-0.5 max-lg:w-full lg:hidden" style={{ width: 'var(--board-size)' }}>
             <div>
-              <p className="mb-1.5 text-ui-xs font-semibold uppercase tracking-[0.15em] text-neutral-500">
+              <p className="mb-1 text-ui-xs font-semibold uppercase tracking-[0.15em] text-neutral-500">
                 {t.moveTypes}
               </p>
-              <div className="flex gap-1.5" role="radiogroup" aria-label={t.moveTypes}>
+              <div className="flex gap-1" role="radiogroup" aria-label={t.moveTypes}>
                 {modeButtons.map((mode) => renderModeButton(mode, true))}
               </div>
             </div>
-            <div className="game-status-row flex min-w-0 items-center gap-2" aria-live="polite">
+            <div className="game-status-row flex min-h-0 min-w-0 items-center gap-2 py-0" aria-live="polite">
               <div
                 className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                   game.status.type === 'player' ? 'bg-indigo-400'
