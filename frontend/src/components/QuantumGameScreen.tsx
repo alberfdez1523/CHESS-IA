@@ -27,7 +27,7 @@ import {
   quantumRoomFingerprint,
   quantumStateFingerprint,
 } from '../lib/onlineTypes'
-import type { GameConfig, Language, PieceColor, QMoveMode, QMoveRecord, QState } from '../lib/types'
+import type { GameConfig, Language, PieceColor, QMoveMode, QState } from '../lib/types'
 
 interface QuantumGameScreenProps {
   config: GameConfig
@@ -36,66 +36,6 @@ interface QuantumGameScreenProps {
   settings: AppSettings
   onOpenSettings: () => void
   onSettingsChange: (partial: Partial<AppSettings>) => void
-}
-
-function QuantumCoach({
-  language,
-  history,
-  selected,
-  firstQuantumTarget,
-  canUndo,
-  isOnline,
-}: {
-  language: Language
-  history: QMoveRecord[]
-  selected: boolean
-  firstQuantumTarget: boolean
-  canUndo: boolean
-  isOnline: boolean
-}) {
-  const t = ui(language)
-  const hasQuantum = history.some((m) => m.moveType === 'quantum')
-  const hasMerge = history.some((m) => m.moveType === 'merge')
-  const hasMeasure = history.some((m) => !!m.measurement)
-  const hasTunnel = history.some((m) => m.description.toLowerCase().includes('túnel') || m.description.toLowerCase().includes('tunel'))
-  const steps = [
-    { done: selected || history.length > 0, label: t.quantumCoachSelect },
-    { done: firstQuantumTarget || hasQuantum, label: t.quantumCoachSplit },
-    { done: hasMerge, label: t.quantumCoachMerge },
-    { done: hasMeasure, label: t.quantumCoachMeasure },
-    { done: hasTunnel, label: t.quantumCoachTunnel },
-  ]
-
-  return (
-    <section className="mt-5 rounded border border-indigo-500/15 bg-indigo-500/[0.04] p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-ui-xs font-semibold uppercase tracking-[0.15em] text-indigo-300">
-          {t.quantumCoachTitle}
-        </p>
-        <span className={`h-1.5 w-1.5 rounded-full ${canUndo ? 'bg-emerald-400' : 'bg-indigo-400/60'}`} />
-      </div>
-      <div className="mt-3 space-y-2">
-        {steps.map((step, index) => (
-          <div key={step.label} className="flex items-start gap-2 text-ui-xs">
-            <span
-              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border text-[9px] ${
-                step.done
-                  ? 'border-indigo-300/40 bg-indigo-400/20 text-indigo-200'
-                  : 'border-surface-4 text-neutral-600'
-              }`}
-              aria-hidden
-            >
-              {step.done ? '✓' : index + 1}
-            </span>
-            <span className={step.done ? 'text-neutral-300' : 'text-neutral-600'}>{step.label}</span>
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-ui-xs text-neutral-600">
-        {isOnline ? t.quantumUndoOnlineDisabled : t.quantumUndoReady}
-      </p>
-    </section>
-  )
 }
 
 export default function QuantumGameScreen({
@@ -168,7 +108,6 @@ export default function QuantumGameScreen({
   }, [config.opponentMode, game, onlineSync])
   const reduceMotion = useReducedMotion()
   const [boardReady, setBoardReady] = useState(false)
-  const [mobileModesOpen, setMobileModesOpen] = useState(false)
   const [mobileStatsOpen, setMobileStatsOpen] = useState(false)
 
   const pending = onlineSync.pendingMeasurement
@@ -359,16 +298,15 @@ export default function QuantumGameScreen({
         key={mode}
         type="button"
         data-testid={`quantum-mode-${mode}`}
-        onClick={() => {
-          game.chooseMoveMode(mode)
-          setMobileModesOpen(false)
-        }}
+        aria-pressed={active}
+        aria-label={`${info.label}: ${info.desc}`}
+        onClick={() => game.chooseMoveMode(mode)}
         disabled={!enabled || game.gameOver}
-        className={`${compact ? 'min-w-[96px] shrink-0' : 'w-full'} rounded border px-3.5 py-3 text-left text-ui-sm transition-colors
+        className={`${compact ? 'min-h-[36px] min-w-0 flex-1 px-2 py-2 text-center' : 'w-full px-3.5 py-3 text-left'} rounded border text-ui-sm transition-colors
           ${active ? modeColor(mode, true) : enabled && !game.gameOver ? modeColor(mode, false) : 'cursor-not-allowed border-surface-4 bg-surface-1 text-neutral-700'}`}
       >
-        <span className="mr-2 text-sm">{info.icon}</span>
-        <span className="font-semibold">{info.label}</span>
+        <span className={compact ? 'block text-sm' : 'mr-2 text-sm'}>{info.icon}</span>
+        <span className={`font-semibold ${compact ? 'mt-0.5 block truncate text-[10px] leading-tight' : ''}`}>{info.label}</span>
         {!compact && <span className="mt-0.5 block text-ui-sm text-neutral-500">{info.desc}</span>}
       </button>
     )
@@ -509,14 +447,6 @@ export default function QuantumGameScreen({
             />
             <span>{game.status.text}</span>
           </div>
-          <QuantumCoach
-            language={language}
-            history={game.history}
-            selected={!!game.selectedPiece}
-            firstQuantumTarget={!!game.firstQuantumTarget}
-            canUndo={game.canUndo}
-            isOnline={isOnline}
-          />
         </motion.div>
 
         <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:w-auto lg:flex-none lg:px-6" {...boardMotion}>
@@ -547,52 +477,25 @@ export default function QuantumGameScreen({
 
           <PlayerBar {...bottomBar} />
 
-          <div className="game-quantum-controls shrink-0 py-1 max-lg:w-full lg:hidden" style={{ width: 'var(--board-size)' }}>
-            <div className="game-status-row flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2" aria-live="polite">
-                <div
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                    game.status.type === 'player' ? 'bg-indigo-400'
-                      : game.status.type === 'over' ? 'bg-red-400'
-                      : 'bg-neutral-600'
-                  }`}
-                />
-                <span className="truncate text-ui-xs text-neutral-500">{game.status.text}</span>
+          <div className="game-quantum-controls shrink-0 space-y-2 py-1 max-lg:w-full lg:hidden" style={{ width: 'var(--board-size)' }}>
+            <div>
+              <p className="mb-1.5 text-ui-xs font-semibold uppercase tracking-[0.15em] text-neutral-500">
+                {t.moveTypes}
+              </p>
+              <div className="flex gap-1.5" role="radiogroup" aria-label={t.moveTypes}>
+                {modeButtons.map((mode) => renderModeButton(mode, true))}
               </div>
-              {!game.gameOver && (
-                <button
-                  type="button"
-                  onClick={() => setMobileModesOpen(true)}
-                  className="min-h-[36px] shrink-0 rounded border border-surface-4 px-2.5 text-ui-xs font-semibold text-indigo-300"
-                >
-                  {modeLabels[game.moveMode].icon} {modeLabels[game.moveMode].label}
-                </button>
-              )}
             </div>
-
-            {mobileModesOpen && !game.gameOver && (
-              <>
-              <button
-                type="button"
-                className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-                aria-label={t.cancel}
-                onClick={() => setMobileModesOpen(false)}
-              />
+            <div className="game-status-row flex min-w-0 items-center gap-2" aria-live="polite">
               <div
-                className="fixed inset-x-0 bottom-0 z-50 rounded-t-xl border border-surface-4 bg-surface-1 p-4 shadow-2xl lg:hidden"
-                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
-                role="dialog"
-                aria-label={t.moveTypes}
-              >
-                <p className="mb-3 text-ui-xs font-semibold uppercase tracking-[0.15em] text-neutral-500">
-                  {t.moveTypes}
-                </p>
-                <div className="space-y-2">
-                  {modeButtons.map((mode) => renderModeButton(mode))}
-                </div>
-              </div>
-              </>
-            )}
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  game.status.type === 'player' ? 'bg-indigo-400'
+                    : game.status.type === 'over' ? 'bg-red-400'
+                    : 'bg-neutral-600'
+                }`}
+              />
+              <span className="truncate text-ui-xs text-neutral-500">{game.status.text}</span>
+            </div>
           </div>
 
           {hasCastleButtons && (
