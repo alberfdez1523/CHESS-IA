@@ -13,6 +13,7 @@ import OnlineSessionEndedModal from './OnlineSessionEndedModal'
 import { OnlineBetaBadge } from './OnlineBetaNotice'
 import GameViewportShell from './GameViewportShell'
 import GameMobileStatsSheet from './GameMobileStatsSheet'
+import GameIcon from './GameIcon'
 import { useChessGame } from '../hooks/useChessGame'
 import { useOnlineGameSync } from '../hooks/useOnlineGameSync'
 import { useSoundFX } from '../hooks/useSoundFX'
@@ -199,6 +200,28 @@ export default function GameScreen({
       ? `${t.onlineBadge}${config.online?.code ? ` · ${config.online.code}` : ''}`
       : t.classic2P
 
+  const onlineStatusText = onlineSync.isPushing
+    ? t.onlineSyncing
+    : onlineSync.onlineStatus === 'connecting'
+      ? t.onlineStatusConnecting
+      : onlineSync.onlineStatus === 'waiting'
+        ? t.onlineStatusWaiting
+        : onlineSync.onlineStatus === 'reconnecting'
+          ? t.onlineStatusReconnecting
+          : onlineSync.onlineStatus === 'conflict'
+            ? t.onlineStatusConflict
+            : onlineSync.onlineStatus === 'ended'
+              ? t.onlineStatusEnded
+              : t.onlineStatusSynced
+
+  const onlineStatusClass = onlineSync.isPushing
+    ? 'border-amber-400/30 text-amber-300'
+    : onlineSync.onlineStatus === 'synced'
+      ? 'border-emerald-400/30 text-emerald-300'
+      : onlineSync.onlineStatus === 'conflict' || onlineSync.onlineStatus === 'ended'
+        ? 'border-red-400/30 text-red-300'
+        : 'border-surface-4 text-neutral-500'
+
   const boardMotion = reduceMotion
     ? { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } }
     : { initial: { opacity: 0, scale: 0.97 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.4, delay: 0.1 } }
@@ -213,25 +236,15 @@ export default function GameScreen({
   const gameHeader = (
     <header className="flex items-center justify-between border-b border-surface-4 px-3 py-2 max-lg:py-2 lg:px-6 lg:py-3">
         <div className="flex items-center gap-3">
-          <span className="font-serif text-lg text-accent">♛</span>
+          <GameIcon name="queen" className="h-5 w-5 text-accent" />
           <span className="hidden font-serif text-sm text-white sm:inline">GdD</span>
           <span className="flex flex-wrap items-center gap-2 text-ui-xs font-medium uppercase tracking-wider text-neutral-500">
             {modeBadge}
             {isOnline && (
               <span
-                className={`rounded-sm border px-1.5 py-0.5 ${
-                  onlineSync.isPushing
-                    ? 'border-amber-400/30 text-amber-300'
-                    : onlineSync.opponentConnected
-                      ? 'border-emerald-400/30 text-emerald-300'
-                      : 'border-surface-4 text-neutral-500'
-                }`}
+                className={`rounded-sm border px-1.5 py-0.5 ${onlineStatusClass}`}
               >
-                {onlineSync.isPushing
-                  ? t.onlineSyncing
-                  : onlineSync.opponentConnected
-                    ? t.onlineConnected
-                    : t.onlineReconnecting}
+                {onlineStatusText}
               </span>
             )}
             {isOnline && <OnlineBetaBadge language={language} />}
@@ -241,10 +254,10 @@ export default function GameScreen({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="min-h-[44px] rounded px-3 py-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:bg-surface-2 hover:text-white"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded px-3 py-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:bg-surface-2 hover:text-white"
             aria-label={t.settings}
           >
-            ⚙ {t.settings}
+            <GameIcon name="settings" /> {t.settings}
           </button>
           <button
             type="button"
@@ -305,7 +318,7 @@ export default function GameScreen({
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-surface-4 text-ui-sm text-neutral-400 transition-colors hover:bg-surface-2 hover:text-white"
             aria-label={language === 'es' ? 'Evaluación e historial' : 'Eval and history'}
           >
-            📊
+            <GameIcon name="chart" />
           </button>
           <div className="flex min-w-0 flex-1">
             <ActionButtons
@@ -324,12 +337,12 @@ export default function GameScreen({
               ${music.playing ? 'bg-accent/15 text-accent' : 'text-neutral-600 hover:text-neutral-400'}`}
             aria-label={music.playing ? t.pause : t.play}
           >
-            {music.playing ? '⏸' : '♫'}
+            <GameIcon name={music.playing ? 'pause' : 'music'} />
           </button>
         </div>
       )}
     >
-        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:flex-none lg:px-0" {...boardMotion}>
+        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:w-auto lg:flex-none lg:px-0" {...boardMotion}>
           <PlayerBar {...topBar} />
 
           {!game.boardReady ? (

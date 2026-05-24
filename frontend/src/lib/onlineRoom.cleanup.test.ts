@@ -4,11 +4,16 @@ const rpcMock = vi.fn()
 const isConfiguredMock = vi.fn(() => true)
 
 vi.mock('./supabase', () => ({
-  isSupabaseConfigured: () => isConfiguredMock(),
   getSupabase: () => ({
     rpc: rpcMock,
   }),
   ensureOnlineAuth: vi.fn(),
+}))
+
+vi.mock('./onlineConfig', () => ({
+  isSupabaseConfigured: () => isConfiguredMock(),
+  getInviteUrl: (code: string) => `/?room=${code}`,
+  parseRoomCodeFromUrl: () => null,
 }))
 
 import { cleanupStaleRooms } from './onlineRoom'

@@ -2,16 +2,17 @@ import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import StartMenu from './components/StartMenu'
-import OnlineLobby from './components/OnlineLobby'
-import { abandonOnlineRoom, cleanupStaleRooms, isOnlineAvailable, parseRoomCodeFromUrl } from './lib/onlineRoom'
 import {
   clearOnlineSession,
   installOnlineUnloadHandlers,
   registerOnlineSession,
+  abandonSessionBestEffort,
 } from './lib/onlineSessionLifecycle'
 import SettingsPanel from './components/SettingsPanel'
 import BoardSkeleton from './components/BoardSkeleton'
+import { isSupabaseConfigured as isOnlineAvailable, parseRoomCodeFromUrl } from './lib/onlineConfig'
 const RulesScreen = lazy(() => import('./components/RulesScreen'))
+const OnlineLobby = lazy(() => import('./components/OnlineLobby'))
 const GameScreen = lazy(() => import('./components/GameScreen'))
 const QuantumGameScreen = lazy(() => import('./components/QuantumGameScreen'))
 import type { GameConfig, PlayerColorChoice } from './lib/types'
@@ -64,7 +65,7 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== 'menu' || !isOnlineAvailable()) return
-    void cleanupStaleRooms(15)
+    void import('./lib/onlineRoom').then(({ cleanupStaleRooms }) => cleanupStaleRooms(15))
   }, [screen])
 
   useEffect(() => {
@@ -87,6 +88,10 @@ export default function App() {
       : ''
     document.title = `Gambito de Dama Cuántico${modeLabel}`
   }, [gameConfig, language])
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [screen])
 
   const handleSettingsChange = useCallback(
     (partial: Partial<AppSettings>, meta?: SettingsChangeMeta) => {
@@ -140,11 +145,7 @@ export default function App() {
     const cfg = gameConfigRef.current
     const roomId = cfg?.online?.roomId ?? lobbyRoomIdRef.current
     if (roomId) {
-      try {
-        await abandonOnlineRoom(roomId)
-      } catch (e) {
-        console.error('[online] abandon on menu failed:', e)
-      }
+      await abandonSessionBestEffort(roomId)
       lobbyRoomIdRef.current = null
       clearOnlineSession()
     }
@@ -197,21 +198,30 @@ export default function App() {
             exit={{ opacity: 0 }}
             transition={transition}
           >
-            <OnlineLobby
-              language={language}
-              initialGameMode={lobbyPrefs.gameMode}
-              initialColor={lobbyPrefs.color}
-              useTimer={lobbyPrefs.useTimer}
-              timerMinutes={lobbyPrefs.timerMinutes}
-              difficulty={lobbyPrefs.difficulty}
-              initialJoinCode={parseRoomCodeFromUrl()}
-              onBack={() => void handleNewGame()}
-              onRoomActive={(roomId) => {
-                lobbyRoomIdRef.current = roomId
-                registerOnlineSession(roomId)
-              }}
-              onStart={handlePlay}
-            />
+            <Suspense
+              fallback={
+                <ScreenLoadingFallback
+                  language={language}
+                  label={language === 'es' ? 'Abriendo sala...' : 'Opening room...'}
+                />
+              }
+            >
+              <OnlineLobby
+                language={language}
+                initialGameMode={lobbyPrefs.gameMode}
+                initialColor={lobbyPrefs.color}
+                useTimer={lobbyPrefs.useTimer}
+                timerMinutes={lobbyPrefs.timerMinutes}
+                difficulty={lobbyPrefs.difficulty}
+                initialJoinCode={parseRoomCodeFromUrl()}
+                onBack={() => void handleNewGame()}
+                onRoomActive={(roomId) => {
+                  lobbyRoomIdRef.current = roomId
+                  registerOnlineSession(roomId)
+                }}
+                onStart={handlePlay}
+              />
+            </Suspense>
           </motion.div>
         ) : screen === 'rules' ? (
           <motion.div

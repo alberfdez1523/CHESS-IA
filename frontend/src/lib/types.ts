@@ -121,6 +121,13 @@ export interface QMoveRecord {
   description: string
 }
 
+export interface QuantumUndoEntry {
+  state: QState
+  lastMove: { from: string; to: string } | null
+  moveMode: QMoveMode
+  gameOverInfo: GameOverInfo | null
+}
+
 export interface QGameOver {
   winner: PieceColor
   reason: string

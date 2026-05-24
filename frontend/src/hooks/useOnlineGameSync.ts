@@ -5,6 +5,7 @@ import type {
   ClassicRoomState,
   OnlineRoomRow,
   QPendingMeasurement,
+  OnlineStatus,
   QuantumRoomState,
 } from '../lib/onlineTypes'
 import { quantumRoomFingerprint, quantumStateFingerprint } from '../lib/onlineTypes'
@@ -204,6 +205,20 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
       )
     : false
 
+  const onlineStatus: OnlineStatus = !isOnline
+    ? 'synced'
+    : opponentLeft
+      ? 'ended'
+      : syncError
+        ? 'conflict'
+        : !room
+          ? 'connecting'
+          : room.status === 'waiting' || !room.white_player_id || !room.black_player_id
+            ? 'waiting'
+            : opponentOnline === false
+              ? 'reconnecting'
+              : 'synced'
+
   const pushClassicState = useCallback(
     async (
       fen: string,
@@ -390,6 +405,7 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     opponentConnected,
     opponentOnline,
     opponentLeft,
+    onlineStatus,
     isPushing,
     syncError,
     pushClassicState,

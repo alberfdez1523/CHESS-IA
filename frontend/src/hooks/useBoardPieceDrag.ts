@@ -102,8 +102,6 @@ export function useBoardPieceDrag(
   const beginPieceDrag = useCallback(
     (sq: string, e: React.PointerEvent) => {
       if (e.button !== 0) return
-      e.preventDefault()
-      e.stopPropagation()
 
       const board = boardRef.current
       const ghost = ghostRef.current

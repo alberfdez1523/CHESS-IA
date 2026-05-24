@@ -7,6 +7,7 @@ export interface QPendingMeasurement {
 }
 
 export type RoomStatus = 'waiting' | 'playing' | 'finished'
+export type OnlineStatus = 'connecting' | 'waiting' | 'synced' | 'reconnecting' | 'conflict' | 'ended'
 
 export interface ClassicRoomState {
   type: 'classic'

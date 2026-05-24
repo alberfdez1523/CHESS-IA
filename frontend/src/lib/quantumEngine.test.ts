@@ -127,4 +127,80 @@ describe('QuantumChessEngine', () => {
     expect(engine.getLegalMoves('w_k', 'e1')).toEqual([])
     expect(() => engine.doClassicalMove('w_k', 'e1', 'e2')).toThrow()
   })
+
+  it('merges a split knight back into one state', () => {
+    const engine = new QuantumChessEngine()
+    engine.state.turn = 'w'
+    engine.state.pieces['w_n_b'].positions = { b1: 1 }
+
+    engine.doQuantumMove('w_n_b', 'b1', 'a3', 'c3')
+    engine.state.turn = 'w'
+    engine.doMergeFrom('w_n_b', 'a3', 'b5')
+
+    expect(engine.getPiece('w_n_b')?.positions).toEqual({ b5: 1 })
+    expect(engine.state.history[engine.state.history.length - 1]?.moveType).toBe('merge')
+  })
+
+  it('creates entanglement for quantum castling', () => {
+    const engine = new QuantumChessEngine()
+    engine.state.turn = 'w'
+
+    engine.doQuantumCastle('w', 'k')
+
+    expect(engine.getPiece('w_k')?.positions).toEqual({ e1: 0.5, g1: 0.5 })
+    expect(engine.getPiece('w_r_h')?.positions).toEqual({ h1: 0.5, f1: 0.5 })
+    expect(engine.state.entanglements.some((e) => e.type === 'castle')).toBe(true)
+    expect(engine.state.castling.w.k).toBe(false)
+  })
+
+  it('records controlled measurement when quantum attacker is not present', () => {
+    const engine = new QuantumChessEngine()
+    for (const p of Object.values(engine.state.pieces)) p.alive = false
+
+    engine.state.pieces['w_q'].alive = true
+    engine.state.pieces['w_q'].positions = { e4: 0.25, d4: 0.75 }
+    engine.state.pieces['b_r_h'].alive = true
+    engine.state.pieces['b_r_h'].positions = { e5: 1 }
+    engine.state.turn = 'w'
+
+    const originalRandom = Math.random
+    Math.random = () => 0.9
+    try {
+      const record = engine.doClassicalMove('w_q', 'e4', 'e5')
+      expect(record.measurement?.target).toBe('attacker')
+      expect(record.measurement?.result).toBe('dead')
+      expect(engine.getPiece('w_q')?.positions).toEqual({ d4: 1 })
+      expect(engine.getPiece('b_r_h')?.alive).toBe(true)
+    } finally {
+      Math.random = originalRandom
+    }
+  })
+
+  it('creates tunnel entanglement when sliding through a quantum state', () => {
+    const engine = new QuantumChessEngine()
+    for (const p of Object.values(engine.state.pieces)) p.alive = false
+
+    engine.state.pieces['w_r_a'].alive = true
+    engine.state.pieces['w_r_a'].positions = { a1: 1 }
+    engine.state.pieces['w_n_b'].alive = true
+    engine.state.pieces['w_n_b'].positions = { c1: 0.5, h3: 0.5 }
+    engine.state.turn = 'w'
+
+    engine.doClassicalMove('w_r_a', 'a1', 'e1')
+
+    expect(engine.state.entanglements.some((e) => e.type === 'tunnel')).toBe(true)
+    expect(engine.getPiece('w_r_a')?.positions).toEqual({ e1: 1 })
+  })
+
+  it('restores exported state snapshots', () => {
+    const engine = new QuantumChessEngine()
+    const snapshot = engine.exportState()
+
+    engine.doClassicalMove('w_p_e', 'e2', 'e4')
+    expect(engine.getPiece('w_p_e')?.positions).toEqual({ e4: 1 })
+
+    engine.loadState(snapshot)
+    expect(engine.getPiece('w_p_e')?.positions).toEqual({ e2: 1 })
+    expect(engine.state.turn).toBe('w')
+  })
 })

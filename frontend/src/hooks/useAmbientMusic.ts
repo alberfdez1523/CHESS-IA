@@ -6,17 +6,23 @@ export function useAmbientMusic(initialVolume = 0.3) {
   const [playing, setPlaying] = useState(false)
   const [volume, setVolumeState] = useState(initialVolume)
 
-  useEffect(() => {
-    const audio = new Audio('/music/lofi.mp3')
+  const ensureAudio = useCallback(() => {
+    if (audioRef.current) return audioRef.current
+    const audio = new Audio('/music/lofi.wav')
     audio.loop = true
-    audio.volume = initialVolume
+    audio.preload = 'none'
+    audio.volume = volume
     audioRef.current = audio
+    return audio
+  }, [volume])
 
+  useEffect(() => {
     return () => {
-      audio.pause()
-      audio.src = ''
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -24,7 +30,7 @@ export function useAmbientMusic(initialVolume = 0.3) {
   }, [volume])
 
   const toggle = useCallback(() => {
-    const audio = audioRef.current
+    const audio = ensureAudio()
     if (!audio) return
     if (playing) {
       audio.pause()
@@ -32,7 +38,7 @@ export function useAmbientMusic(initialVolume = 0.3) {
       audio.play().catch(() => {})
     }
     setPlaying(!playing)
-  }, [playing])
+  }, [ensureAudio, playing])
 
   const setVolume = useCallback((v: number) => {
     setVolumeState(v)

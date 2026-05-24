@@ -10,7 +10,7 @@ Ejecución local:
     python server.py
 """
 
-import os, pathlib, json, sys, threading, asyncio
+import os, pathlib, json, sys, threading, asyncio, time
 from concurrent.futures import CancelledError
 from contextlib import asynccontextmanager
 from functools import partial
@@ -113,6 +113,10 @@ DifficultyLevel = Literal["beginner", "easy", "medium", "hard", "master"]
 # Mantener una sola instancia reduce latencia y evita abrir procesos por request.
 engine: chess.engine.SimpleEngine | None = None
 engine_lock = threading.Lock()
+eval_cache_lock = threading.Lock()
+eval_cache: dict[tuple[str, int], tuple[float, float, int | None]] = {}
+EVAL_CACHE_TTL_SECONDS = 300
+EVAL_CACHE_MAX_ITEMS = 512
 
 
 def _score_to_eval(score: chess.engine.PovScore) -> tuple[float, int | None]:
@@ -474,16 +478,29 @@ def _get_evaluation_sync(req: EvalRequest) -> EvalResponse:
     except ValueError:
         raise HTTPException(status_code=400, detail={"error": "Invalid FEN", "code": "BAD_REQUEST"})
 
+    depth = min(req.depth, 18)
+    cache_key = (board.fen(), depth)
+    now = time.monotonic()
+    with eval_cache_lock:
+        cached = eval_cache.get(cache_key)
+        if cached and now - cached[0] <= EVAL_CACHE_TTL_SECONDS:
+            return EvalResponse(evaluation=cached[1], mate=cached[2])
+
     info = _with_engine_lock(
         lambda active_engine: active_engine.analyse(
             board,
-            chess.engine.Limit(depth=min(req.depth, 18), time=0.3),
+            chess.engine.Limit(depth=depth, time=0.3),
         )
     )
     if "score" not in info:
         raise HTTPException(status_code=503, detail={"error": "Engine did not return an evaluation", "code": "ENGINE_UNAVAILABLE"})
 
     evaluation, mate = _score_to_eval(info["score"])
+    with eval_cache_lock:
+        eval_cache[cache_key] = (now, evaluation, mate)
+        if len(eval_cache) > EVAL_CACHE_MAX_ITEMS:
+            oldest_key = min(eval_cache, key=lambda key: eval_cache[key][0])
+            eval_cache.pop(oldest_key, None)
     return EvalResponse(evaluation=evaluation, mate=mate)
 
 
@@ -599,8 +616,12 @@ def _quantum_move_sync(req: QuantumMoveRequest):
 
 @app.post("/api/quantum/move")
 async def quantum_move(req: QuantumMoveRequest):
-    """Evalúa todos los tableros clásicos posibles del estado cuántico
-    y devuelve la mejor jugada ponderada por probabilidad."""
+    """Endpoint experimental interno.
+
+    La UI no ofrece IA cuántica: el modo cuántico se mantiene para 2 jugadores
+    local u online. Este endpoint queda disponible para análisis/manual QA sin
+    formar parte del flujo de producto.
+    """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, partial(_quantum_move_sync, req))
 
@@ -608,6 +629,24 @@ async def quantum_move(req: QuantumMoveRequest):
 # ---------------------------------------------------------------------------
 # Frontend estático
 # ---------------------------------------------------------------------------
+class CacheStaticFiles(StaticFiles):
+    def __init__(self, *args, cache_control: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache_control = cache_control
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers.setdefault("Cache-Control", self.cache_control)
+        return response
+
+
+def cached_file_response(path: pathlib.Path, cache_control: str | None = None) -> FileResponse:
+    response = FileResponse(str(path))
+    if cache_control:
+        response.headers.setdefault("Cache-Control", cache_control)
+    return response
+
+
 DIST_DIR = HERE / "frontend" / "dist"
 USE_REACT = DIST_DIR.exists() and (DIST_DIR / "index.html").exists()
 
@@ -666,17 +705,25 @@ def frontend_not_built_response() -> HTMLResponse:
 # Música siempre se sirve desde music/
 _music_dir = HERE / "music"
 if _music_dir.exists():
-    app.mount("/music", StaticFiles(directory=str(_music_dir)), name="music")
+    app.mount(
+        "/music",
+        CacheStaticFiles(directory=str(_music_dir), cache_control="public, max-age=604800"),
+        name="music",
+    )
 
 # Assets del build de Vite (JS/CSS hasheados)
 if USE_REACT and (DIST_DIR / "assets").exists():
-    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+    app.mount(
+        "/assets",
+        CacheStaticFiles(directory=str(DIST_DIR / "assets"), cache_control="public, max-age=31536000, immutable"),
+        name="assets",
+    )
 
 
 @app.get("/")
 def root():
     if USE_REACT:
-        return FileResponse(str(DIST_DIR / "index.html"))
+        return cached_file_response(DIST_DIR / "index.html", "no-cache")
     return frontend_not_built_response()
 
 
@@ -692,7 +739,8 @@ def static_files(filename: str):
     if USE_REACT:
         fp = DIST_DIR / filename
         if fp.is_file():
-            return FileResponse(str(fp))
+            cache_control = "public, max-age=604800" if pathlib.Path(filename).suffix else None
+            return cached_file_response(fp, cache_control)
 
         # Si parece un asset (tiene extensión), no devolver index.html.
         # Evita que CSS/JS faltantes rompan silenciosamente la UI.
@@ -700,7 +748,7 @@ def static_files(filename: str):
         if "." in name:
             raise HTTPException(404)
 
-        return FileResponse(str(DIST_DIR / "index.html"))
+        return cached_file_response(DIST_DIR / "index.html", "no-cache")
 
     name = pathlib.Path(filename).name
     if "." in name:

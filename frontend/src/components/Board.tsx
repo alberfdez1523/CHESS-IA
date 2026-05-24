@@ -170,6 +170,7 @@ export default function Board({
             piece !== null &&
             piece.color === playerColor &&
             piece.color === turnColor
+          const dragPiece = canDrag && piece ? { type: piece.type, color: piece.color } : null
 
           const showFile = row === 7
           const showRank = col === 0
@@ -197,13 +198,14 @@ export default function Board({
                 ${isLastTo ? 'sq-last-to' : ''}
                 ${isCheck ? 'sq-check' : ''}
               `}
+              onPointerDown={dragPiece ? (e) => handlePiecePointerDown(square, dragPiece, e) : undefined}
               onClick={() => handleSquareClick(square)}
             >
               <AnimatePresence initial={false} mode="popLayout">
                 {piece && (
                   <motion.div
                     key={`${square}-${piece.color}${piece.type}`}
-                    className={`absolute inset-0 flex items-center justify-center ${canDrag ? 'pointer-events-auto touch-none' : 'pointer-events-none'}`}
+                    className="pointer-events-none absolute inset-0 flex items-center justify-center"
                     initial={false}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={undefined}
@@ -211,11 +213,6 @@ export default function Board({
                   >
                     <motion.div
                       className={canDrag ? 'chess-piece-draggable flex h-full w-full items-center justify-center' : 'flex h-full w-full items-center justify-center'}
-                      onPointerDown={
-                        canDrag
-                          ? (e) => handlePiecePointerDown(square, { type: piece.type, color: piece.color }, e)
-                          : undefined
-                      }
                     >
                       <Piece type={piece.type} color={piece.color} animate={false} />
                     </motion.div>

@@ -1,7 +1,8 @@
 import { Chess } from 'chess.js'
 import type { GameConfig, GameMode, PieceColor } from './types'
 import type { ClassicRoomState, OnlineRoomRow, QuantumRoomState, RoomGameState } from './onlineTypes'
-import { getSupabase, isSupabaseConfigured } from './supabase'
+import { getSupabase } from './supabase'
+import { getInviteUrl, isSupabaseConfigured, parseRoomCodeFromUrl } from './onlineConfig'
 import { QuantumChessEngine } from './quantumEngine'
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -428,18 +429,8 @@ export function subscribeToRoomPresence(
   }
 }
 
-export function getInviteUrl(code: string): string {
-  const base = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
-  return `${base}?room=${encodeURIComponent(code)}`
-}
-
-export function parseRoomCodeFromUrl(): string | null {
-  if (typeof window === 'undefined') return null
-  const params = new URLSearchParams(window.location.search)
-  const room = params.get('room')
-  return room ? room.trim().toUpperCase() : null
-}
-
 export function isOnlineAvailable(): boolean {
   return isSupabaseConfigured()
 }
+
+export { getInviteUrl, parseRoomCodeFromUrl }

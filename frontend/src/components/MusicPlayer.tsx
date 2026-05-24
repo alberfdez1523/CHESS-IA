@@ -1,5 +1,6 @@
 import type { Language } from '../lib/types'
 import { ui } from '../lib/i18n'
+import GameIcon from './GameIcon'
 
 interface MusicPlayerProps {
   playing: boolean
@@ -16,11 +17,13 @@ export default function MusicPlayer({ playing, volume, onToggle, onVolumeChange,
       <button
         type="button"
         onClick={onToggle}
-        className={`min-h-[44px] min-w-[44px] text-sm transition-colors ${playing ? 'text-accent' : 'text-neutral-600 hover:text-neutral-400'}`}
+        className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-sm transition-colors ${
+          playing ? 'text-accent' : 'text-neutral-600 hover:text-neutral-400'
+        }`}
         title={playing ? t.pause : t.play}
         aria-label={playing ? t.pause : t.play}
       >
-        {playing ? '⏸' : '♫'}
+        <GameIcon name={playing ? 'pause' : 'music'} />
       </button>
       <input
         type="range"

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { Language } from '../lib/types'
 import { ui } from '../lib/i18n'
 import { useModalA11y } from '../hooks/useModalA11y'
+import GameIcon from './GameIcon'
 
 interface ActionButtonsProps {
   onUndo: () => void
@@ -46,25 +47,25 @@ export default function ActionButtons({
             type="button"
             onClick={onUndo}
             disabled={!canUndo || gameOver}
-            className="min-h-[44px] text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white disabled:cursor-not-allowed disabled:text-neutral-700"
+            className="inline-flex min-h-[44px] items-center gap-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white disabled:cursor-not-allowed disabled:text-neutral-700"
           >
-            ↩ {t.undo}
+            <GameIcon name="undo" /> {t.undo}
           </button>
         )}
         <button
           type="button"
           onClick={onFlip}
-          className="min-h-[44px] text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white"
         >
-          ⇅ {t.flip}
+          <GameIcon name="flip" /> {t.flip}
         </button>
         <button
           type="button"
           onClick={handleResignClick}
           disabled={gameOver}
-          className="min-h-[44px] text-ui-sm font-medium text-red-400/60 transition-colors hover:text-red-400 disabled:cursor-not-allowed disabled:text-neutral-700"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-ui-sm font-medium text-red-400/60 transition-colors hover:text-red-400 disabled:cursor-not-allowed disabled:text-neutral-700"
         >
-          ⚑ {t.resign}
+          <GameIcon name="flag" /> {t.resign}
         </button>
       </div>
 

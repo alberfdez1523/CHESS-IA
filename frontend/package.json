@@ -8,6 +8,8 @@
     "build": "tsc -b && node ./node_modules/vite/bin/vite.js build",
     "preview": "vite preview",
     "test": "vitest run",
+    "e2e": "playwright test",
+    "e2e:visual": "playwright test e2e/game.spec.ts",
     "check:smoke": "node --check ../scripts/multiplayer-smoke.mjs",
     "smoke:multiplayer": "node ../scripts/multiplayer-smoke.mjs"
   },
@@ -19,6 +21,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

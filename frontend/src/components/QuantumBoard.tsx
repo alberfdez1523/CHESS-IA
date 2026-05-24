@@ -152,6 +152,7 @@ export default function QuantumBoard({
     <div
       ref={boardRef}
       className="board-root relative select-none overflow-hidden rounded-sm shadow-board ring-1 ring-white/[0.06]"
+      data-qmode={moveMode}
       style={{ width: 'var(--board-size)', height: 'var(--board-size)' }}
     >
       <div ref={liveRef} className="sr-only" aria-live="polite" aria-atomic="true" />
@@ -175,6 +176,7 @@ export default function QuantumBoard({
           const hasCapturableEnemy = isLegal && cells.some((c) => c.color !== playerColor)
           const myCell = cells.find((c) => c.color === playerColor)
           const canDrag = !isThinking && !!myCell && playerColor === turnColor && moveMode === 'classical'
+          const dragPiece = canDrag && myCell ? { type: myCell.type, color: myCell.color } : null
 
           const showFile = row === 7
           const showRank = col === 0
@@ -201,8 +203,12 @@ export default function QuantumBoard({
                 ${isLastFrom ? 'sq-last-from' : ''}
                 ${isLastTo ? 'sq-last-to' : ''}
                 ${isFirstQt ? 'sq-quantum-first' : ''}
+                ${isLegal && moveMode === 'quantum' ? 'sq-quantum-target' : ''}
+                ${isMergeTarget ? 'sq-merge-target' : ''}
+                ${hasCapturableEnemy ? 'sq-quantum-capture' : ''}
                 ${isCheck ? 'sq-check' : ''}
               `}
+              onPointerDown={dragPiece ? (e) => handlePiecePointerDown(square, dragPiece, e) : undefined}
               onClick={() => handleSquareClick(square)}
             >
               <AnimatePresence initial={false} mode="popLayout">
@@ -214,7 +220,7 @@ export default function QuantumBoard({
                   return (
                     <motion.div
                       key={`${square}-${cell.pieceId}`}
-                      className={`absolute inset-0 flex items-center justify-center ${isQuantum ? 'quantum-piece-glow' : ''} ${canDrag && cell.pieceId === myCell?.pieceId ? 'pointer-events-auto touch-none' : 'pointer-events-none'}`}
+                      className={`pointer-events-none absolute inset-0 flex items-center justify-center ${isQuantum ? 'quantum-piece-glow' : ''}`}
                       style={{
                         opacity: Math.max(0.2, opacity),
                         zIndex: zIdx,
@@ -228,9 +234,6 @@ export default function QuantumBoard({
                       {canDrag && cell.pieceId === myCell?.pieceId ? (
                         <motion.div
                           className="chess-piece-draggable flex h-full w-full items-center justify-center"
-                          onPointerDown={(e) =>
-                            handlePiecePointerDown(square, { type: cell.type, color: cell.color }, e)
-                          }
                         >
                           <Piece type={cell.type} color={cell.color} animate={false} />
                         </motion.div>
@@ -255,6 +258,16 @@ export default function QuantumBoard({
               )}
               {isLegal && moveMode === 'quantum' && !isFirstQt && (
                 <motion.div className="quantum-dot pointer-events-none" initial={reduceMotion ? false : { scale: 0 }} animate={{ scale: 1 }} />
+              )}
+              {isFirstQt && (
+                <span className="quantum-target-index" aria-hidden>
+                  1
+                </span>
+              )}
+              {firstQuantumTarget && isLegal && moveMode === 'quantum' && !isFirstQt && (
+                <span className="quantum-target-index" aria-hidden>
+                  2
+                </span>
               )}
               {isMergeTarget && (
                 <motion.div className="merge-dot pointer-events-none" initial={reduceMotion ? false : { scale: 0 }} animate={{ scale: 1 }} />

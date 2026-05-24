@@ -14,6 +14,7 @@ import { OnlineBetaBadge } from './OnlineBetaNotice'
 import QuantumMeasurementRoulette from './QuantumMeasurementRoulette'
 import GameViewportShell from './GameViewportShell'
 import GameMobileStatsSheet from './GameMobileStatsSheet'
+import GameIcon from './GameIcon'
 import { useQuantumChess } from '../hooks/useQuantumChess'
 import { useOnlineGameSync } from '../hooks/useOnlineGameSync'
 import { useSoundFX } from '../hooks/useSoundFX'
@@ -26,7 +27,7 @@ import {
   quantumRoomFingerprint,
   quantumStateFingerprint,
 } from '../lib/onlineTypes'
-import type { GameConfig, Language, PieceColor, QMoveMode, QState } from '../lib/types'
+import type { GameConfig, Language, PieceColor, QMoveMode, QMoveRecord, QState } from '../lib/types'
 
 interface QuantumGameScreenProps {
   config: GameConfig
@@ -35,6 +36,66 @@ interface QuantumGameScreenProps {
   settings: AppSettings
   onOpenSettings: () => void
   onSettingsChange: (partial: Partial<AppSettings>) => void
+}
+
+function QuantumCoach({
+  language,
+  history,
+  selected,
+  firstQuantumTarget,
+  canUndo,
+  isOnline,
+}: {
+  language: Language
+  history: QMoveRecord[]
+  selected: boolean
+  firstQuantumTarget: boolean
+  canUndo: boolean
+  isOnline: boolean
+}) {
+  const t = ui(language)
+  const hasQuantum = history.some((m) => m.moveType === 'quantum')
+  const hasMerge = history.some((m) => m.moveType === 'merge')
+  const hasMeasure = history.some((m) => !!m.measurement)
+  const hasTunnel = history.some((m) => m.description.toLowerCase().includes('túnel') || m.description.toLowerCase().includes('tunel'))
+  const steps = [
+    { done: selected || history.length > 0, label: t.quantumCoachSelect },
+    { done: firstQuantumTarget || hasQuantum, label: t.quantumCoachSplit },
+    { done: hasMerge, label: t.quantumCoachMerge },
+    { done: hasMeasure, label: t.quantumCoachMeasure },
+    { done: hasTunnel, label: t.quantumCoachTunnel },
+  ]
+
+  return (
+    <section className="mt-5 rounded border border-indigo-500/15 bg-indigo-500/[0.04] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-ui-xs font-semibold uppercase tracking-[0.15em] text-indigo-300">
+          {t.quantumCoachTitle}
+        </p>
+        <span className={`h-1.5 w-1.5 rounded-full ${canUndo ? 'bg-emerald-400' : 'bg-indigo-400/60'}`} />
+      </div>
+      <div className="mt-3 space-y-2">
+        {steps.map((step, index) => (
+          <div key={step.label} className="flex items-start gap-2 text-ui-xs">
+            <span
+              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border text-[9px] ${
+                step.done
+                  ? 'border-indigo-300/40 bg-indigo-400/20 text-indigo-200'
+                  : 'border-surface-4 text-neutral-600'
+              }`}
+              aria-hidden
+            >
+              {step.done ? '✓' : index + 1}
+            </span>
+            <span className={step.done ? 'text-neutral-300' : 'text-neutral-600'}>{step.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-ui-xs text-neutral-600">
+        {isOnline ? t.quantumUndoOnlineDisabled : t.quantumUndoReady}
+      </p>
+    </section>
+  )
 }
 
 export default function QuantumGameScreen({
@@ -263,6 +324,28 @@ export default function QuantumGameScreen({
     return 'border-accent/30 bg-accent/10 text-accent'
   }
 
+  const onlineStatusText = onlineSync.isPushing
+    ? t.onlineSyncing
+    : onlineSync.onlineStatus === 'connecting'
+      ? t.onlineStatusConnecting
+      : onlineSync.onlineStatus === 'waiting'
+        ? t.onlineStatusWaiting
+        : onlineSync.onlineStatus === 'reconnecting'
+          ? t.onlineStatusReconnecting
+          : onlineSync.onlineStatus === 'conflict'
+            ? t.onlineStatusConflict
+            : onlineSync.onlineStatus === 'ended'
+              ? t.onlineStatusEnded
+              : t.onlineStatusSynced
+
+  const onlineStatusClass = onlineSync.isPushing
+    ? 'border-amber-400/30 text-amber-300'
+    : onlineSync.onlineStatus === 'synced'
+      ? 'border-emerald-400/30 text-emerald-300'
+      : onlineSync.onlineStatus === 'conflict' || onlineSync.onlineStatus === 'ended'
+        ? 'border-red-400/30 text-red-300'
+        : 'border-surface-4 text-neutral-500'
+
   const boardMotion = reduceMotion
     ? { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } }
     : { initial: { opacity: 0, scale: 0.97 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.4, delay: 0.1 } }
@@ -275,6 +358,7 @@ export default function QuantumGameScreen({
       <button
         key={mode}
         type="button"
+        data-testid={`quantum-mode-${mode}`}
         onClick={() => {
           game.chooseMoveMode(mode)
           setMobileModesOpen(false)
@@ -300,7 +384,7 @@ export default function QuantumGameScreen({
   const gameHeader = (
     <header className="flex items-center justify-between border-b border-surface-4 px-3 py-2 max-lg:py-2 lg:px-6 lg:py-3">
         <div className="flex items-center gap-3">
-          <span className="font-serif text-lg text-indigo-400">⚛</span>
+          <GameIcon name="atom" className="h-5 w-5 text-indigo-400" />
           <span className="hidden font-serif text-sm text-white sm:inline">GdD</span>
           <span className="flex flex-wrap items-center gap-2 text-ui-xs font-medium uppercase tracking-wider text-neutral-500">
             {isOnline
@@ -308,19 +392,9 @@ export default function QuantumGameScreen({
               : t.quantumBadge}
             {isOnline && (
               <span
-                className={`rounded-sm border px-1.5 py-0.5 ${
-                  onlineSync.isPushing
-                    ? 'border-amber-400/30 text-amber-300'
-                    : onlineSync.opponentConnected
-                      ? 'border-emerald-400/30 text-emerald-300'
-                      : 'border-surface-4 text-neutral-500'
-                }`}
+                className={`rounded-sm border px-1.5 py-0.5 ${onlineStatusClass}`}
               >
-                {onlineSync.isPushing
-                  ? t.onlineSyncing
-                  : onlineSync.opponentConnected
-                    ? t.onlineConnected
-                    : t.onlineReconnecting}
+                {onlineStatusText}
               </span>
             )}
             {isOnline && <OnlineBetaBadge language={language} />}
@@ -330,10 +404,10 @@ export default function QuantumGameScreen({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="min-h-[44px] rounded px-3 py-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:bg-surface-2 hover:text-white"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded px-3 py-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:bg-surface-2 hover:text-white"
             aria-label={t.settings}
           >
-            ⚙ {t.settings}
+            <GameIcon name="settings" /> {t.settings}
           </button>
           <button
             type="button"
@@ -387,17 +461,17 @@ export default function QuantumGameScreen({
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-surface-4 text-ui-sm text-neutral-400 transition-colors hover:bg-surface-2 hover:text-white"
             aria-label={language === 'es' ? 'Evaluación e historial' : 'Eval and history'}
           >
-            📊
+            <GameIcon name="chart" />
           </button>
           <div className="flex min-w-0 flex-1">
             <ActionButtons
-              onUndo={() => {}}
+              onUndo={game.undo}
               onFlip={game.flip}
               onResign={game.resign}
-              canUndo={false}
+              canUndo={game.canUndo}
               gameOver={game.gameOver}
               language={language}
-              showUndo={false}
+              showUndo={!isOnline}
             />
           </div>
           <button
@@ -407,7 +481,7 @@ export default function QuantumGameScreen({
               ${music.playing ? 'bg-indigo-500/15 text-indigo-400' : 'text-neutral-600 hover:text-neutral-400'}`}
             aria-label={music.playing ? t.pause : t.play}
           >
-            {music.playing ? '⏸' : '♫'}
+            <GameIcon name={music.playing ? 'pause' : 'music'} />
           </button>
         </div>
       )}
@@ -435,12 +509,17 @@ export default function QuantumGameScreen({
             />
             <span>{game.status.text}</span>
           </div>
-          <p className="mt-3 text-ui-xs text-neutral-600" title={t.undoComingSoon}>
-            ↩ {t.undoComingSoon}
-          </p>
+          <QuantumCoach
+            language={language}
+            history={game.history}
+            selected={!!game.selectedPiece}
+            firstQuantumTarget={!!game.firstQuantumTarget}
+            canUndo={game.canUndo}
+            isOnline={isOnline}
+          />
         </motion.div>
 
-        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:flex-none lg:px-6" {...boardMotion}>
+        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-center overflow-hidden lg:w-auto lg:flex-none lg:px-6" {...boardMotion}>
           <PlayerBar {...topBar} />
 
           {!boardReady ? (
@@ -563,15 +642,17 @@ export default function QuantumGameScreen({
           <div className="rule" />
           <div className="p-4">
             <ActionButtons
-              onUndo={() => {}}
+              onUndo={game.undo}
               onFlip={game.flip}
               onResign={game.resign}
-              canUndo={false}
+              canUndo={game.canUndo}
               gameOver={game.gameOver}
               language={language}
-              showUndo={false}
+              showUndo={!isOnline}
             />
-            <p className="mt-2 text-ui-xs text-neutral-600">{t.undoComingSoon}</p>
+            <p className="mt-2 text-ui-xs text-neutral-600">
+              {isOnline ? t.quantumUndoOnlineDisabled : t.quantumUndoReady}
+            </p>
           </div>
           <div className="rule" />
           <div className="p-4">

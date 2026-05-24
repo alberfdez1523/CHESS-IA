@@ -50,6 +50,55 @@
   :root { --board-size: min(58vw, 720px); }
 }
 
+@media (min-width: 1024px) {
+  .game-viewport {
+    --game-header-h: 4.5rem;
+    --game-banner-h: 0px;
+    --game-castle-h: 0px;
+    --game-main-vpad: clamp(1rem, 3vh, 4rem);
+    --game-board-chrome-h: 8.5rem;
+    --board-size: min(
+      52vw,
+      720px,
+      calc(100dvh - var(--game-header-h) - var(--game-banner-h) - var(--game-main-vpad) - var(--game-board-chrome-h))
+    );
+  }
+
+  .game-viewport.has-game-banner {
+    --game-banner-h: 2.75rem;
+  }
+
+  .game-viewport.has-game-banner-double {
+    --game-banner-h: 5.5rem;
+  }
+
+  .game-viewport.has-castle-buttons {
+    --game-castle-h: 3rem;
+    --game-board-chrome-h: 11.5rem;
+  }
+
+  .game-main {
+    padding-block: calc(var(--game-main-vpad) / 2);
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 760px) {
+  .game-viewport {
+    --game-header-h: 4.5rem;
+    --game-main-vpad: 0.75rem;
+    --game-board-chrome-h: 7.5rem;
+  }
+
+  .game-viewport.has-castle-buttons {
+    --game-board-chrome-h: 10rem;
+  }
+
+  .game-chrome-header header {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+}
+
 /* ── Game viewport chrome (mobile: fit one screen) ── */
 @media (max-width: 1023px) {
   :root {
@@ -413,6 +462,26 @@ body {
   background-color: rgba(99, 102, 241, 0.22) !important;
   animation: quantum-pulse 2s ease-in-out infinite;
 }
+.sq-quantum-target::after,
+.sq-merge-target::after,
+.sq-quantum-capture::after {
+  content: '';
+  position: absolute;
+  inset: 7%;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.sq-quantum-target::after {
+  border: 1px dashed rgba(129, 140, 248, 0.55);
+}
+.sq-merge-target::after {
+  border: 1px solid rgba(6, 182, 212, 0.58);
+  box-shadow: inset 0 0 18px rgba(6, 182, 212, 0.08);
+}
+.sq-quantum-capture::after {
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.12);
+}
 .quantum-dot {
   width: 26%;
   height: 26%;
@@ -442,6 +511,25 @@ body {
   padding: 0 3px;
   border-radius: 3px;
   line-height: 1.4;
+  pointer-events: none;
+}
+.quantum-target-index {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  display: inline-flex;
+  height: 1rem;
+  min-width: 1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  border: 1px solid rgba(165, 180, 252, 0.4);
+  background: rgba(10, 10, 11, 0.72);
+  color: #c7d2fe;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
   pointer-events: none;
 }
 

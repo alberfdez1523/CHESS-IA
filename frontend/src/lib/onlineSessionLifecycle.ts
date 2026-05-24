@@ -1,5 +1,4 @@
-import { abandonOnlineRoom } from './onlineRoom'
-import { getSupabase, isSupabaseConfigured } from './supabase'
+import { getSupabaseEnv, isSupabaseConfigured } from './onlineConfig'
 
 const STORAGE_KEY = 'gdd-active-room'
 
@@ -43,13 +42,13 @@ export function clearOnlineSession(): void {
 async function abandonViaKeepaliveRpc(roomId: string): Promise<void> {
   if (!isSupabaseConfigured()) return
 
+  const { getSupabase } = await import('./supabase')
   const supabase = getSupabase()
   const { data: sessionData } = await supabase.auth.getSession()
   const token = sessionData.session?.access_token
   if (!token) return
 
-  const url = import.meta.env.VITE_SUPABASE_URL as string
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+  const { url, anonKey } = getSupabaseEnv()
 
   await fetch(`${url}/rest/v1/rpc/abandon_room`, {
     method: 'POST',
@@ -80,6 +79,7 @@ export async function abandonSessionBestEffort(roomId?: string | null): Promise<
       return
     }
 
+    const { abandonOnlineRoom } = await import('./onlineRoom')
     await abandonOnlineRoom(id)
   } catch (e) {
     console.warn('[online] abandonSessionBestEffort failed:', e)

@@ -123,6 +123,7 @@ Nota: el frontend legado de la raíz fue eliminado. Si `frontend/dist` no existe
 pytest -q
 cd frontend
 npm test
+npm run e2e
 npm run build
 ```
 
@@ -138,6 +139,8 @@ Requisitos de la prueba de humo:
 - Backend local levantado en `http://localhost:8000` o `APP_URL` apuntando a otra URL.
 - Build del frontend generado con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 - Chrome o Edge instalado; si no esta en una ruta comun, define `CHROME_PATH`.
+
+La suite `npm run e2e` usa Playwright para validar los flujos principales y que el tablero no quede recortado en `390x844`, `768x1024`, `1280x720` y `1440x900`.
 
 ### Supabase
 
