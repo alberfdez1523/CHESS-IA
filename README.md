@@ -115,7 +115,6 @@ frontend/
     quantum-ai.spec.ts
 server.py
 tests/
-supabase/migrations/
 ```
 
 ---
@@ -199,23 +198,10 @@ En CI, `SKIP_STOCKFISH=1` desactiva el motor; los tests de eval devuelven `503` 
 
 ---
 
-## Supabase (multijugador)
-
-Aplica migraciones en `supabase/migrations/` (`001` → `003`):
-
-- `rooms`: estado y versión optimista
-- `room_moves`: historial ligero
-- `abandon_room`, `cleanup_stale_rooms`
-
-Limpieza de salas huérfanas: al abrir menú + cron cada 10 min (ver SQL en migraciones).
-
----
-
 ## Notas de uso
 
 - **Clásico vs IA** y **cuántico vs IA** mejoran con Stockfish en marcha; sin motor, la IA cuántica sigue con heurística local.
 - **Cuántico 2 jugadores** y **online** no requieren Stockfish.
-- El endpoint `/api/quantum/move` queda para QA; la UI no lo usa como jugador principal.
 
 ## Licencia
 
