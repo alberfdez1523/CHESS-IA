@@ -11,6 +11,8 @@ Aplicación web de ajedrez con dos modos de juego:
 
 El modo cuántico añade superposición, fusión, enroque cuántico, medición probabilística y efecto túnel.
 
+Desde el inicio hay un **Tutorial cuántico** opcional con ejemplos paso a paso de movimientos especiales, capturas con medición y normas propias del modo cuántico.
+
 ---
 
 ## Modo clásico
@@ -163,6 +165,8 @@ VITE_SUPABASE_URL=...
 VITE_SUPABASE_ANON_KEY=...
 VITE_API_BASE=          # opcional; por defecto /api o localhost:8000 en dev
 ```
+
+La configuración de Supabase (variables reales, esquema, políticas y funciones privadas) no se versiona en este repositorio. Debe mantenerse en el entorno privado de despliegue/desarrollo.
 
 ---
 

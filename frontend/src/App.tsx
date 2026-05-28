@@ -41,6 +41,7 @@ function ScreenLoadingFallback({
 
 export default function App() {
   const [screen, setScreen] = useState<'menu' | 'lobby' | 'game' | 'rules'>('menu')
+  const [rulesInitialTab, setRulesInitialTab] = useState<'quantum' | 'tutorial'>('quantum')
   const [lobbyPrefs, setLobbyPrefs] = useState<{
     gameMode: GameConfig['gameMode']
     color: PlayerColorChoice
@@ -185,7 +186,14 @@ export default function App() {
             <StartMenu
               onPlay={handlePlay}
               onOpenOnlineLobby={handleOpenOnlineLobby}
-              onRules={() => setScreen('rules')}
+              onRules={() => {
+                setRulesInitialTab('quantum')
+                setScreen('rules')
+              }}
+              onQuantumTutorial={() => {
+                setRulesInitialTab('tutorial')
+                setScreen('rules')
+              }}
               language={language}
               onOpenSettings={() => setSettingsOpen(true)}
             />
@@ -232,7 +240,11 @@ export default function App() {
             transition={transition}
           >
             <Suspense fallback={<ScreenLoadingFallback language={language} label={ui(language).loadingRules} />}>
-              <RulesScreen onBack={() => setScreen('menu')} language={language} />
+              <RulesScreen
+                onBack={() => setScreen('menu')}
+                language={language}
+                initialTab={rulesInitialTab}
+              />
             </Suspense>
           </motion.div>
         ) : gameConfig ? (

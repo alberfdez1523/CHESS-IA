@@ -12,7 +12,6 @@ import {
 } from '../lib/onlineRoom'
 import type { OnlineRoomRow } from '../lib/onlineTypes'
 import { ui } from '../lib/i18n'
-import OnlineBetaNotice, { OnlineBetaBadge } from './OnlineBetaNotice'
 
 interface OnlineLobbyProps {
   language: Language
@@ -231,12 +230,8 @@ export default function OnlineLobby({
 
         <motion.div className="flex flex-wrap items-center gap-2">
           <h1 className="font-serif text-2xl text-white">{t.onlineTitle}</h1>
-          <OnlineBetaBadge language={language} />
         </motion.div>
         <p className="mt-2 text-ui-sm text-neutral-500">{t.onlineSubtitle}</p>
-        <div className="mt-4">
-          <OnlineBetaNotice language={language} />
-        </div>
 
         {error && (
           <p className="mt-4 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-ui-sm text-red-300">

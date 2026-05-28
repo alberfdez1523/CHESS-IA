@@ -6,6 +6,7 @@ import RuleCard from './rules/RuleCard'
 import PieceExplorer from './rules/PieceExplorer'
 import CaptureFlowLab from './rules/CaptureFlowLab'
 import Glossary from './rules/Glossary'
+import QuantumTutorial from './rules/QuantumTutorial'
 import {
   getClassicRules,
   getQuantumRules,
@@ -20,9 +21,10 @@ import { useRulesScrollSpy } from './rules/useRulesScrollSpy'
 interface RulesScreenProps {
   onBack: () => void
   language: Language
+  initialTab?: Tab
 }
 
-type Tab = 'classic' | 'quantum'
+type Tab = 'classic' | 'quantum' | 'tutorial'
 
 const CATEGORY_ORDER: RuleCategory[] = [
   'intro',
@@ -32,17 +34,19 @@ const CATEGORY_ORDER: RuleCategory[] = [
   'endgame',
 ]
 
-export default function RulesScreen({ onBack, language }: RulesScreenProps) {
-  const [tab, setTab] = useState<Tab>('quantum')
+export default function RulesScreen({ onBack, language, initialTab = 'quantum' }: RulesScreenProps) {
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [activeSection, setActiveSection] = useState<string>('')
   const es = language === 'es'
+  const isTutorial = tab === 'tutorial'
+  const contentTab = tab === 'classic' ? 'classic' : 'quantum'
 
   const rules = useMemo(
-    () => (tab === 'classic' ? getClassicRules(es) : getQuantumRules(es)),
-    [tab, es],
+    () => (contentTab === 'classic' ? getClassicRules(es) : getQuantumRules(es)),
+    [contentTab, es],
   )
   const categoryLabels = useMemo(() => getCategoryLabels(es), [es])
-  const quickStart = useMemo(() => getQuickStart(es, tab), [es, tab])
+  const quickStart = useMemo(() => getQuickStart(es, contentTab), [es, contentTab])
   const pieceGuide = useMemo(() => getPieceGuide(es), [es])
   const captureScenarios = useMemo(() => getCaptureScenarios(es), [es])
   const glossary = useMemo(() => getGlossary(es), [es])
@@ -57,6 +61,10 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
   }, [rules])
 
   const tocItems = useMemo(() => {
+    if (isTutorial) {
+      return [{ id: 'quantum-tutorial', label: es ? 'Tutorial cuántico' : 'Quantum tutorial' }]
+    }
+
     const items: { id: string; label: string }[] = []
     for (const [, catRules] of rulesByCategory) {
       for (const r of catRules) {
@@ -76,7 +84,7 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
       items.push({ id: 'glossary', label: es ? 'Glosario' : 'Glossary' })
     }
     return items
-  }, [rulesByCategory, tab, es])
+  }, [rulesByCategory, tab, es, isTutorial])
 
   const sectionIds = useMemo(() => tocItems.map((item) => item.id), [tocItems])
 
@@ -91,6 +99,10 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
       ? es
         ? 'Ajedrez clásico'
         : 'Classic chess'
+      : tab === 'tutorial'
+        ? es
+          ? 'Tutorial cuántico'
+          : 'Quantum tutorial'
       : es
         ? 'Ajedrez cuántico'
         : 'Quantum chess'
@@ -162,10 +174,12 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
                 [
                   { key: 'classic' as Tab, label: es ? '♛ Clásico' : '♛ Classic' },
                   { key: 'quantum' as Tab, label: es ? '⚛ Cuántico' : '⚛ Quantum' },
+                  { key: 'tutorial' as Tab, label: es ? '⚛ Tutorial' : '⚛ Tutorial' },
                 ] as const
               ).map((t, i) => (
                 <button
                   key={t.key}
+                  data-testid={`rules-tab-${t.key}`}
                   type="button"
                   onClick={() => {
                     setTab(t.key)
@@ -174,7 +188,7 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
                     ${i > 0 ? 'border-l border-surface-4' : ''}
                     ${
                       tab === t.key
-                        ? t.key === 'quantum'
+                        ? t.key === 'quantum' || t.key === 'tutorial'
                           ? 'bg-indigo-500/10 text-indigo-400'
                           : 'bg-accent/10 text-accent'
                         : 'text-neutral-500 hover:text-neutral-300'
@@ -186,7 +200,8 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
             </motion.div>
           </motion.div>
 
-          <AnimatePresence mode="wait">
+          {!isTutorial && (
+            <AnimatePresence mode="wait">
             <motion.div
               key={tab}
               className="rules-quickstart mb-10"
@@ -206,7 +221,8 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
                 ))}
               </motion.div>
             </motion.div>
-          </AnimatePresence>
+            </AnimatePresence>
+          )}
 
           <motion.div className="rules-toc-mobile mb-8 lg:hidden">
             <label htmlFor="rules-jump" className="mb-2 block text-ui-xs text-neutral-600">
@@ -238,38 +254,44 @@ export default function RulesScreen({ onBack, language }: RulesScreenProps) {
               transition={{ duration: 0.25 }}
               className="space-y-10"
             >
-              {Array.from(rulesByCategory.entries()).map(([category, catRules]) => (
-                <section key={category} aria-labelledby={`cat-${category}`}>
-                  <h2 id={`cat-${category}`} className="rules-category-title mb-4">
-                    {categoryLabels[category]}
-                  </h2>
-                  <motion.div className="space-y-4">
-                    {catRules.map((rule, idx) => (
-                      <RuleCard
-                        key={rule.id}
-                        rule={rule}
-                        index={idx}
-                        es={es}
-                        variant={tab}
-                        defaultOpen={idx === 0 && category === 'intro'}
-                      />
-                    ))}
-                  </motion.div>
-                </section>
-              ))}
-
-              {tab === 'classic' ? (
-                <motion.div id="piece-explorer">
-                  <PieceExplorer pieces={pieceGuide} es={es} />
-                </motion.div>
+              {isTutorial ? (
+                <QuantumTutorial es={es} />
               ) : (
                 <>
-                  <motion.div id="capture-lab">
-                    <CaptureFlowLab scenarios={captureScenarios} es={es} />
-                  </motion.div>
-                  <motion.div id="glossary">
-                    <Glossary items={glossary} es={es} />
-                  </motion.div>
+                  {Array.from(rulesByCategory.entries()).map(([category, catRules]) => (
+                    <section key={category} aria-labelledby={`cat-${category}`}>
+                      <h2 id={`cat-${category}`} className="rules-category-title mb-4">
+                        {categoryLabels[category]}
+                      </h2>
+                      <motion.div className="space-y-4">
+                        {catRules.map((rule, idx) => (
+                          <RuleCard
+                            key={rule.id}
+                            rule={rule}
+                            index={idx}
+                            es={es}
+                            variant={contentTab}
+                            defaultOpen={idx === 0 && category === 'intro'}
+                          />
+                        ))}
+                      </motion.div>
+                    </section>
+                  ))}
+
+                  {tab === 'classic' ? (
+                    <motion.div id="piece-explorer">
+                      <PieceExplorer pieces={pieceGuide} es={es} />
+                    </motion.div>
+                  ) : (
+                    <>
+                      <motion.div id="capture-lab">
+                        <CaptureFlowLab scenarios={captureScenarios} es={es} />
+                      </motion.div>
+                      <motion.div id="glossary">
+                        <Glossary items={glossary} es={es} />
+                      </motion.div>
+                    </>
+                  )}
                 </>
               )}
             </motion.div>

@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DIFFICULTIES, TIMER_OPTIONS } from '../lib/constants'
 import { checkHealth } from '../lib/api'
-import { getDifficultyLabel, ui } from '../lib/i18n'
+import { getDifficultyLabel } from '../lib/i18n'
 import type { GameConfig, GameMode, OpponentMode, PieceColor, Difficulty, Language, PlayerColorChoice } from '../lib/types'
-import OnlineBetaNotice, { OnlineBetaBadge } from './OnlineBetaNotice'
+import OnlineBetaNotice from './OnlineBetaNotice'
 
 interface StartMenuProps {
   onPlay: (config: GameConfig) => void
@@ -16,6 +16,7 @@ interface StartMenuProps {
     difficulty: Difficulty
   }) => void
   onRules: () => void
+  onQuantumTutorial: () => void
   language: Language
   onOpenSettings: () => void
 }
@@ -24,6 +25,7 @@ export default function StartMenu({
   onPlay,
   onOpenOnlineLobby,
   onRules,
+  onQuantumTutorial,
   language,
   onOpenSettings,
 }: StartMenuProps) {
@@ -40,7 +42,6 @@ export default function StartMenu({
   const isOnlineMode = opponentMode === 'online'
   const canPlay = isOnlineMode ? true : requiresEngine ? serverReady : true
   const isQuantum = gameMode === 'quantum'
-  const tu = ui(language)
 
   const t = language === 'es'
     ? {
@@ -72,6 +73,7 @@ export default function StartMenu({
         looking: 'Buscando servidor…',
         offline: 'Sin conexión',
         rules: 'Reglas del juego',
+        tutorial: 'Tutorial cuántico',
         settings: 'Ajustes',
       }
     : {
@@ -103,6 +105,7 @@ export default function StartMenu({
         looking: 'Looking for server…',
         offline: 'Offline',
         rules: 'Game rules',
+        tutorial: 'Quantum tutorial',
         settings: 'Settings',
       }
 
@@ -229,6 +232,7 @@ export default function StartMenu({
                 ] as const).map((opt, i) => (
                   <button
                     key={opt.value}
+                    data-testid={`start-mode-${opt.value}`}
                     onClick={() => {
                       setGameMode(opt.value)
                       if (opt.value === 'quantum') setDifficulty('medium')
@@ -278,12 +282,13 @@ export default function StartMenu({
               <Label>{t.opponent}</Label>
               <div className="flex overflow-hidden rounded border border-surface-4">
                 {([
-                  { value: 'ai' as OpponentMode, label: t.vsAi, beta: false },
-                  { value: 'local' as OpponentMode, label: t.twoPlayers, beta: false },
-                  { value: 'online' as OpponentMode, label: t.online, beta: true },
+                  { value: 'ai' as OpponentMode, label: t.vsAi },
+                  { value: 'local' as OpponentMode, label: t.twoPlayers },
+                  { value: 'online' as OpponentMode, label: t.online },
                 ] as const).map((opt, i) => (
                   <button
                     key={opt.value}
+                    data-testid={`start-opponent-${opt.value}`}
                     onClick={() => setOpponentMode(opt.value)}
                     className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-center text-ui-sm font-semibold transition-colors
                       ${i > 0 ? 'border-l border-surface-4' : ''}
@@ -295,7 +300,6 @@ export default function StartMenu({
                       }`}
                   >
                     <span>{opt.label}</span>
-                    {opt.beta && <OnlineBetaBadge language={language} className="scale-90" />}
                   </button>
                 ))}
               </div>
@@ -327,6 +331,7 @@ export default function StartMenu({
                 {DIFFICULTIES.map((d, i) => (
                   <button
                     key={d.key}
+                    data-testid={`start-difficulty-${d.key}`}
                     onClick={() => setDifficulty(d.key)}
                     disabled={!requiresEngine && !(isQuantum && opponentMode === 'ai')}
                     className={`flex flex-1 flex-col items-center gap-1.5 py-3 transition-colors
@@ -408,15 +413,10 @@ export default function StartMenu({
 
             <div className="rule mb-8" />
 
-            {isOnlineMode && (
-              <motion.div className="mb-4" custom={4.5} variants={stagger} initial="hidden" animate="show">
-                <OnlineBetaNotice language={language} variant="compact" />
-              </motion.div>
-            )}
-
             {/* Play button */}
             <motion.div custom={5} variants={stagger} initial="hidden" animate="show">
               <button
+                data-testid="start-play"
                 onClick={handlePlay}
                 disabled={!canPlay}
                 className={`w-full rounded py-4 text-ui-sm font-semibold uppercase tracking-[0.2em] transition-all
@@ -429,7 +429,7 @@ export default function StartMenu({
               >
                 {canPlay
                   ? isOnlineMode
-                    ? `🌐  ${tu.onlineBetaTitle}`
+                    ? `🌐  ${t.playOnline}`
                     : isQuantum
                       ? opponentMode === 'ai'
                         ? `⚛  ${language === 'es' ? 'Cuántico vs IA' : 'Quantum vs AI'}`
@@ -443,16 +443,25 @@ export default function StartMenu({
 
             {/* Footer links */}
             <motion.div
-              className="mt-6 flex items-center justify-between"
+              className="mt-6 flex flex-wrap items-center justify-between gap-3"
               custom={6} variants={stagger} initial="hidden" animate="show"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <button
                   type="button"
                   onClick={onRules}
+                  data-testid="start-rules"
                   className="min-h-[44px] text-ui-sm font-medium text-neutral-500 transition-colors hover:text-accent"
                 >
                   {t.rules} →
+                </button>
+                <button
+                  type="button"
+                  onClick={onQuantumTutorial}
+                  data-testid="start-quantum-tutorial"
+                  className="min-h-[44px] text-ui-sm font-medium text-neutral-500 transition-colors hover:text-indigo-300"
+                >
+                  ⚛ {t.tutorial}
                 </button>
                 <button
                   type="button"

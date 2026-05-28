@@ -10,7 +10,6 @@ import MusicPlayer from './MusicPlayer'
 import PromotionModal from './PromotionModal'
 import GameOverModal from './GameOverModal'
 import OnlineSessionEndedModal from './OnlineSessionEndedModal'
-import { OnlineBetaBadge } from './OnlineBetaNotice'
 import QuantumMeasurementRoulette from './QuantumMeasurementRoulette'
 import GameViewportShell from './GameViewportShell'
 import GameMobileStatsSheet from './GameMobileStatsSheet'
@@ -346,7 +345,6 @@ export default function QuantumGameScreen({
                 {onlineStatusText}
               </span>
             )}
-            {isOnline && <OnlineBetaBadge language={language} />}
           </span>
         </div>
         <div className="flex items-center gap-1">

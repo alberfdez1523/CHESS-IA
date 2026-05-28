@@ -88,6 +88,7 @@ export default function MoveHistory({
             return (
               <motion.div
                 key={i}
+                data-testid="move-history-item"
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}

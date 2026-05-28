@@ -24,10 +24,10 @@ async function mockQuantumEngine(page: Page) {
 
 async function startQuantumVsAI(page: Page, color: 'Blancas' | 'Negras' = 'Blancas') {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Cuántico' }).click()
-  await page.getByRole('button', { name: 'Vs IA' }).click()
+  await page.getByTestId('start-mode-quantum').click()
+  await page.getByTestId('start-opponent-ai').click()
   await page.getByRole('button', { name: color }).click()
-  await page.getByRole('button', { name: /Cuántico vs IA/i }).click()
+  await page.getByTestId('start-play').click()
   await expect(page.locator('.board-root')).toBeVisible()
 }
 
@@ -39,7 +39,7 @@ test('quantum vs AI starts and AI responds after human move', async ({ page }) =
   await page.locator('[data-square="e4"]').click()
 
   await expect.poll(async () => {
-    const historyItems = page.locator('.move-history-item, [class*="history"] li')
+    const historyItems = page.getByTestId('move-history-item')
     return historyItems.count()
   }, { timeout: 15000 }).toBeGreaterThan(1)
 })
@@ -49,7 +49,7 @@ test('quantum vs AI with black: AI moves first', async ({ page }) => {
   await startQuantumVsAI(page, 'Negras')
 
   await expect.poll(async () => {
-    const historyItems = page.locator('.move-history-item, [class*="history"] li')
+    const historyItems = page.getByTestId('move-history-item')
     return historyItems.count()
   }, { timeout: 15000 }).toBeGreaterThan(0)
 })
@@ -57,10 +57,10 @@ test('quantum vs AI with black: AI moves first', async ({ page }) => {
 test('quantum AI difficulty selector is available', async ({ page }) => {
   await mockQuantumEngine(page)
   await page.goto('/')
-  await page.getByRole('button', { name: 'Cuántico' }).click()
-  await page.getByRole('button', { name: 'Vs IA' }).click()
-  await expect(page.getByText(/heurística local/i)).toBeVisible()
-  await page.getByRole('button', { name: 'Difícil' }).click()
-  await page.getByRole('button', { name: /Cuántico vs IA/i }).click()
+  await page.getByTestId('start-mode-quantum').click()
+  await page.getByTestId('start-opponent-ai').click()
+  await expect(page.getByText(/heurística local/i).first()).toBeVisible()
+  await page.getByTestId('start-difficulty-hard').click()
+  await page.getByTestId('start-play').click()
   await expect(page.locator('.board-root')).toBeVisible()
 })

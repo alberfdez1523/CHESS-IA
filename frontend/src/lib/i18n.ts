@@ -273,12 +273,12 @@ export const UI_STRINGS = {
     onlineRoomFinished: 'La partida ya terminó',
     onlineNotConfigured: 'Multijugador no configurado',
     onlineNotConfiguredHint:
-      'Añade VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY (ver frontend/.env.example y supabase/migrations).',
+      'Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en tu entorno privado para activar el multijugador.',
     onlineBadge: 'En línea · 2 jugadores',
     onlineBetaBadge: 'Beta',
     onlineBetaNotice:
       'El multijugador en línea está en fase beta. Pueden aparecer desincronizaciones o cortes; estamos mejorándolo.',
-    onlineBetaTitle: 'Multijugador en línea (beta)',
+    onlineBetaTitle: 'Multijugador en línea',
     onlineConnected: 'Rival conectado',
     onlineReconnecting: 'Rival reconectando',
     onlineSyncing: 'Sincronizando',
@@ -381,12 +381,12 @@ export const UI_STRINGS = {
     onlineRoomFinished: 'Game already finished',
     onlineNotConfigured: 'Multiplayer not configured',
     onlineNotConfiguredHint:
-      'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see frontend/.env.example and supabase/migrations).',
+      'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your private environment to enable multiplayer.',
     onlineBadge: 'Online · 2 players',
     onlineBetaBadge: 'Beta',
     onlineBetaNotice:
       'Online multiplayer is in beta. You may see sync issues or disconnects; we are actively improving it.',
-    onlineBetaTitle: 'Online multiplayer (beta)',
+    onlineBetaTitle: 'Online multiplayer',
     onlineConnected: 'Opponent connected',
     onlineReconnecting: 'Opponent reconnecting',
     onlineSyncing: 'Syncing',

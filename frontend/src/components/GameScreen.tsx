@@ -10,7 +10,6 @@ import MusicPlayer from './MusicPlayer'
 import PromotionModal from './PromotionModal'
 import GameOverModal from './GameOverModal'
 import OnlineSessionEndedModal from './OnlineSessionEndedModal'
-import { OnlineBetaBadge } from './OnlineBetaNotice'
 import GameViewportShell from './GameViewportShell'
 import GameMobileStatsSheet from './GameMobileStatsSheet'
 import GameIcon from './GameIcon'
@@ -247,7 +246,6 @@ export default function GameScreen({
                 {onlineStatusText}
               </span>
             )}
-            {isOnline && <OnlineBetaBadge language={language} />}
           </span>
         </div>
         <div className="flex items-center gap-1">

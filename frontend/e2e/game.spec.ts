@@ -14,16 +14,16 @@ async function mockClassicEngine(page: Page) {
 
 async function openClassicLocal(page: Page) {
   await page.goto('/')
-  await page.getByRole('button', { name: '2 jugadores' }).click()
-  await page.getByRole('button', { name: 'Iniciar partida' }).click()
+  await page.getByTestId('start-opponent-local').click()
+  await page.getByTestId('start-play').click()
   await expect(page.locator('.board-root')).toBeVisible()
 }
 
 async function openQuantumLocal(page: Page) {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Cuántico' }).click()
-  await page.getByRole('button', { name: '2 jugadores' }).click()
-  await page.getByRole('button', { name: /Iniciar cuántico/i }).click()
+  await page.getByTestId('start-mode-quantum').click()
+  await page.getByTestId('start-opponent-local').click()
+  await page.getByTestId('start-play').click()
   await expect(page.locator('.board-root')).toBeVisible()
 }
 
@@ -54,8 +54,8 @@ test('classic local board is fully visible across key viewports', async ({ page 
 test('classic AI flow works with mocked Stockfish', async ({ page }) => {
   await mockClassicEngine(page)
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Iniciar partida' })).toBeEnabled()
-  await page.getByRole('button', { name: 'Iniciar partida' }).click()
+  await expect(page.getByTestId('start-play')).toBeEnabled()
+  await page.getByTestId('start-play').click()
   await expect(page.locator('[data-square="e2"] .piece-white')).toBeVisible()
   await page.locator('[data-square="e2"]').click()
   await expect(page.locator('[data-square="e4"] .legal-dot')).toBeVisible()
@@ -72,15 +72,19 @@ test('quantum local board is fully visible and supports local undo', async ({ pa
     await page.setViewportSize(viewport)
     await openQuantumLocal(page)
     await expectBoardInsideViewport(page)
-    const controls = page.locator('.game-quantum-controls')
-    await expect(controls).toBeVisible()
-    const controlsBox = await controls.boundingBox()
-    expect(controlsBox).not.toBeNull()
-    expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(viewport.height)
+    const controls = page.locator('.game-quantum-controls').first()
+    if (viewport.width < 1024) {
+      await expect(controls).toBeVisible()
+      const controlsBox = await controls.boundingBox()
+      expect(controlsBox).not.toBeNull()
+      expect(controlsBox!.y + controlsBox!.height).toBeLessThanOrEqual(viewport.height)
+    } else {
+      await expect(controls).toBeHidden()
+    }
   }
 
   await page.setViewportSize({ width: 1440, height: 900 })
-  await page.getByTestId('quantum-mode-quantum').click()
+  await page.locator('[data-testid="quantum-mode-quantum"]').filter({ visible: true }).click()
   await page.locator('[data-square="b1"]').click()
   await page.locator('[data-square="a3"]').click()
   await page.locator('[data-square="c3"]').click()
@@ -90,9 +94,18 @@ test('quantum local board is fully visible and supports local undo', async ({ pa
   await expect(page.locator('[data-square="b1"] .chess-piece')).toBeVisible()
 })
 
+test('quantum tutorial opens from the menu and advances through steps', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('start-quantum-tutorial').click()
+  await expect(page.getByTestId('quantum-tutorial')).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Tutorial de ajedrez cuántico/i })).toBeVisible()
+  await page.getByTestId('tutorial-next').click()
+  await expect(page.getByRole('heading', { name: /Movimiento cuántico/i })).toBeVisible()
+})
+
 test('rules and settings remain reachable from the menu', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Reglas del juego' }).click()
+  await page.getByTestId('start-rules').click()
   await expect(page.getByRole('heading', { level: 1, name: 'Reglas del juego' })).toBeVisible()
   await page.getByRole('button', { name: /menú/i }).click()
   await page.getByRole('button', { name: 'Ajustes' }).click()
