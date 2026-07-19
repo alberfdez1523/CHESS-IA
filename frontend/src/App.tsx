@@ -23,6 +23,7 @@ import {
   type SettingsChangeMeta,
 } from './lib/themeTransition'
 import { ui } from './lib/i18n'
+import { gameAutosave, type GameAutosave } from './lib/gameAutosave'
 
 function ScreenLoadingFallback({
   language,
@@ -50,6 +51,8 @@ export default function App() {
     difficulty: GameConfig['difficulty']
   } | null>(null)
   const [gameConfig, setGameConfig] = useState<GameConfig | null>(null)
+  const [resumeAutosave, setResumeAutosave] = useState<GameAutosave | null>(null)
+  const [gameInstance, setGameInstance] = useState(0)
   const gameConfigRef = useRef<GameConfig | null>(null)
   gameConfigRef.current = gameConfig
   const lobbyRoomIdRef = useRef<string | null>(null)
@@ -58,6 +61,10 @@ export default function App() {
   const reduceMotion = useReducedMotion()
 
   const { language } = settings
+
+  useEffect(() => {
+    document.documentElement.lang = language
+  }, [language])
 
   useEffect(() => {
     applyThemeToDom(settings.theme)
@@ -120,12 +127,34 @@ export default function App() {
   )
 
   const handlePlay = useCallback((config: GameConfig) => {
+    gameAutosave.clear()
     if (config.online?.roomId) {
       lobbyRoomIdRef.current = config.online.roomId
       registerOnlineSession(config.online.roomId)
     }
+    setResumeAutosave(null)
+    setGameInstance((value) => value + 1)
     setGameConfig(config)
     setScreen('game')
+  }, [])
+
+  const handleContinue = useCallback((autosave: GameAutosave) => {
+    setResumeAutosave(autosave)
+    setGameInstance((value) => value + 1)
+    setGameConfig({
+      playerColor: autosave.config.playerColor,
+      difficulty: autosave.config.difficulty,
+      opponentMode: autosave.config.opponentMode,
+      useTimer: autosave.config.useTimer,
+      timerMinutes: autosave.config.timerMinutes,
+      gameMode: autosave.type,
+    })
+    setScreen('game')
+  }, [])
+
+  const handleRematch = useCallback(() => {
+    setResumeAutosave(null)
+    setGameInstance((value) => value + 1)
   }, [])
 
   const handleOpenOnlineLobby = useCallback(
@@ -151,6 +180,7 @@ export default function App() {
       clearOnlineSession()
     }
     setGameConfig(null)
+    setResumeAutosave(null)
     setLobbyPrefs(null)
     setScreen('menu')
     if (typeof window !== 'undefined' && window.location.search.includes('room=')) {
@@ -185,6 +215,7 @@ export default function App() {
           >
             <StartMenu
               onPlay={handlePlay}
+              onContinue={handleContinue}
               onOpenOnlineLobby={handleOpenOnlineLobby}
               onRules={() => {
                 setRulesInitialTab('quantum')
@@ -249,7 +280,7 @@ export default function App() {
           </motion.div>
         ) : gameConfig ? (
           <motion.div
-            key="game"
+            key={`game-${gameInstance}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -271,6 +302,8 @@ export default function App() {
                   settings={settings}
                   onOpenSettings={() => setSettingsOpen(true)}
                   onSettingsChange={handleSettingsChange}
+                  resumeAutosave={resumeAutosave}
+                  onRematch={gameConfig.opponentMode === 'online' ? undefined : handleRematch}
                 />
               ) : (
                 <GameScreen
@@ -280,6 +313,8 @@ export default function App() {
                   settings={settings}
                   onOpenSettings={() => setSettingsOpen(true)}
                   onSettingsChange={handleSettingsChange}
+                  resumeAutosave={resumeAutosave}
+                  onRematch={gameConfig.opponentMode === 'online' ? undefined : handleRematch}
                 />
               )}
             </Suspense>

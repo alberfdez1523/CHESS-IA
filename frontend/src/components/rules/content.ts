@@ -201,7 +201,7 @@ export function getClassicRules(es: boolean): RuleDefinition[] {
         : 'The game can end with no winner under several rules.',
       desc: es
         ? 'Las tablas equilibran partidas donde nadie puede forzar victoria. Conoce los casos más habituales para no perder ventajas por desconocimiento.'
-        : 'Draws balance games where neither side can force a win. Know the common cases so you do not throw away advantages.',
+        : 'Draws even out games where neither side can force a win. Know the common cases so you do not throw away advantages.',
       bullets: es
         ? [
             'Ahogado: sin movimientos legales y sin jaque',
@@ -239,8 +239,8 @@ export function getQuantumRules(es: boolean): RuleDefinition[] {
       color: 'text-indigo-300',
       bgColor: 'bg-indigo-500/10 border-indigo-500/20',
       desc: es
-        ? 'Parte del ajedrez clásico, pero con superposición, fusión, medición probabilística y efecto túnel. No hay jaque mate clásico: ganas capturando el rey enemigo (a veces tras una medición).'
-        : 'Built on classic chess, but with superposition, merge, probabilistic measurement, and tunneling. No classic checkmate: you win by capturing the enemy king (sometimes after measurement).',
+        ? 'Parte del ajedrez clásico, pero con superposición, fusión, medición probabilística y efecto túnel. No hay jaque ni jaque mate: ganas capturando el rey enemigo (a veces tras una medición).'
+        : 'Built on classic chess, but with superposition, merge, probabilistic measurement, and tunneling. There is no check or checkmate: you win by capturing the enemy king (sometimes after measurement).',
       bullets: es
         ? ['Movimiento clásico: igual que siempre', 'Movimiento cuántico: divide la pieza', 'Fusión: vuelve al 100% en una casilla', 'Capturas cuánticas: ruleta de medición']
         : ['Classic move: same as always', 'Quantum move: split the piece', 'Merge: return to 100% on one square', 'Quantum captures: measurement roulette'],
@@ -341,7 +341,7 @@ export function getQuantumRules(es: boolean): RuleDefinition[] {
       title: es ? 'Fusión (merge)' : 'Merge',
       summary: es
         ? 'Reúne una pieza dividida: elige una casilla y colapsa al 100% ahí.'
-        : 'Reunite a split piece: pick one square and collapse to 100% there.',
+        : 'Merge a split piece: pick one square and collapse to 100% there.',
       desc: es
         ? 'Modo «Fusión»: solo para piezas ya en superposición. La otra posición desaparece y recuperas control total de la pieza.'
         : '«Merge» mode: only for pieces already in superposition. The other position vanishes and you regain full control.',
@@ -446,8 +446,8 @@ export function getQuantumRules(es: boolean): RuleDefinition[] {
       bgColor: 'bg-red-500/8 border-red-500/15',
       title: es ? 'Fin de partida cuántico' : 'Quantum game end',
       summary: es
-        ? 'Ganas capturando el rey enemigo; no hay jaque mate tradicional.'
-        : 'You win by capturing the enemy king; there is no traditional checkmate.',
+        ? 'Ganas capturando el rey enemigo; no existe jaque ni jaque mate.'
+        : 'You win by capturing the enemy king; there is no check or checkmate.',
       desc: es
         ? 'Un rey en superposición puede «esconderse» en dos casillas. Una captura o medición exitosa sobre el rey puede terminar la partida al instante.'
         : 'A king in superposition can «hide» on two squares. A successful capture or measurement on the king can end the game immediately.',
@@ -622,7 +622,7 @@ export function getCaptureScenarios(es: boolean): CaptureScenario[] {
       attacker: 'classic',
       defender: 'quantum',
       label: es ? 'Clásica → Cuántica' : 'Classic → Quantum',
-      measured: es ? 'Se mide la pieza OBJETIVO' : 'TARGET piece is measured',
+      measured: es ? 'Se mide la pieza objetivo' : 'Target piece is measured',
       outcome: es
         ? 'Vivo: estaba ahí y muere. Muerto: colapsa a su otra casilla.'
         : 'Alive: it was there and is captured. Dead: collapses to other square.',

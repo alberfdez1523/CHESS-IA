@@ -1,33 +1,11 @@
 import { QuantumChessEngine } from './quantumEngine'
 import { requestQuantumEval, requestQuantumEvalBatch } from './api'
-import type { Difficulty, PieceColor, PieceType, QMoveRecord, QState } from './types'
+import type {
+  Difficulty, PieceColor, PieceType, QMoveRecord, QState, QuantumAction,
+} from './types'
 
-export type QAIAction =
-  | {
-      kind: 'classical'
-      pieceId: string
-      from: string
-      to: string
-      promotion?: PieceType
-    }
-  | {
-      kind: 'quantum'
-      pieceId: string
-      from: string
-      toA: string
-      toB: string
-    }
-  | {
-      kind: 'merge'
-      pieceId: string
-      from: string
-      to: string
-    }
-  | {
-      kind: 'quantumCastle'
-      color: PieceColor
-      side: 'k' | 'q'
-    }
+/** Alias compatible para consumidores históricos de la IA. */
+export type QAIAction = QuantumAction
 
 export interface ScoredQAIAction {
   action: QAIAction
@@ -106,7 +84,7 @@ export function generateLegalQActions(engine: QuantumChessEngine): QAIAction[] {
       }
 
       if (piece.type !== 'p') {
-        const quantumTargets = moves.filter((m) => !m.isCapture).map((m) => m.square)
+        const quantumTargets = engine.getQuantumSplitTargets(piece.id, from)
         for (let i = 0; i < quantumTargets.length; i++) {
           for (let j = i + 1; j < quantumTargets.length; j++) {
             actions.push({
@@ -148,8 +126,7 @@ export function isActionStillLegal(engine: QuantumChessEngine, action: QAIAction
     case 'quantum': {
       const piece = engine.getPiece(action.pieceId)
       if (!piece || piece.type === 'p') return false
-      const moves = engine.getLegalMoves(action.pieceId, action.from)
-      const nonCapture = moves.filter((m) => !m.isCapture).map((m) => m.square)
+      const nonCapture = engine.getQuantumSplitTargets(action.pieceId, action.from)
       return nonCapture.includes(action.toA) && nonCapture.includes(action.toB)
     }
     case 'merge':

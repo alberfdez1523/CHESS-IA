@@ -3,6 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { RuleDefinition } from './types'
 import MiniBoard from './MiniBoard'
 import { useMiniSqPx } from './useMiniSqPx'
+import GameIcon, { type GameIconName } from '../GameIcon'
+
+function RuleIcon({ icon }: { icon: string }) {
+  if (/^[♔♕♖♗♘♙♚♛♜♝♞♟½]$/.test(icon)) return <span aria-hidden="true">{icon}</span>
+  const mapped: GameIconName = icon === '🔗'
+    ? 'merge'
+    : icon === '🏰'
+      ? 'classic'
+      : icon === '👑'
+        ? 'queen'
+        : icon === '🎰'
+          ? 'chart'
+          : 'atom'
+  return <GameIcon name={mapped} className="h-5 w-5" />
+}
 
 interface RuleCardProps {
   rule: RuleDefinition
@@ -51,7 +66,7 @@ export default function RuleCard({
         <motion.div
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded border text-lg ${accentClass}`}
         >
-          {rule.icon}
+          <RuleIcon icon={rule.icon} />
         </motion.div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
@@ -59,12 +74,10 @@ export default function RuleCard({
               <h3 className={`text-ui-base font-bold ${titleClass}`}>{rule.title}</h3>
               <p className="mt-1 text-ui-sm leading-snug text-neutral-400">{rule.summary}</p>
             </div>
-            <span
-              className={`mt-1 flex-shrink-0 text-neutral-500 transition-transform ${open ? 'rotate-180' : ''}`}
-              aria-hidden
-            >
-              ▾
-            </span>
+            <GameIcon
+              name="chevron"
+              className={`mt-1 flex-shrink-0 text-neutral-500 transition-transform ${open ? '-rotate-90' : 'rotate-90'}`}
+            />
           </div>
           <span className="mt-2 inline-block text-[10px] font-semibold uppercase tracking-wider text-neutral-600">
             {es ? 'Regla' : 'Rule'} #{index + 1}
@@ -129,7 +142,7 @@ export default function RuleCard({
                           }}
                           aria-label={es ? 'Paso anterior' : 'Previous step'}
                         >
-                          ←
+                          <GameIcon name="chevron" className="rotate-180" />
                         </button>
                         <span className="min-w-[4.5rem] text-center text-ui-xs text-neutral-500">
                           {step + 1} / {steps.length}
@@ -144,7 +157,7 @@ export default function RuleCard({
                           }}
                           aria-label={es ? 'Paso siguiente' : 'Next step'}
                         >
-                          →
+                          <GameIcon name="chevron" />
                         </button>
                       </div>
                     )}

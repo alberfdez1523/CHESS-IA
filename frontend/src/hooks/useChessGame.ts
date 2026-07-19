@@ -496,15 +496,16 @@ export function useChessGame(
 
   function undoMove() {
     const game = gameRef.current
-    if (game.history().length < 2 || isThinkingRef.current || gameOverInfo) return
-    game.undo()
-    game.undo()
+    if (isOnline || isThinkingRef.current || gameOverInfo) return
+    const plies = isAIMode ? 2 : 1
+    if (game.history().length < plies) return
+    for (let index = 0; index < plies; index++) game.undo()
     setSelectedSquare(null)
     setLastMove(null)
     setFen(game.fen())
   }
 
-  const undo = useCallback(() => undoMove(), [gameOverInfo])
+  const undo = useCallback(() => undoMove(), [gameOverInfo, isAIMode, isOnline])
 
   const flip = useCallback(() => {
     setBoardFlipped(prev => !prev)
@@ -514,7 +515,7 @@ export function useChessGame(
     if (gameOverInfo) return
     sounds.playGameEnd()
     setGameOverInfo({
-      title: language === 'es' ? 'Resignación' : 'Resignation',
+      title: language === 'es' ? 'Rendición' : 'Resignation',
       message: language === 'es' ? 'Has abandonado la partida' : 'You resigned the game',
       result: 'lose',
     })

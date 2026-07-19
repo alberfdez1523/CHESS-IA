@@ -1,9 +1,9 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import Piece from './Piece'
-import { FILES, RANKS } from '../lib/constants'
 import { getColorName, getPieceName, ui } from '../lib/i18n'
 import { useBoardPieceDrag, type DragGhostPiece } from '../hooks/useBoardPieceDrag'
+import { useBoardNavigation } from '../hooks/useBoardNavigation'
 import type { Language, PieceColor, PieceType } from '../lib/types'
 
 interface BoardProps {
@@ -37,7 +37,6 @@ export default function Board({
   language,
   statusText,
 }: BoardProps) {
-  const [focusedSquare, setFocusedSquare] = useState('e4')
   const [ghostPiece, setGhostPiece] = useState<DragGhostPiece | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const ghostRef = useRef<HTMLDivElement>(null)
@@ -52,31 +51,23 @@ export default function Board({
     () => setGhostPiece(null),
   )
 
-  const squares = useMemo(() => {
-    const result: { square: string; row: number; col: number; isLight: boolean }[] = []
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const fileIdx = boardFlipped ? 7 - c : c
-        const rankIdx = boardFlipped ? r : 7 - r
-        const square = `${FILES[fileIdx]}${RANKS[rankIdx]}`
-        const isLight = (fileIdx + rankIdx) % 2 !== 0
-        result.push({ square, row: r, col: c, isLight })
-      }
-    }
-    return result
-  }, [boardFlipped])
-
-  const squareIndex = useMemo(() => {
-    const map = new Map<string, { row: number; col: number }>()
-    squares.forEach(({ square, row, col }) => map.set(square, { row, col }))
-    return map
-  }, [squares])
+  const { focusedSquare, setFocusedSquare, squares, handleKeyDown } = useBoardNavigation({
+    flipped: boardFlipped,
+    idPrefix: 'sq',
+    onActivate: onSquareClick,
+  })
 
   useEffect(() => {
-    if (statusText && liveRef.current) {
-      liveRef.current.textContent = statusText
+    if (!liveRef.current) return
+    if (selectedSquare) {
+      const selected = getPiece(selectedSquare)
+      liveRef.current.textContent = selected
+        ? `${getColorName(selected.color, language)} ${getPieceName(selected.type, language)}, ${selectedSquare}, ${t.selected}`
+        : `${selectedSquare}, ${t.selected}`
+      return
     }
-  }, [statusText, lastMove, checkSquare])
+    if (statusText) liveRef.current.textContent = statusText
+  }, [checkSquare, getPiece, language, lastMove, selectedSquare, statusText, t])
 
   const buildAriaLabel = useCallback((square: string) => {
     const piece = getPiece(square)
@@ -93,36 +84,6 @@ export default function Board({
     if (lastMove?.to === square) parts.push(t.lastMoveTo)
     return t.squareLabel(square, parts.slice(1).join(', '), '')
   }, [getPiece, language, selectedSquare, legalSquares, checkSquare, lastMove, t])
-
-  const moveFocus = useCallback((square: string) => {
-    setFocusedSquare(square)
-    document.getElementById(`sq-${square}`)?.focus()
-  }, [])
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent, square: string) => {
-    const pos = squareIndex.get(square)
-    if (!pos) return
-
-    const delta: Record<string, [number, number]> = {
-      ArrowUp: [-1, 0],
-      ArrowDown: [1, 0],
-      ArrowLeft: [0, -1],
-      ArrowRight: [0, 1],
-    }
-
-    if (delta[e.key]) {
-      e.preventDefault()
-      const [dr, dc] = delta[e.key]
-      const target = squares.find((s) => s.row === pos.row + dr && s.col === pos.col + dc)
-      if (target) moveFocus(target.square)
-      return
-    }
-
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onSquareClick(square)
-    }
-  }, [squareIndex, squares, moveFocus, onSquareClick])
 
   const handleSquareClick = useCallback((square: string) => {
     if (consumeClickSuppression()) return
@@ -185,6 +146,7 @@ export default function Board({
               data-board-col={col}
               type="button"
               role="gridcell"
+              aria-selected={isSelected}
               aria-rowindex={row + 1}
               aria-colindex={col + 1}
               aria-label={buildAriaLabel(square)}
@@ -239,12 +201,12 @@ export default function Board({
 
               {showFile && (
                 <span className={`board-coord coord-file pointer-events-none ${coordColor}`}>
-                  {boardFlipped ? FILES[7 - col] : FILES[col]}
+                  {square[0]}
                 </span>
               )}
               {showRank && (
                 <span className={`board-coord coord-rank pointer-events-none ${coordColor}`}>
-                  {boardFlipped ? RANKS[row] : RANKS[7 - row]}
+                  {square[1]}
                 </span>
               )}
             </button>

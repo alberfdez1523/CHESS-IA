@@ -6,8 +6,246 @@
 import type {
   PieceColor, PieceType, QPiece, QBoardCell, QMoveRecord,
   QMoveType, QEntanglement, QCastleEntData, QTunnelEntData,
-  QState, QGameOver, QMeasurementEvent,
+  QState, QGameOver, QMeasurementEvent, QuantumAction, QuantumRng,
+  ActionResult, GameResultCause,
 } from './types'
+
+const PROBABILITY_EPSILON = 1e-9
+const UINT64_MASK = 0xffffffffffffffffn
+const GAME_RESULT_CAUSES = new Set<GameResultCause>([
+  'king-captured', 'checkmate', 'draw', 'no-legal-actions', 'timeout', 'resignation', 'agreement',
+])
+
+export class QuantumActionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'QuantumActionError'
+  }
+}
+
+function cloneState(state: QState): QState {
+  return structuredClone(state)
+}
+
+function isBoardSquare(value: string): boolean {
+  return /^[a-h][1-8]$/.test(value)
+}
+
+function normalizeLoadedState(next: QState): QState {
+  const normalized = cloneState(next)
+  if (normalized.rngCounter === undefined) normalized.rngCounter = 0
+  if (normalized.gameOver && !normalized.gameOver.cause) {
+    normalized.gameOver.cause = normalized.gameOver.winner === null
+      ? 'no-legal-actions'
+      : 'king-captured'
+  }
+  for (const record of normalized.history) {
+    if (!record.measurements && record.measurement) record.measurements = [record.measurement]
+  }
+  return normalized
+}
+
+/** Valida invariantes persistentes, también para estados recibidos por red. */
+export function validateQuantumState(state: QState): void {
+  if (!state || typeof state !== 'object') throw new QuantumActionError('Estado cuántico inválido')
+  if (state.turn !== 'w' && state.turn !== 'b') throw new QuantumActionError('Turno inválido')
+  if (!state.pieces || typeof state.pieces !== 'object') throw new QuantumActionError('Mapa de piezas inválido')
+  if (!Array.isArray(state.history)) throw new QuantumActionError('Historial inválido')
+  if (!Array.isArray(state.entanglements)) throw new QuantumActionError('Entrelazamientos inválidos')
+  if (
+    !state.castling ||
+    typeof state.castling.w?.k !== 'boolean' ||
+    typeof state.castling.w?.q !== 'boolean' ||
+    typeof state.castling.b?.k !== 'boolean' ||
+    typeof state.castling.b?.q !== 'boolean'
+  ) {
+    throw new QuantumActionError('Derechos de enroque inválidos')
+  }
+  if (!Number.isInteger(state.moveNumber) || state.moveNumber < 1) {
+    throw new QuantumActionError('Número de movimiento inválido')
+  }
+  if (!Number.isInteger(state.nextEntId) || state.nextEntId < 1) {
+    throw new QuantumActionError('Identificador de entrelazamiento inválido')
+  }
+  if (!Number.isInteger(state.rngCounter) || state.rngCounter < 0) {
+    throw new QuantumActionError('Contador RNG inválido')
+  }
+
+  const alliedOccupancy = new Map<string, string>()
+  for (const [id, piece] of Object.entries(state.pieces)) {
+    if (!piece || piece.id !== id) throw new QuantumActionError(`Pieza inválida: ${id}`)
+    if (piece.color !== 'w' && piece.color !== 'b') throw new QuantumActionError(`Color inválido: ${id}`)
+    if (!['p', 'n', 'b', 'r', 'q', 'k'].includes(piece.type)) {
+      throw new QuantumActionError(`Tipo de pieza inválido: ${id}`)
+    }
+
+    const positions = Object.entries(piece.positions)
+    if (!piece.alive) {
+      if (positions.length > 0) throw new QuantumActionError(`Una pieza capturada conserva posiciones: ${id}`)
+      continue
+    }
+    if (positions.length === 0) throw new QuantumActionError(`Una pieza viva no tiene posición: ${id}`)
+
+    let total = 0
+    for (const [square, probability] of positions) {
+      if (!isBoardSquare(square)) throw new QuantumActionError(`Casilla inválida: ${square}`)
+      if (!Number.isFinite(probability) || probability <= 0 || probability > 1) {
+        throw new QuantumActionError(`Probabilidad inválida en ${square}`)
+      }
+      total += probability
+
+      const occupancyKey = `${piece.color}:${square}`
+      const occupyingPiece = alliedOccupancy.get(occupancyKey)
+      if (occupyingPiece && occupyingPiece !== id) {
+        throw new QuantumActionError(`Dos piezas aliadas distintas coexisten en ${square}`)
+      }
+      alliedOccupancy.set(occupancyKey, id)
+    }
+    if (Math.abs(total - 1) > PROBABILITY_EPSILON) {
+      throw new QuantumActionError(`La probabilidad de ${id} no suma 1`)
+    }
+  }
+
+  const entanglementIds = new Set<number>()
+  for (const entanglement of state.entanglements) {
+    if (!Number.isInteger(entanglement.id) || entanglement.id < 1 || entanglementIds.has(entanglement.id)) {
+      throw new QuantumActionError('Identificador de entrelazamiento duplicado o inválido')
+    }
+    entanglementIds.add(entanglement.id)
+
+    if (entanglement.type === 'castle') {
+      const data = entanglement.data
+      if (!state.pieces[data.kingId] || !state.pieces[data.rookId]) {
+        throw new QuantumActionError('Enroque entrelazado referencia piezas inexistentes')
+      }
+      const squares = [
+        data.castled.king, data.castled.rook, data.original.king, data.original.rook,
+      ]
+      if (squares.some((square) => !isBoardSquare(square))) {
+        throw new QuantumActionError('Enroque entrelazado contiene casillas inválidas')
+      }
+      continue
+    }
+
+    if (entanglement.type === 'tunnel') {
+      const data = entanglement.data
+      if (!state.pieces[data.tunnelerId] || !state.pieces[data.blockerId]) {
+        throw new QuantumActionError('Túnel entrelazado referencia piezas inexistentes')
+      }
+      if (!isBoardSquare(data.tunnelerOriginal) || !isBoardSquare(data.blockerSquare)) {
+        throw new QuantumActionError('Túnel entrelazado contiene casillas inválidas')
+      }
+      const originOccupiedByAnother = Object.values(state.pieces).some((piece) =>
+        piece.alive && piece.id !== data.tunnelerId && piece.positions[data.tunnelerOriginal] !== undefined,
+      )
+      if (originOccupiedByAnother) {
+        throw new QuantumActionError('El origen reservado de un túnel está ocupado')
+      }
+      continue
+    }
+
+    throw new QuantumActionError('Tipo de entrelazamiento inválido')
+  }
+  if ([...entanglementIds].some((id) => id >= state.nextEntId)) {
+    throw new QuantumActionError('El siguiente identificador de entrelazamiento no es monotónico')
+  }
+
+  if (state.gameOver !== null) {
+    if (
+      (state.gameOver.winner !== null && state.gameOver.winner !== 'w' && state.gameOver.winner !== 'b') ||
+      !GAME_RESULT_CAUSES.has(state.gameOver.cause) ||
+      typeof state.gameOver.reason !== 'string'
+    ) {
+      throw new QuantumActionError('Resultado terminal inválido')
+    }
+    if (state.gameOver.cause === 'no-legal-actions' && state.gameOver.winner !== null) {
+      throw new QuantumActionError('Las tablas no pueden tener ganador')
+    }
+    if (state.gameOver.cause === 'king-captured' && state.gameOver.winner === null) {
+      throw new QuantumActionError('La captura del rey requiere ganador')
+    }
+  }
+
+  const whiteKingAlive = state.pieces.w_k?.alive === true
+  const blackKingAlive = state.pieces.b_k?.alive === true
+  if (!state.gameOver && (!whiteKingAlive || !blackKingAlive)) {
+    throw new QuantumActionError('Un rey capturado requiere resultado terminal')
+  }
+  if (state.gameOver?.cause === 'king-captured') {
+    const losingKingAlive = state.gameOver.winner === 'w' ? blackKingAlive : whiteKingAlive
+    if (losingKingAlive) throw new QuantumActionError('El resultado no coincide con el rey capturado')
+  }
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null) return 'null'
+  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value)
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new QuantumActionError('El estado contiene un número no finito')
+    return Object.is(value, -0) ? '0' : JSON.stringify(value)
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(',')}}`
+  }
+  throw new QuantumActionError('El estado contiene un valor no serializable')
+}
+
+export function canonicalizeQuantumState(state: QState): string {
+  const canonicalState = {
+    ...state,
+    history: state.history.map(({ description: _description, ...record }) => record),
+    entanglements: [...state.entanglements].sort((left, right) => left.id - right.id),
+    gameOver: state.gameOver
+      ? { winner: state.gameOver.winner, cause: state.gameOver.cause }
+      : null,
+  }
+  return canonicalJson(canonicalState)
+}
+
+/** Huella estable para sincronización; no pretende ser criptográfica. */
+export function hashQuantumState(state: QState): string {
+  const bytes = new TextEncoder().encode(canonicalizeQuantumState(state))
+  let hash = 0xcbf29ce484222325n
+  for (const byte of bytes) {
+    hash ^= BigInt(byte)
+    hash = (hash * 0x100000001b3n) & UINT64_MASK
+  }
+  return hash.toString(16).padStart(16, '0')
+}
+
+/** PRNG Mulberry32 reproducible; `counter` permite reanudar una secuencia. */
+export function createSeededQuantumRng(seed: string | number, counter = 0): QuantumRng {
+  if (!Number.isInteger(counter) || counter < 0) throw new QuantumActionError('Contador RNG inválido')
+  const source = String(seed)
+  let state = 0x811c9dc5
+  for (let index = 0; index < source.length; index++) {
+    state ^= source.charCodeAt(index)
+    state = Math.imul(state, 0x01000193)
+  }
+
+  const next: QuantumRng = () => {
+    state = (state + 0x6d2b79f5) | 0
+    let value = state
+    value = Math.imul(value ^ (value >>> 15), value | 1)
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+  for (let index = 0; index < counter; index++) next()
+  next.checkpoint = () => state
+  next.restore = (checkpoint) => {
+    if (typeof checkpoint !== 'number' || !Number.isInteger(checkpoint)) {
+      throw new QuantumActionError('Checkpoint RNG inválido')
+    }
+    state = checkpoint
+  }
+  return next
+}
 
 // ─── Utilidades de coordenadas ───
 
@@ -35,6 +273,10 @@ const LABELS: Record<string, string> = {
   p: 'Peón', n: 'Caballo', b: 'Alfil', r: 'Torre', q: 'Dama', k: 'Rey',
 }
 
+const MERGE_PARTICIPLE: Record<string, string> = {
+  p: 'fusionado', n: 'fusionado', b: 'fusionado', r: 'fusionada', q: 'fusionada', k: 'fusionado',
+}
+
 // ─── Resultado de generación de movimientos ───
 
 export interface MoveTarget {
@@ -56,9 +298,16 @@ interface ClassicalCastleInfo {
 
 export class QuantumChessEngine {
   state: QState
+  private rng: QuantumRng
 
-  constructor() {
+  constructor(rng: QuantumRng = Math.random) {
     this.state = createInitialState()
+    this.rng = rng
+  }
+
+  /** Sustituye la fuente de azar sin alterar el estado; online la deriva de semilla + contador. */
+  setRng(rng: QuantumRng): void {
+    this.rng = rng
   }
 
   // ─── Vista del tablero ───
@@ -109,17 +358,18 @@ export class QuantumChessEngine {
     return false
   }
 
-  isClassicalKingInCheck(color: PieceColor): boolean {
-    const kingSq = this.getClassicalKingSquare(color)
-    if (!kingSq) return false
-    return this.isSquareAttackedByClassical(kingSq, color)
+  /**
+   * Compatibilidad con consumidores antiguos. En esta variante no existe
+   * jaque: el rey puede entrar en una casilla atacada y sólo pierde al ser
+   * capturado.
+   */
+  isClassicalKingInCheck(_color: PieceColor): boolean {
+    return false
   }
 
   /** Rey del bando al turno en jaque clásico (para UI) */
   getCheckSquareForTurn(): string | null {
-    const kingSq = this.getClassicalKingSquare(this.state.turn)
-    if (!kingSq || !this.isClassicalKingInCheck(this.state.turn)) return null
-    return kingSq
+    return null
   }
 
   // ─── Generación de movimientos legales ───
@@ -143,44 +393,60 @@ export class QuantumChessEngine {
       case 'k': moves = this._kingMoves(piece, fromSquare, board); break
       default: return []
     }
-    return this._applyCheckFilters(piece, fromSquare, moves, board)
+    return moves.filter((move) => !this.state.entanglements.some((entanglement) =>
+      entanglement.type === 'tunnel' &&
+      entanglement.data.tunnelerOriginal === move.square &&
+      entanglement.data.tunnelerId !== pieceId,
+    ))
+  }
+
+  /** Destinos no capturantes válidos para split; el enroque tiene acción propia. */
+  getQuantumSplitTargets(pieceId: string, fromSquare: string): string[] {
+    const piece = this.state.pieces[pieceId]
+    if (!piece || piece.type === 'p') return []
+    return this.getLegalMoves(pieceId, fromSquare)
+      .filter((move) => {
+        if (move.isCapture) return false
+        if (piece.type !== 'k') return true
+        return Math.abs(fromSquare.charCodeAt(0) - move.square.charCodeAt(0)) !== 2
+      })
+      .map((move) => move.square)
   }
 
   /** Casillas de fusión: reachable desde TODAS las posiciones del quantum piece */
   getMergeTargets(pieceId: string, fromSquare?: string): string[] {
     const piece = this.state.pieces[pieceId]
-    if (!piece || !piece.alive) return []
+    if (this.state.gameOver || !piece || !piece.alive || piece.color !== this.state.turn) return []
     const squares = Object.keys(piece.positions)
     if (squares.length < 2) return []
 
     const origin = fromSquare && piece.positions[fromSquare] !== undefined ? fromSquare : squares[0]
     const board = this.getBoard()
-    const originTargets = new Set(
-      this.getLegalMoves(pieceId, origin)
-        .filter(m => !m.isCapture)
-        .map(m => m.square)
-    )
-    if (originTargets.size === 0) return []
+    const orderedSquares = [origin, ...squares.filter((square) => square !== origin)]
+    let commonTargets: Set<string> | null = null
 
-    const result = new Set<string>()
-    for (const sq of squares) {
-      if (sq === origin) continue
-      const moves = this.getLegalMoves(pieceId, sq)
-      for (const move of moves) {
-        if (move.isCapture || !originTargets.has(move.square)) continue
-        const cells = board[move.square] || []
-        const hasOtherPiece = cells.some(c => c.pieceId !== pieceId)
-        if (!hasOtherPiece) result.add(move.square)
-      }
+    for (const square of orderedSquares) {
+      const targets = new Set(
+        this.getLegalMoves(pieceId, square)
+          .filter((move) => !move.isCapture)
+          .map((move) => move.square),
+      )
+      commonTargets = commonTargets === null
+        ? targets
+        : new Set(Array.from(commonTargets as Set<string>).filter((target) => targets.has(target)))
+      if (commonTargets.size === 0) return []
     }
 
     // También filtramos: el destino debe estar vacío de piezas enemigas y de otras piezas propias
-    return [...result]
+    return [...(commonTargets ?? [])].filter((target) =>
+      (board[target] || []).every((cell) => cell.pieceId === pieceId),
+    )
   }
 
   /** Opciones de enroque cuántico disponibles */
   canQuantumCastle(color: PieceColor): ('k' | 'q')[] {
     const sides: ('k' | 'q')[] = []
+    if (this.state.gameOver || color !== this.state.turn) return sides
     const c = this.state.castling[color]
     const rank = color === 'w' ? '1' : '8'
     const kingId = `${color}_k`
@@ -197,7 +463,7 @@ export class QuantumChessEngine {
       if (rook?.alive && Object.keys(rook.positions).length === 1 && rook.positions[`h${rank}`] === 1) {
         const f = board[`f${rank}`] || []
         const g = board[`g${rank}`] || []
-        const pathClear = f.every(c => c.probability < 1) && g.every(c => c.probability < 1)
+        const pathClear = f.length === 0 && g.length === 0
         if (pathClear) sides.push('k')
       }
     }
@@ -209,7 +475,7 @@ export class QuantumChessEngine {
         const b = board[`b${rank}`] || []
         const c2 = board[`c${rank}`] || []
         const d = board[`d${rank}`] || []
-        const pathClear = b.every(c => c.probability < 1) && c2.every(c => c.probability < 1) && d.every(c => c.probability < 1)
+        const pathClear = b.length === 0 && c2.length === 0 && d.length === 0
         if (pathClear) sides.push('q')
       }
     }
@@ -219,7 +485,94 @@ export class QuantumChessEngine {
 
   // ─── Ejecución de movimientos ───
 
+  /** Punto único de mutación validada para toda acción cuántica. */
+  applyAction(action: QuantumAction, rng: QuantumRng = this.rng): ActionResult {
+    const previousState = this.exportState()
+    const previousRng = this.rng
+    const rngCounterStart = previousState.rngCounter
+    const hasRngCheckpoint = typeof rng.checkpoint === 'function' && typeof rng.restore === 'function'
+    const rngCheckpoint = hasRngCheckpoint ? rng.checkpoint?.() : undefined
+
+    try {
+      validateQuantumState(previousState)
+      this.rng = rng
+      this._assertActionLegal(action)
+
+      let record: QMoveRecord
+      switch (action.kind) {
+        case 'classical':
+          record = this._doClassicalMove(action.pieceId, action.from, action.to, action.promotion)
+          break
+        case 'quantum':
+          record = this._doQuantumMove(action.pieceId, action.from, action.toA, action.toB)
+          break
+        case 'merge':
+          record = this._doMergeFrom(action.pieceId, action.from, action.to)
+          break
+        case 'quantumCastle':
+          record = this._doQuantumCastle(action.color, action.side)
+          break
+        default: {
+          const exhaustive: never = action
+          throw new QuantumActionError(`Acción cuántica desconocida: ${String(exhaustive)}`)
+        }
+      }
+
+      this._refreshTerminalState()
+      validateQuantumState(this.state)
+      const nextState = this.exportState()
+      const events = record.measurements ?? (record.measurement ? [record.measurement] : [])
+
+      return {
+        state: nextState,
+        record: structuredClone(record),
+        measurementTrace: {
+          events: structuredClone(events),
+          rngCounterStart,
+          rngCounterEnd: nextState.rngCounter,
+        },
+        gameResult: nextState.gameOver ? structuredClone(nextState.gameOver) : null,
+        stateHash: hashQuantumState(nextState),
+      }
+    } catch (error) {
+      this.state = previousState
+      if (hasRngCheckpoint) rng.restore?.(rngCheckpoint)
+      if (error instanceof QuantumActionError) throw error
+      throw new QuantumActionError(error instanceof Error ? error.message : 'Acción cuántica inválida')
+    } finally {
+      this.rng = previousRng
+    }
+  }
+
+  /** API histórica: delega en `applyAction` y conserva el retorno anterior. */
   doClassicalMove(pieceId: string, from: string, to: string, promotion?: PieceType): QMoveRecord {
+    return this.applyAction({ kind: 'classical', pieceId, from, to, promotion }).record
+  }
+
+  /** API histórica: delega en `applyAction` y conserva el retorno anterior. */
+  doQuantumMove(pieceId: string, from: string, toA: string, toB: string): QMoveRecord {
+    return this.applyAction({ kind: 'quantum', pieceId, from, toA, toB }).record
+  }
+
+  /** API histórica: fusiona todas las ramas de la pieza en un destino común. */
+  doMerge(pieceId: string, to: string): QMoveRecord {
+    const piece = this.state.pieces[pieceId]
+    const from = Object.keys(piece?.positions ?? {})[0]
+    if (!from) throw new QuantumActionError('No hay estados para fusionar')
+    return this.doMergeFrom(pieceId, from, to)
+  }
+
+  /** API histórica: delega en `applyAction` y conserva el retorno anterior. */
+  doMergeFrom(pieceId: string, from: string, to: string): QMoveRecord {
+    return this.applyAction({ kind: 'merge', pieceId, from, to }).record
+  }
+
+  /** API histórica: delega en `applyAction` y conserva el retorno anterior. */
+  doQuantumCastle(color: PieceColor, side: 'k' | 'q'): QMoveRecord {
+    return this.applyAction({ kind: 'quantumCastle', color, side }).record
+  }
+
+  private _doClassicalMove(pieceId: string, from: string, to: string, promotion?: PieceType): QMoveRecord {
     if (this.state.gameOver) throw new Error('La partida ha terminado')
     const piece = this.state.pieces[pieceId]
     const legalMoves = this.getLegalMoves(pieceId, from)
@@ -240,6 +593,7 @@ export class QuantumChessEngine {
     let captured: { id: string; type: PieceType } | undefined
     let measurement: QMeasurementEvent | undefined
     let attackerMeasurement: QMeasurementEvent | undefined
+    const measurements: QMeasurementEvent[] = []
     let staysOnOrigin = false
 
     // ¿La pieza que mueve es cuántica?
@@ -252,7 +606,7 @@ export class QuantumChessEngine {
 
       if (attackerIsQuantum) {
         // Medir atacante primero
-        const roll = Math.random()
+        const roll = this._nextRandom()
         const alive = roll < prob
         if (!alive) {
           // Atacante no existe → pierde turno, colapsa en otra casilla
@@ -264,14 +618,15 @@ export class QuantumChessEngine {
             attackerWasQuantum: true,
             defenderWasQuantum: defenderIsQuantum,
             step: 1,
-            totalSteps: defenderIsQuantum ? 2 : 1,
+            totalSteps: 1,
           }
+          measurements.push(measurement)
           this._collapsePieceAway(pieceId, from)
           this._resolveEntanglementsFor(pieceId)
           const desc = `⚡ ${LABELS[piece.type]} mide en ${to} → NO existe`
           const record: QMoveRecord = {
             pieceId, pieceType: piece.type, color: piece.color,
-            moveType: 'classical', from, to, measurement, description: desc,
+            moveType: 'classical', from, to, measurement, measurements, description: desc,
           }
           this.state.history.push(record)
           this._endTurn()
@@ -288,6 +643,7 @@ export class QuantumChessEngine {
           step: 1,
           totalSteps: defenderIsQuantum ? 2 : 1,
         }
+        measurements.push(attackerMeasurement)
         measurement = attackerMeasurement
         this._collapsePieceTo(pieceId, from)
         this._resolveEntanglementsFor(pieceId)
@@ -295,7 +651,7 @@ export class QuantumChessEngine {
 
       if (defenderIsQuantum && (!attackerIsQuantum || measurement?.result === 'alive')) {
         // Medir defensor
-        const defRoll = Math.random()
+        const defRoll = this._nextRandom()
         const defAlive = defRoll < defender.probability
         if (!defAlive) {
           // Defensor no existe → movimiento normal (casilla vacía), defensor colapsa en otra casilla
@@ -312,6 +668,7 @@ export class QuantumChessEngine {
               ? { target: attackerMeasurement.target, result: attackerMeasurement.result }
               : undefined,
           }
+          measurements.push(measurement)
           this._collapsePieceAway(defender.pieceId, to)
           this._resolveEntanglementsFor(defender.pieceId)
           staysOnOrigin = attemptedPawnCapture
@@ -330,9 +687,10 @@ export class QuantumChessEngine {
               ? { target: attackerMeasurement.target, result: attackerMeasurement.result }
               : undefined,
           }
+          measurements.push(measurement)
           captured = { id: defender.pieceId, type: defender.type }
           this._killPiece(defender.pieceId)
-          this._resolveEntanglementsFor(defender.pieceId)
+          this._resolveEntanglementsFor(defender.pieceId, to)
         }
       } else if (!defenderIsQuantum) {
         // Captura estándar de pieza clásica
@@ -379,7 +737,7 @@ export class QuantumChessEngine {
     }
 
     // Promoción de peón
-    if (promotion && piece.type === 'p') {
+    if (!staysOnOrigin && promotion && piece.type === 'p') {
       const destRank = to[1]
       if ((piece.color === 'w' && destRank === '8') || (piece.color === 'b' && destRank === '1')) {
         piece.type = promotion
@@ -408,7 +766,8 @@ export class QuantumChessEngine {
 
     const record: QMoveRecord = {
       pieceId, pieceType: piece.type, color: piece.color,
-      moveType: 'classical', from, to: staysOnOrigin ? from : to, captured, measurement, description: desc,
+      moveType: 'classical', from, to: staysOnOrigin ? from : to, captured, measurement,
+      measurements: measurements.length > 0 ? measurements : undefined, description: desc,
     }
     this.state.history.push(record)
     this._checkGameOver()
@@ -418,7 +777,7 @@ export class QuantumChessEngine {
 
   private _cachedMoves: MoveTarget[] | null = null
 
-  doQuantumMove(pieceId: string, from: string, toA: string, toB: string): QMoveRecord {
+  private _doQuantumMove(pieceId: string, from: string, toA: string, toB: string): QMoveRecord {
     if (this.state.gameOver) throw new Error('La partida ha terminado')
     const piece = this.state.pieces[pieceId]
     if (piece.type === 'p') throw new Error('Los peones no pueden hacer movimientos cuánticos')
@@ -431,6 +790,7 @@ export class QuantumChessEngine {
     // Añadir a las dos casillas destino
     piece.positions[toA] = (piece.positions[toA] ?? 0) + halfProb
     piece.positions[toB] = (piece.positions[toB] ?? 0) + halfProb
+    this._updateCastlingRights(pieceId, from, toA)
 
     const desc = `${LABELS[piece.type]} → ${toA} | ${toB} (${Math.round(halfProb * 100)}%/${Math.round(halfProb * 100)}%)`
 
@@ -443,14 +803,7 @@ export class QuantumChessEngine {
     return record
   }
 
-  doMerge(pieceId: string, to: string): QMoveRecord {
-    const piece = this.state.pieces[pieceId]
-    const from = Object.keys(piece?.positions ?? {})[0]
-    if (!from) throw new Error('No hay estados para fusionar')
-    return this.doMergeFrom(pieceId, from, to)
-  }
-
-  doMergeFrom(pieceId: string, from: string, to: string): QMoveRecord {
+  private _doMergeFrom(pieceId: string, from: string, to: string): QMoveRecord {
     if (this.state.gameOver) throw new Error('La partida ha terminado')
     const piece = this.state.pieces[pieceId]
     if (!piece || !piece.alive || piece.positions[from] === undefined) {
@@ -460,16 +813,7 @@ export class QuantumChessEngine {
     const legalTargets = new Set(this.getMergeTargets(pieceId, from))
     if (!legalTargets.has(to)) throw new Error('Fusión inválida')
 
-    const partner = Object.keys(piece.positions).find((sq) => {
-      if (sq === from) return false
-      return this.getLegalMoves(pieceId, sq).some(m => !m.isCapture && m.square === to)
-    })
-    if (!partner) throw new Error('No hay segundo estado compatible para fusionar')
-
-    const mergedProbability = (piece.positions[from] ?? 0) + (piece.positions[partner] ?? 0)
-    delete piece.positions[from]
-    delete piece.positions[partner]
-    piece.positions[to] = (piece.positions[to] ?? 0) + mergedProbability
+    piece.positions = { [to]: 1 }
 
     // Limpiar entrelazamientos asociados
     this.state.entanglements = this.state.entanglements.filter(e => {
@@ -484,12 +828,7 @@ export class QuantumChessEngine {
       return true
     })
 
-    const remainingSquares = Object.keys(piece.positions)
-    if (remainingSquares.length === 1) {
-      piece.positions[remainingSquares[0]] = 1
-    }
-
-    const desc = `${LABELS[piece.type]} fusionado en ${to} (${Math.round((piece.positions[to] ?? 0) * 100)}%)`
+    const desc = `${LABELS[piece.type]} ${MERGE_PARTICIPLE[piece.type]} en ${to} (${Math.round((piece.positions[to] ?? 0) * 100)}%)`
     const record: QMoveRecord = {
       pieceId, pieceType: piece.type, color: piece.color,
       moveType: 'merge', from, to, description: desc,
@@ -499,7 +838,7 @@ export class QuantumChessEngine {
     return record
   }
 
-  doQuantumCastle(color: PieceColor, side: 'k' | 'q'): QMoveRecord {
+  private _doQuantumCastle(color: PieceColor, side: 'k' | 'q'): QMoveRecord {
     if (this.state.gameOver) throw new Error('La partida ha terminado')
     const rank = color === 'w' ? '1' : '8'
     const kingId = `${color}_k`
@@ -643,17 +982,114 @@ export class QuantumChessEngine {
   // ─── Detección de fin de partida ───
 
   checkGameOverPublic(): QGameOver | null {
+    this._refreshTerminalState()
     return this.state.gameOver
   }
 
   /** Snapshot para sincronización multijugador */
   exportState(): QState {
-    return structuredClone(this.state)
+    return cloneState(this.state)
   }
 
   /** Restaura estado remoto (multijugador) */
   loadState(next: QState): void {
-    this.state = structuredClone(next)
+    const normalized = normalizeLoadedState(next)
+    validateQuantumState(normalized)
+    this.state = normalized
+  }
+
+  private _assertActionLegal(action: QuantumAction): void {
+    if (this.state.gameOver) throw new QuantumActionError('La partida ha terminado')
+    if (!action || typeof action !== 'object') throw new QuantumActionError('Acción cuántica inválida')
+
+    if (action.kind === 'quantumCastle') {
+      if ((action.color !== 'w' && action.color !== 'b') || (action.side !== 'k' && action.side !== 'q')) {
+        throw new QuantumActionError('Enroque cuántico inválido')
+      }
+      if (!this.canQuantumCastle(action.color).includes(action.side)) {
+        throw new QuantumActionError('Enroque cuántico no disponible')
+      }
+      return
+    }
+
+    if (!isBoardSquare(action.from)) throw new QuantumActionError('Casilla de origen inválida')
+    const piece = this.state.pieces[action.pieceId]
+    if (!piece || !piece.alive) throw new QuantumActionError('Pieza no disponible')
+    if (piece.color !== this.state.turn) throw new QuantumActionError('La pieza no pertenece al turno actual')
+    if (piece.positions[action.from] === undefined) throw new QuantumActionError('La pieza no ocupa el origen')
+
+    if (action.kind === 'classical') {
+      if (!isBoardSquare(action.to)) throw new QuantumActionError('Casilla de destino inválida')
+      if (!this.getLegalMoves(action.pieceId, action.from).some((move) => move.square === action.to)) {
+        throw new QuantumActionError('Movimiento ilegal')
+      }
+      const isPromotion = piece.type === 'p' && (
+        (piece.color === 'w' && action.to[1] === '8') ||
+        (piece.color === 'b' && action.to[1] === '1')
+      )
+      const validPromotions: PieceType[] = ['q', 'r', 'b', 'n']
+      if (isPromotion && (!action.promotion || !validPromotions.includes(action.promotion))) {
+        throw new QuantumActionError('La promoción requiere dama, torre, alfil o caballo')
+      }
+      if (!isPromotion && action.promotion !== undefined) {
+        throw new QuantumActionError('Promoción fuera de la última fila')
+      }
+      return
+    }
+
+    if (action.kind === 'quantum') {
+      if (piece.type === 'p') throw new QuantumActionError('Los peones no pueden hacer movimientos cuánticos')
+      if (!isBoardSquare(action.toA) || !isBoardSquare(action.toB) || action.toA === action.toB) {
+        throw new QuantumActionError('Un split necesita dos destinos distintos y válidos')
+      }
+      const legalNonCaptures = new Set(this.getQuantumSplitTargets(action.pieceId, action.from))
+      if (!legalNonCaptures.has(action.toA) || !legalNonCaptures.has(action.toB)) {
+        throw new QuantumActionError('Destino de split ilegal')
+      }
+      return
+    }
+
+    if (action.kind === 'merge') {
+      if (!isBoardSquare(action.to) || !this.getMergeTargets(action.pieceId, action.from).includes(action.to)) {
+        throw new QuantumActionError('Fusión inválida')
+      }
+      return
+    }
+
+    throw new QuantumActionError('Acción cuántica desconocida')
+  }
+
+  private _nextRandom(): number {
+    const value = this.rng()
+    if (!Number.isFinite(value) || value < 0 || value >= 1) {
+      throw new QuantumActionError('La fuente RNG debe devolver un valor en [0, 1)')
+    }
+    this.state.rngCounter++
+    return value
+  }
+
+  private _hasAnyLegalAction(): boolean {
+    if (this.state.gameOver) return false
+    for (const piece of Object.values(this.state.pieces)) {
+      if (!piece.alive || piece.color !== this.state.turn) continue
+      for (const from of Object.keys(piece.positions)) {
+        if (this.getLegalMoves(piece.id, from).length > 0) return true
+        if (this.getMergeTargets(piece.id, from).length > 0) return true
+      }
+    }
+    return this.canQuantumCastle(this.state.turn).length > 0
+  }
+
+  private _refreshTerminalState(): void {
+    this._checkGameOver()
+    if (this.state.gameOver) return
+    if (!this._hasAnyLegalAction()) {
+      this.state.gameOver = {
+        winner: null,
+        cause: 'no-legal-actions',
+        reason: 'Tablas: no hay acciones legales',
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -861,8 +1297,8 @@ export class QuantumChessEngine {
       if (!sq) continue
 
       const cells = board[sq] || []
-      const hasOwnClassical = cells.some(c => c.color === color && c.probability >= 1 && c.pieceId !== myId)
-      if (hasOwnClassical) continue
+      const hasOwnPiece = cells.some(c => c.color === color)
+      if (hasOwnPiece) continue
 
       const hasEnemy = cells.some(c => c.color !== color)
       moves.push({ square: sq, isCapture: hasEnemy, tunnelThrough: [] })
@@ -898,6 +1334,9 @@ export class QuantumChessEngine {
       while (cf >= 0 && cf < 8 && cr >= 0 && cr < 8) {
         const sq = rc2sq(cf, cr)!
         const cells = board[sq] || []
+
+        // Otra rama de la misma pieza se resuelve mediante fusión, no túnel.
+        if (cells.some((cell) => cell.pieceId === myId)) break
 
         const ownClassical = cells.find(c => c.color === color && c.probability >= 1 && c.pieceId !== myId)
         const ownQuantum = cells.filter(c => c.color === color && c.probability < 1 && c.pieceId !== myId)
@@ -983,10 +1422,14 @@ export class QuantumChessEngine {
       this._killPiece(pieceId)
       return
     }
+    if (remaining.length === 1) {
+      piece.positions = { [remaining[0][0]]: 1 }
+      return
+    }
 
     // Normalizar y elegir proporcionalmente
     const totalProb = remaining.reduce((s, [, p]) => s + p, 0)
-    const roll = Math.random() * totalProb
+    const roll = this._nextRandom() * totalProb
     let accum = 0
     let target = remaining[0][0]
     for (const [sq, p] of remaining) {
@@ -1013,7 +1456,7 @@ export class QuantumChessEngine {
   }
 
   /** Resolver entrelazamientos cuando una pieza colapsa */
-  private _resolveEntanglementsFor(pieceId: string) {
+  private _resolveEntanglementsFor(pieceId: string, observedSquare?: string) {
     const toRemove: number[] = []
 
     for (const ent of this.state.entanglements) {
@@ -1027,10 +1470,13 @@ export class QuantumChessEngine {
             const otherPiece = this.state.pieces[otherId]
             if (otherPiece?.alive && Object.keys(otherPiece.positions).length > 1) {
               // Colapsar al estado original
-              const otherIsCastled = d.kingId === pieceId
-                ? d.original.rook
-                : d.original.king
-              this._collapsePieceTo(otherId, otherIsCastled)
+              const capturedCastledBranch = d.kingId === pieceId
+                ? observedSquare === d.castled.king
+                : observedSquare === d.castled.rook
+              const target = d.kingId === pieceId
+                ? (capturedCastledBranch ? d.castled.rook : d.original.rook)
+                : (capturedCastledBranch ? d.castled.king : d.original.king)
+              this._collapsePieceTo(otherId, target)
             }
           } else {
             // La pieza colapsó a una casilla → determinar si fue "enrocado" o "original"
@@ -1129,11 +1575,14 @@ export class QuantumChessEngine {
   private _checkGameOver() {
     const wk = this.state.pieces['w_k']
     const bk = this.state.pieces['b_k']
+    if (!wk?.alive && !bk?.alive) {
+      throw new QuantumActionError('Estado inválido: ambos reyes están capturados')
+    }
     if (!wk?.alive) {
-      this.state.gameOver = { winner: 'b', reason: 'Rey blanco capturado' }
+      this.state.gameOver = { winner: 'b', cause: 'king-captured', reason: 'Rey blanco capturado' }
     }
     if (!bk?.alive) {
-      this.state.gameOver = { winner: 'w', reason: 'Rey negro capturado' }
+      this.state.gameOver = { winner: 'w', cause: 'king-captured', reason: 'Rey negro capturado' }
     }
   }
 
@@ -1192,6 +1641,20 @@ export class QuantumChessEngine {
 //  Creación del estado inicial
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * API funcional y pura: valida/clona `state`, aplica la acción con el RNG
+ * inyectado y devuelve el nuevo estado sin modificar la entrada.
+ */
+export function applyAction(
+  state: QState,
+  action: QuantumAction,
+  rng: QuantumRng = Math.random,
+): ActionResult {
+  const engine = new QuantumChessEngine(rng)
+  engine.loadState(state)
+  return engine.applyAction(action, rng)
+}
+
 function createInitialState(): QState {
   const pieces: Record<string, QPiece> = {}
 
@@ -1227,6 +1690,7 @@ function createInitialState(): QState {
     moveNumber: 1,
     entanglements: [],
     nextEntId: 1,
+    rngCounter: 0,
     gameOver: null,
   }
 }

@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import Piece from './Piece'
-import { FILES, RANKS } from '../lib/constants'
 import { getColorName, getPieceName, ui } from '../lib/i18n'
 import { useBoardPieceDrag, type DragGhostPiece } from '../hooks/useBoardPieceDrag'
-import type { Language, PieceColor, QBoardCell, QMoveMode } from '../lib/types'
+import { useBoardNavigation } from '../hooks/useBoardNavigation'
+import type { Language, PieceColor, QBoardCell, QEntanglement, QMoveMode } from '../lib/types'
 
 interface QuantumBoardProps {
   board: Record<string, QBoardCell[]>
@@ -23,6 +23,7 @@ interface QuantumBoardProps {
   language: Language
   statusText?: string
   checkSquare?: string | null
+  entanglements?: QEntanglement[]
 }
 
 export default function QuantumBoard({
@@ -42,8 +43,8 @@ export default function QuantumBoard({
   language,
   statusText,
   checkSquare = null,
+  entanglements = [],
 }: QuantumBoardProps) {
-  const [focusedSquare, setFocusedSquare] = useState('e4')
   const [ghostPiece, setGhostPiece] = useState<DragGhostPiece | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const ghostRef = useRef<HTMLDivElement>(null)
@@ -58,31 +59,58 @@ export default function QuantumBoard({
     () => setGhostPiece(null),
   )
 
-  const squares = useMemo(() => {
-    const result: { square: string; row: number; col: number; isLight: boolean }[] = []
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const fileIdx = boardFlipped ? 7 - c : c
-        const rankIdx = boardFlipped ? r : 7 - r
-        const square = `${FILES[fileIdx]}${RANKS[rankIdx]}`
-        const isLight = (fileIdx + rankIdx) % 2 !== 0
-        result.push({ square, row: r, col: c, isLight })
+  const { focusedSquare, setFocusedSquare, squares, squareIndex, handleKeyDown } = useBoardNavigation({
+    flipped: boardFlipped,
+    idPrefix: 'qsq',
+    onActivate: onSquareClick,
+  })
+
+  const entanglementLines = useMemo(() => {
+    type EntanglementLine = {
+      id: string
+      kind: 'tunnel' | 'castle'
+      from: { x: number; y: number }
+      to: { x: number; y: number }
+    }
+    const point = (square: string) => {
+      const position = squareIndex.get(square)
+      if (!position) return null
+      return {
+        x: (position.col + 0.5) * 12.5,
+        y: (position.row + 0.5) * 12.5,
       }
     }
-    return result
-  }, [boardFlipped])
-
-  const squareIndex = useMemo(() => {
-    const map = new Map<string, { row: number; col: number }>()
-    squares.forEach(({ square, row, col }) => map.set(square, { row, col }))
-    return map
-  }, [squares])
+    const lines: EntanglementLine[] = []
+    entanglements.forEach((entry) => {
+      if (entry.type === 'tunnel') {
+        const from = point(entry.data.tunnelerOriginal)
+        const to = point(entry.data.blockerSquare)
+        if (from && to) lines.push({ id: `tunnel-${entry.id}`, kind: 'tunnel', from, to })
+        return
+      }
+      const castleLines = [
+        { id: `castle-king-${entry.id}`, from: point(entry.data.original.king), to: point(entry.data.castled.king) },
+        { id: `castle-rook-${entry.id}`, from: point(entry.data.original.rook), to: point(entry.data.castled.rook) },
+      ]
+      castleLines.forEach((line) => {
+        if (line.from && line.to) lines.push({ id: line.id, kind: 'castle', from: line.from, to: line.to })
+      })
+    })
+    return lines
+  }, [entanglements, squareIndex])
 
   useEffect(() => {
-    if (statusText && liveRef.current) {
-      liveRef.current.textContent = statusText
+    if (!liveRef.current) return
+    if (selectedPiece) {
+      const selected = (board[selectedPiece.square] ?? []).find((cell) => cell.pieceId === selectedPiece.id)
+      const branchCount = Object.values(board).flat().filter((cell) => cell.pieceId === selectedPiece.id).length
+      liveRef.current.textContent = selected
+        ? `${getColorName(selected.color, language)} ${getPieceName(selected.type, language)}, ${selectedPiece.square}, ${t.selected}, ${branchCount} ${language === 'es' ? 'ramas' : 'branches'}`
+        : `${selectedPiece.square}, ${t.selected}`
+      return
     }
-  }, [statusText, lastMove])
+    if (statusText) liveRef.current.textContent = statusText
+  }, [board, language, lastMove, selectedPiece, statusText, t])
 
   const buildAriaLabel = useCallback((square: string) => {
     const cells = board[square] || []
@@ -96,7 +124,7 @@ export default function QuantumBoard({
           .join('; '),
       )
     }
-    if (selectedPiece?.square === square) parts.push(t.selected)
+    if (selectedPiece && cells.some((cell) => cell.pieceId === selectedPiece.id)) parts.push(t.selected)
     if (legalTargets.has(square)) parts.push(t.legalMove)
     if (mergeTargets.has(square)) parts.push(language === 'es' ? 'fusión posible' : 'merge target')
     if (lastMove?.from === square) parts.push(t.lastMoveFrom)
@@ -104,36 +132,6 @@ export default function QuantumBoard({
     if (square === checkSquare) parts.push(t.check)
     return parts.join(', ')
   }, [board, language, selectedPiece, legalTargets, mergeTargets, lastMove, checkSquare, t])
-
-  const moveFocus = useCallback((square: string) => {
-    setFocusedSquare(square)
-    document.getElementById(`qsq-${square}`)?.focus()
-  }, [])
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent, square: string) => {
-    const pos = squareIndex.get(square)
-    if (!pos) return
-
-    const delta: Record<string, [number, number]> = {
-      ArrowUp: [-1, 0],
-      ArrowDown: [1, 0],
-      ArrowLeft: [0, -1],
-      ArrowRight: [0, 1],
-    }
-
-    if (delta[e.key]) {
-      e.preventDefault()
-      const [dr, dc] = delta[e.key]
-      const target = squares.find((s) => s.row === pos.row + dr && s.col === pos.col + dc)
-      if (target) moveFocus(target.square)
-      return
-    }
-
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onSquareClick(square)
-    }
-  }, [squareIndex, squares, moveFocus, onSquareClick])
 
   const handleSquareClick = useCallback((square: string) => {
     if (consumeClickSuppression()) return
@@ -157,16 +155,39 @@ export default function QuantumBoard({
     >
       <div ref={liveRef} className="sr-only" aria-live="polite" aria-atomic="true" />
 
+      {entanglementLines.length > 0 && (
+        <svg className="pointer-events-none absolute inset-0 z-[5] h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
+          {entanglementLines.map((line) => (
+            <line
+              key={line.id}
+              x1={line.from.x}
+              y1={line.from.y}
+              x2={line.to.x}
+              y2={line.to.y}
+              vectorEffect="non-scaling-stroke"
+              stroke={line.kind === 'tunnel' ? 'rgb(var(--merge-rgb))' : 'rgb(var(--quantum-rgb))'}
+              strokeWidth="1.25"
+              strokeDasharray={line.kind === 'tunnel' ? '2.5 3.5' : '5 3'}
+              strokeLinecap="round"
+              opacity="0.72"
+            />
+          ))}
+        </svg>
+      )}
+
       <div
         role="grid"
         aria-label={t.boardAriaLabel}
+        aria-multiselectable="true"
         aria-rowcount={8}
         aria-colcount={8}
         className="grid h-full w-full grid-cols-8 grid-rows-8"
       >
         {squares.map(({ square, row, col, isLight }) => {
           const cells = board[square] || []
-          const isSelected = selectedPiece?.square === square
+          // Highlight every visible branch of the selected quantum piece, not only
+          // the square used to begin the action.
+          const isSelected = !!selectedPiece && cells.some((cell) => cell.pieceId === selectedPiece.id)
           const isLegal = legalTargets.has(square)
           const isMergeTarget = moveMode === 'merge' && mergeTargets.has(square)
           const isFirstQt = firstQuantumTarget === square
@@ -191,6 +212,7 @@ export default function QuantumBoard({
               data-board-col={col}
               type="button"
               role="gridcell"
+              aria-selected={isSelected}
               aria-rowindex={row + 1}
               aria-colindex={col + 1}
               aria-label={buildAriaLabel(square)}
@@ -278,12 +300,12 @@ export default function QuantumBoard({
 
               {showFile && (
                 <span className={`board-coord coord-file pointer-events-none ${coordColor}`}>
-                  {boardFlipped ? FILES[7 - col] : FILES[col]}
+                  {square[0]}
                 </span>
               )}
               {showRank && (
                 <span className={`board-coord coord-rank pointer-events-none ${coordColor}`}>
-                  {boardFlipped ? RANKS[row] : RANKS[7 - row]}
+                  {square[1]}
                 </span>
               )}
             </button>

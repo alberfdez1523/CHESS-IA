@@ -12,7 +12,7 @@ import { getColorName, translateGameOverInfo } from '../lib/i18n'
 import type {
   GameConfig, Language, PieceColor, PieceType, Chances, QBoardCell,
   QMoveRecord, QMoveMode, QGameOver, GameOverInfo, QMeasurementEvent,
-  QuantumUndoEntry,
+  QuantumUndoEntry, QuantumRng, QState,
 } from '../lib/types'
 
 export interface GameSounds {
@@ -46,6 +46,13 @@ function quantumEvalToChances(cp: number): Chances {
 }
 
 function qGameOverToClassic(qgo: QGameOver, playerColor: PieceColor, language: Language): GameOverInfo {
+  if (qgo.winner === null) {
+    return {
+      title: language === 'es' ? 'Tablas' : 'Draw',
+      message: language === 'es' ? qgo.reason : 'No legal actions remain',
+      result: 'draw',
+    }
+  }
   const isWin = qgo.winner === playerColor
   const reason = language === 'es'
     ? qgo.reason
@@ -71,6 +78,7 @@ export interface QuantumStateChangeMeta {
 export interface UseQuantumChessOptions {
   onStateChange?: (engine: QuantumChessEngine, meta?: QuantumStateChangeMeta) => void
   canMove?: () => boolean
+  getRng?: (counter: number) => QuantumRng
 }
 
 export function useQuantumChess(
@@ -81,6 +89,7 @@ export function useQuantumChess(
 ) {
   const engineRef = useRef(new QuantumChessEngine())
   const undoStackRef = useRef<QuantumUndoEntry[]>([])
+  const replaySnapshotsRef = useRef<QState[]>([])
 
   const [boardVersion, setBoardVersion] = useState(0)
   const [undoDepth, setUndoDepth] = useState(0)
@@ -104,10 +113,21 @@ export function useQuantumChess(
   const lastAiHistoryLengthRef = useRef(-1)
   const [isThinking, setIsThinking] = useState(false)
   const [engineError, setEngineError] = useState<string | null>(null)
+  const [aiRetryToken, setAiRetryToken] = useState(0)
   const canMoveRef = useRef(options.canMove)
   canMoveRef.current = options.canMove
+  const getRngRef = useRef(options.getRng)
+  getRngRef.current = options.getRng
   const engine = engineRef.current
   const state = engine.state
+  if (replaySnapshotsRef.current.length === 0) {
+    replaySnapshotsRef.current = [cloneQState(engine.exportState())]
+  }
+
+  const prepareRng = useCallback(() => {
+    const next = getRngRef.current?.(engine.state.rngCounter)
+    if (next) engine.setRng(next)
+  }, [engine])
 
   const board: Record<string, QBoardCell[]> = useMemo(() => {
     void boardVersion
@@ -174,12 +194,14 @@ export function useQuantumChess(
     if (!selectedPiece) return new Set()
     if (moveMode === 'merge') return new Set(engine.getMergeTargets(selectedPiece.id, selectedPiece.square))
     if (firstQuantumTarget) {
-      const moves = engine.getLegalMoves(selectedPiece.id, selectedPiece.square)
-      return new Set(moves.filter(m => !m.isCapture && m.square !== firstQuantumTarget).map(m => m.square))
+      return new Set(
+        engine.getQuantumSplitTargets(selectedPiece.id, selectedPiece.square)
+          .filter((square) => square !== firstQuantumTarget),
+      )
     }
     const moves = engine.getLegalMoves(selectedPiece.id, selectedPiece.square)
     if (moveMode === 'quantum') {
-      return new Set(moves.filter(m => !m.isCapture).map(m => m.square))
+      return new Set(engine.getQuantumSplitTargets(selectedPiece.id, selectedPiece.square))
     }
     return new Set(moves.map(m => m.square))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -234,7 +256,7 @@ export function useQuantumChess(
     if (isAIMode) {
       if (isThinking) return { text: language === 'es' ? 'IA pensando…' : 'AI thinking…', type: 'thinking' as const }
       if (turn === config.playerColor) return { text: language === 'es' ? 'Tu turno' : 'Your turn', type: 'player' as const }
-      return { text: language === 'es' ? 'Turno de la IA' : 'AI turn', type: 'ai' as const }
+      return { text: language === 'es' ? 'Turno de la IA' : "AI's turn", type: 'ai' as const }
     }
     if (isOnline) {
       if (turn === config.playerColor) {
@@ -246,6 +268,13 @@ export function useQuantumChess(
   }, [gameOverInfo, turn, language, isOnline, isAIMode, isThinking, isMeasurementBlocking, config.playerColor])
 
   const refresh = useCallback(() => {
+    const replayState = cloneQState(engine.exportState())
+    const lastReplay = replaySnapshotsRef.current[replaySnapshotsRef.current.length - 1]
+    if (!lastReplay || lastReplay.history.length < replayState.history.length) {
+      replaySnapshotsRef.current.push(replayState)
+    } else if (lastReplay.history.length === replayState.history.length) {
+      replaySnapshotsRef.current[replaySnapshotsRef.current.length - 1] = replayState
+    }
     setBoardVersion(v => v + 1)
     const qgo = engine.checkGameOverPublic()
     if (qgo && !gameOverInfo && !isMeasurementBlocking) {
@@ -353,17 +382,32 @@ export function useQuantumChess(
     }
   }, [engine, sounds, playCheckIfNeeded, gameOverInfo, config.playerColor, language])
 
-  const loadQuantumState = useCallback((qstate: import('../lib/types').QState) => {
+  const loadQuantumState = useCallback((
+    qstate: import('../lib/types').QState,
+    restoredLastMove?: { from: string; to: string } | null,
+  ) => {
     engine.loadState(qstate)
+    const previousReplay = replaySnapshotsRef.current[replaySnapshotsRef.current.length - 1]
+    replaySnapshotsRef.current = previousReplay && qstate.history.length === previousReplay.history.length + 1
+      ? [...replaySnapshotsRef.current, cloneQState(qstate)]
+      : [cloneQState(qstate)]
     undoStackRef.current = []
     setUndoDepth(0)
     setSelectedPiece(null)
     setFirstQuantumTarget(null)
     setMoveMode('classical')
+    const latest = qstate.history[qstate.history.length - 1]
+    setLastMove(
+      restoredLastMove === undefined
+        ? latest ? { from: latest.from, to: latest.to } : null
+        : restoredLastMove,
+    )
     setBoardVersion(v => v + 1)
     const qgo = engine.checkGameOverPublic()
     if (qgo) {
       setGameOverInfo(qGameOverToClassic(qgo, config.playerColor, language))
+    } else {
+      setGameOverInfo(null)
     }
   }, [engine, config.playerColor, language])
 
@@ -392,6 +436,7 @@ export function useQuantumChess(
 
         const preMove = cloneQState(engine.exportState())
         const aiColor = preMove.turn
+        prepareRng()
         const record = applyQAIAction(engine, action)
         lastAiHistoryLengthRef.current = engine.state.history.length
         setEngineError(null)
@@ -428,7 +473,15 @@ export function useQuantumChess(
     isMeasurementBlocking,
     config.difficulty,
     applyClassicalMoveRecord,
+    aiRetryToken,
   ])
+
+  const retryAIMove = useCallback(() => {
+    if (!isAIMode || gameOver || isThinkingRef.current) return
+    lastAiHistoryLengthRef.current = -1
+    setEngineError(null)
+    setAiRetryToken((value) => value + 1)
+  }, [gameOver, isAIMode])
 
   const undo = useCallback(() => {
     if (isMeasurementBlocking) return
@@ -439,6 +492,7 @@ export function useQuantumChess(
     if (!entry) return
 
     engine.loadState(cloneQState(entry.state))
+    replaySnapshotsRef.current = replaySnapshotsRef.current.slice(0, engine.state.history.length + 1)
     setSelectedPiece(null)
     setFirstQuantumTarget(null)
     setMoveMode(entry.moveMode)
@@ -464,6 +518,7 @@ export function useQuantumChess(
     if (firstQuantumTarget && selectedPiece) {
       if (legalTargets.has(sq)) {
         pushUndoSnapshot()
+        prepareRng()
         engine.doQuantumMove(selectedPiece.id, selectedPiece.square, firstQuantumTarget, sq)
         sounds.playMove()
         setSelectedPiece(null)
@@ -483,6 +538,7 @@ export function useQuantumChess(
       if (legalTargets.has(sq)) {
         if (moveMode === 'merge') {
           pushUndoSnapshot()
+          prepareRng()
           engine.doMergeFrom(selectedPiece.id, selectedPiece.square, sq)
           sounds.playMove()
           setSelectedPiece(null)
@@ -510,6 +566,7 @@ export function useQuantumChess(
         pushUndoSnapshot()
         const preMove = cloneQState(engine.exportState())
         const mover = state.turn
+        prepareRng()
         const record = engine.doClassicalMove(selectedPiece.id, selectedPiece.square, sq)
         setSelectedPiece(null)
         setMoveMode('classical')
@@ -570,6 +627,7 @@ export function useQuantumChess(
     pushUndoSnapshot()
     const preMove = cloneQState(engine.exportState())
     const mover = state.turn
+    prepareRng()
     const record = engine.doClassicalMove(myPiece.pieceId, from, to)
     setSelectedPiece(null)
     applyClassicalMoveRecord(record, preMove, mover)
@@ -583,6 +641,7 @@ export function useQuantumChess(
     pushUndoSnapshot()
     const preMove = cloneQState(engine.exportState())
     const mover = state.turn
+    prepareRng()
     const record = engine.doClassicalMove(
       promotionPending.pieceId, promotionPending.from, promotionPending.to,
       pieceType as PieceType
@@ -601,6 +660,7 @@ export function useQuantumChess(
     const allowedColor = state.turn
 
     pushUndoSnapshot()
+    prepareRng()
     engine.doQuantumCastle(allowedColor, side)
     sounds.playMove()
     setSelectedPiece(null)
@@ -624,6 +684,7 @@ export function useQuantumChess(
     pushUndoSnapshot()
     const preMove = cloneQState(engine.exportState())
     const mover = allowedColor
+    prepareRng()
     const record = engine.doClassicalMove(kingId, from, to)
     setSelectedPiece(null)
     setFirstQuantumTarget(null)
@@ -643,7 +704,7 @@ export function useQuantumChess(
     if (gameOverInfo) return
     sounds.playGameEnd()
     setGameOverInfo({
-      title: language === 'es' ? 'Resignación' : 'Resignation',
+      title: language === 'es' ? 'Rendición' : 'Resignation',
       message: language === 'es' ? 'Partida terminada por rendición' : 'Game ended by resignation',
       result: 'lose',
     })
@@ -675,6 +736,7 @@ export function useQuantumChess(
     boardFlipped,
     isThinking,
     engineError,
+    retryAIMove,
     turn,
     gameOver,
     gameOverInfo,
@@ -703,6 +765,7 @@ export function useQuantumChess(
     dismissGameOver,
     exportState: () => engine.exportState(),
     dismissMeasurement,
+    replaySnapshots: replaySnapshotsRef.current,
     playerColor: config.playerColor,
     controlColor: isOnline || isAIMode ? config.playerColor : turn,
     isAIMode,

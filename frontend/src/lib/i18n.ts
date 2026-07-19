@@ -30,8 +30,9 @@ const TITLE_TRANSLATIONS: Record<string, Record<Language, string>> = {
   'Draw': { es: 'Tablas', en: 'Draw' },
   'Fin': { es: 'Fin', en: 'Game Over' },
   'Game Over': { es: 'Fin', en: 'Game Over' },
-  'Resignación': { es: 'Resignación', en: 'Resignation' },
-  'Resignation': { es: 'Resignación', en: 'Resignation' },
+  'Rendición': { es: 'Rendición', en: 'Resignation' },
+  'Resignation': { es: 'Rendición', en: 'Resignation' },
+  'Resignación': { es: 'Rendición', en: 'Resignation' },
   '¡Tiempo agotado!': { es: '¡Tiempo agotado!', en: 'Time Out!' },
   'Time Out!': { es: '¡Tiempo agotado!', en: 'Time Out!' },
   'Tiempo agotado': { es: 'Tiempo agotado', en: 'Time Out' },
@@ -122,7 +123,7 @@ export function getColorName(color: PieceColor, language: Language) {
 
 export function getPlayerLabel(color: PieceColor, language: Language) {
   if (language === 'en') return color === 'w' ? 'White Player' : 'Black Player'
-  return color === 'w' ? 'Jugador Blancas' : 'Jugador Negras'
+  return color === 'w' ? 'Jugador de las blancas' : 'Jugador de las negras'
 }
 
 export function translateGameOverInfo(info: GameOverInfo, language: Language): GameOverInfo {
@@ -151,7 +152,7 @@ export function translateMoveDescription(description: string, language: Language
     return `${translatePieceLabel(quantumSplitMatch[1], language)} -> ${quantumSplitMatch[2]} | ${quantumSplitMatch[3]} (${quantumSplitMatch[4]})`
   }
 
-  const mergeMatch = description.match(/^(.+) fusionado en ([a-h][1-8]) \((.+)\)$/)
+  const mergeMatch = description.match(/^(.+) fusionad[oa] en ([a-h][1-8]) \((.+)\)$/)
   if (mergeMatch) {
     return `${translatePieceLabel(mergeMatch[1], language)} merged on ${mergeMatch[2]} (${mergeMatch[3]})`
   }
@@ -210,7 +211,7 @@ export const UI_STRINGS = {
     flip: 'Girar',
     resign: 'Rendirse',
     resignConfirmTitle: '¿Rendirse?',
-    resignConfirmMessage: 'Abandonarás la partida y contará como derrota.',
+    resignConfirmMessage: 'Si te rindes, la partida contará como derrota.',
     resignConfirm: 'Sí, rendirme',
     cancel: 'Cancelar',
     undoComingSoon: 'Deshacer no disponible en modo cuántico (próximamente)',
@@ -263,7 +264,7 @@ export const UI_STRINGS = {
     onlineCreateHint: 'Obtendrás un código para compartir con tu rival',
     onlineRoomCode: 'Código de sala',
     onlineWaitingOpponent: 'Esperando al rival…',
-    onlineBothConnected: 'Rival conectado. El anfitrion puede empezar.',
+    onlineBothConnected: 'Rival conectado. El anfitrión puede empezar.',
     onlineCopyLink: 'Copiar enlace de invitación',
     onlineStartGame: 'Empezar partida',
     onlineConnecting: 'Conectando…',
@@ -286,7 +287,7 @@ export const UI_STRINGS = {
     onlineStatusWaiting: 'Esperando rival',
     onlineStatusSynced: 'Sincronizado',
     onlineStatusReconnecting: 'Reconectando',
-    onlineStatusConflict: 'Conflicto de sincronía',
+    onlineStatusConflict: 'Conflicto de sincronización',
     onlineStatusEnded: 'Sala cerrada',
     quantumUndoReady: 'Deshacer local disponible',
     quantumUndoOnlineDisabled: 'Deshacer bloqueado en online para evitar conflictos',
@@ -300,7 +301,7 @@ export const UI_STRINGS = {
     thinking: 'Thinking…',
     quantumThinking: '⚛ Calculating multiverse…',
     yourTurn: 'Your turn',
-    aiTurn: 'AI turn',
+    aiTurn: "AI's turn",
     aiThinking: 'The AI is thinking...',
     turnColor: (color: string) => `${color} to move`,
     colorToMove: (color: string) => `${color} to move`,

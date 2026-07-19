@@ -1,13 +1,26 @@
-import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { DIFFICULTIES, TIMER_OPTIONS } from '../lib/constants'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { checkHealth } from '../lib/api'
+import { DIFFICULTIES, TIMER_OPTIONS } from '../lib/constants'
+import { gameAutosave, type GameAutosave, type GameAutosaveSummary } from '../lib/gameAutosave'
+import { loadGameSetup, saveGameSetup } from '../lib/gameSetup'
 import { getDifficultyLabel } from '../lib/i18n'
-import type { GameConfig, GameMode, OpponentMode, PieceColor, Difficulty, Language, PlayerColorChoice } from '../lib/types'
+import type {
+  Difficulty,
+  GameConfig,
+  GameMode,
+  Language,
+  OpponentMode,
+  PieceColor,
+  PlayerColorChoice,
+} from '../lib/types'
+import GameIcon, { type GameIconName } from './GameIcon'
 import OnlineBetaNotice from './OnlineBetaNotice'
+import QuantumLogo from './QuantumLogo'
 
 interface StartMenuProps {
   onPlay: (config: GameConfig) => void
+  onContinue: (autosave: GameAutosave) => void
   onOpenOnlineLobby: (prefs: {
     gameMode: GameMode
     color: PlayerColorChoice
@@ -23,479 +36,557 @@ interface StartMenuProps {
 
 export default function StartMenu({
   onPlay,
+  onContinue,
   onOpenOnlineLobby,
   onRules,
   onQuantumTutorial,
   language,
   onOpenSettings,
 }: StartMenuProps) {
-  const [color, setColor] = useState<PlayerColorChoice>('w')
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium')
-  const [opponentMode, setOpponentMode] = useState<OpponentMode>('ai')
-  const [useTimer, setUseTimer] = useState(false)
-  const [timerMinutes, setTimerMinutes] = useState(10)
-  const [gameMode, setGameMode] = useState<GameMode>('classic')
+  const initial = useMemo(() => loadGameSetup(), [])
+  const [gameMode, setGameMode] = useState<GameMode>(initial.gameMode)
+  const [opponentMode, setOpponentMode] = useState<OpponentMode>(initial.opponentMode)
+  const [color, setColor] = useState<PlayerColorChoice>(initial.color)
+  const [difficulty, setDifficulty] = useState<Difficulty>(initial.difficulty)
+  const [useTimer, setUseTimer] = useState(initial.useTimer)
+  const [timerMinutes, setTimerMinutes] = useState(initial.timerMinutes)
+  const [customizeOpen, setCustomizeOpen] = useState(false)
   const [serverReady, setServerReady] = useState(false)
   const [checking, setChecking] = useState(true)
+  const [autosaveSummary, setAutosaveSummary] = useState<GameAutosaveSummary | null>(() => gameAutosave.getSummary())
+  const reduceMotion = useReducedMotion()
 
-  const requiresEngine = gameMode === 'classic' && opponentMode === 'ai'
-  const isOnlineMode = opponentMode === 'online'
-  const canPlay = isOnlineMode ? true : requiresEngine ? serverReady : true
   const isQuantum = gameMode === 'quantum'
+  const isOnline = opponentMode === 'online'
+  const requiresStockfish = gameMode === 'classic' && opponentMode === 'ai'
+  const canStart = !requiresStockfish || serverReady
 
-  const t = language === 'es'
+  const copy = language === 'es'
     ? {
-        subtitle: isQuantum ? 'Modo cuántico: local, online o contra IA' : 'Clásico vs Stockfish o 2 jugadores',
-        tagline: 'Donde el ajedrez se encuentra con la física cuántica',
-        gameMode: 'Modo de juego',
+        appName: 'Gambito de Dama Cuántico',
+        title: 'Juega el tablero que todavía no existe.',
+        quantum: 'Jugar cuántico',
+        quantumDetail: 'Split, fusión y medición',
         classic: 'Clásico',
-        quantum: 'Cuántico',
-        yourPieces: 'Tu color',
+        classicDetail: 'Reglas FIDE y Stockfish',
+        online: 'En línea',
+        onlineDetail: 'Sala privada · beta casual',
+        academy: 'Academia',
+        academyDetail: 'Siete misiones jugables',
+        setupEyebrow: 'Nueva partida',
+        setupTitle: isQuantum ? 'Configura la partida' : 'Prepara el tablero',
+        setupIntro: 'Elige primero a tu rival. El resto ya tiene una configuración recomendada.',
+        rival: 'Rival',
+        ai: isQuantum ? 'IA cuántica' : 'Stockfish',
+        local: 'Dos jugadores',
+        onlineRival: 'Rival en línea',
+        personalize: 'Personalizar',
+        closePersonalize: 'Ocultar opciones',
+        pieces: 'Tu color',
         white: 'Blancas',
         random: 'Aleatorio',
         black: 'Negras',
-        opponent: 'Oponente',
-        vsAi: 'Vs IA',
-        twoPlayers: '2 jugadores',
-        online: 'En línea',
-        playOnline: 'Multijugador en línea',
-        playLocal: 'Mismo dispositivo',
-        quantumInfo: 'Modo cuántico: juega local, online o contra IA experimental intermedia.',
-        quantumAiInfo: 'IA cuántica: elige la dificultad (usa heurística local y Stockfish si está disponible).',
         difficulty: 'Dificultad',
-        diffUnused: 'En 2 jugadores la dificultad no se usa.',
         clock: 'Reloj',
-        playClassic: 'Iniciar partida',
-        playQuantum: 'Iniciar cuántico',
-        connecting: 'Conectando…',
-        unavailable: 'Servidor no disponible',
-        ready: 'Stockfish listo',
-        looking: 'Buscando servidor…',
-        offline: 'Sin conexión',
-        rules: 'Reglas del juego',
-        tutorial: 'Tutorial cuántico',
+        noClock: 'Sin reloj',
+        summary: 'Resumen',
+        start: isOnline ? 'Abrir sala' : isQuantum ? 'Iniciar partida cuántica' : 'Iniciar partida clásica',
+        checking: 'Comprobando Stockfish…',
+        unavailable: 'Stockfish no responde',
+        offlineDetail: 'Puedes reintentar, jugar local o cambiar a la IA cuántica heurística.',
+        retry: 'Reintentar',
+        playLocal: 'Jugar local',
+        quantumAi: 'Usar IA cuántica',
+        ready: 'Stockfish disponible',
+        continue: 'Continuar partida',
+        continueDetail: 'Partida local guardada en este dispositivo',
+        moves: 'jugadas',
+        rules: 'Referencia de reglas',
         settings: 'Ajustes',
+        beta: 'beta casual',
       }
     : {
-        subtitle: isQuantum ? 'Quantum mode: local, online, or vs AI' : 'Classic vs Stockfish or 2 players',
-        tagline: 'Where chess meets quantum physics',
-        gameMode: 'Game mode',
+        appName: 'Gambito de Dama Cuántico',
+        title: 'Play the board that does not exist yet.',
+        quantum: 'Play quantum',
+        quantumDetail: 'Split, merge and measure',
         classic: 'Classic',
-        quantum: 'Quantum',
-        yourPieces: 'Your color',
+        classicDetail: 'FIDE rules and Stockfish',
+        online: 'Online',
+        onlineDetail: 'Private room · casual beta',
+        academy: 'Academy',
+        academyDetail: 'Seven playable missions',
+        setupEyebrow: 'New game',
+        setupTitle: isQuantum ? 'Configure the game' : 'Prepare the board',
+        setupIntro: 'Choose your opponent first. Everything else starts with sensible defaults.',
+        rival: 'Opponent',
+        ai: isQuantum ? 'Quantum AI' : 'Stockfish',
+        local: 'Two players',
+        onlineRival: 'Online opponent',
+        personalize: 'Customize',
+        closePersonalize: 'Hide options',
+        pieces: 'Your color',
         white: 'White',
         random: 'Random',
         black: 'Black',
-        opponent: 'Opponent',
-        vsAi: 'Vs AI',
-        twoPlayers: '2 players',
-        online: 'Online',
-        playOnline: 'Online multiplayer',
-        playLocal: 'Same device',
-        quantumInfo: 'Quantum mode: play locally, online, or against experimental medium AI.',
-        quantumAiInfo: 'Quantum AI: pick a difficulty (local heuristic + Stockfish when available).',
         difficulty: 'Difficulty',
-        diffUnused: 'Difficulty is not used in 2-player mode.',
         clock: 'Clock',
-        playClassic: 'Start match',
-        playQuantum: 'Start quantum',
-        connecting: 'Connecting…',
-        unavailable: 'Server unavailable',
-        ready: 'Stockfish ready',
-        looking: 'Looking for server…',
-        offline: 'Offline',
-        rules: 'Game rules',
-        tutorial: 'Quantum tutorial',
+        noClock: 'No clock',
+        summary: 'Summary',
+        start: isOnline ? 'Open room' : isQuantum ? 'Start quantum game' : 'Start classic game',
+        checking: 'Checking Stockfish…',
+        unavailable: 'Stockfish is not responding',
+        offlineDetail: 'Retry, play locally, or switch to the heuristic quantum AI.',
+        retry: 'Retry',
+        playLocal: 'Play locally',
+        quantumAi: 'Use quantum AI',
+        ready: 'Stockfish available',
+        continue: 'Continue game',
+        continueDetail: 'Local game saved on this device',
+        moves: 'moves',
+        rules: 'Rules reference',
         settings: 'Settings',
+        beta: 'casual beta',
       }
 
-  useEffect(() => {
-    let cancelled = false
-    const poll = async () => {
-      setChecking(true)
-      const ok = await checkHealth()
-      if (!cancelled) {
-        setServerReady(ok)
-        setChecking(false)
-        if (!ok) setTimeout(poll, 3000)
-      }
-    }
-    poll()
-    return () => { cancelled = true }
+  const pollHealth = useCallback(async () => {
+    setChecking(true)
+    const ok = await checkHealth()
+    setServerReady(ok)
+    setChecking(false)
   }, [])
 
-  const openOnlineLobby = useCallback(() => {
-    onOpenOnlineLobby({
-      gameMode,
-      color,
-      useTimer,
-      timerMinutes,
-      difficulty,
-    })
-  }, [color, difficulty, gameMode, onOpenOnlineLobby, timerMinutes, useTimer])
+  useEffect(() => {
+    void pollHealth()
+  }, [pollHealth])
 
-  const handlePlay = useCallback(() => {
-    if (!canPlay) return
-    if (isOnlineMode) {
-      openOnlineLobby()
-      return
-    }
-    const playerColor: PieceColor =
-      color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : color
-    onPlay({
-      playerColor,
-      difficulty,
-      opponentMode,
-      useTimer,
-      timerMinutes,
-      gameMode,
-    })
-  }, [
+  const selectMode = useCallback((mode: GameMode, opponent?: OpponentMode) => {
+    setGameMode(mode)
+    if (opponent) setOpponentMode(opponent)
+    if (mode === 'quantum' && difficulty === 'master') setDifficulty('medium')
+  }, [difficulty])
+
+  const setup = useMemo(() => ({
+    gameMode,
+    opponentMode,
     color,
     difficulty,
-    opponentMode,
     useTimer,
     timerMinutes,
-    gameMode,
-    canPlay,
-    onPlay,
-    isOnlineMode,
-    openOnlineLobby,
-  ])
+  }), [color, difficulty, gameMode, opponentMode, timerMinutes, useTimer])
 
-  const stagger = {
-    hidden: { opacity: 0, y: 12 },
-    show: (i: number) => ({
-      opacity: 1, y: 0,
-      transition: { delay: 0.1 + i * 0.05, duration: 0.4, ease: [0.16, 1, 0.3, 1] },
-    }),
-  }
+  const handleStart = useCallback(() => {
+    if (!canStart) return
+    saveGameSetup(setup)
+    if (opponentMode === 'online') {
+      onOpenOnlineLobby({ gameMode, color, useTimer, timerMinutes, difficulty })
+      return
+    }
+    const playerColor: PieceColor = color === 'random'
+      ? (Math.random() < 0.5 ? 'w' : 'b')
+      : color
+    onPlay({ playerColor, difficulty, opponentMode, useTimer, timerMinutes, gameMode })
+  }, [canStart, color, difficulty, gameMode, onOpenOnlineLobby, onPlay, opponentMode, setup, timerMinutes, useTimer])
+
+  const handleContinue = useCallback(() => {
+    const autosave = gameAutosave.load()
+    if (!autosave) {
+      setAutosaveSummary(null)
+      return
+    }
+    onContinue(autosave)
+  }, [onContinue])
+
+  const duration = reduceMotion ? 0.01 : 0.2
 
   return (
-    <div className="chess-grid-bg min-h-screen bg-surface-0">
-      <div className="mx-auto flex min-h-screen max-w-6xl">
+    <main
+      className="min-h-screen bg-surface-0 text-ink"
+      data-game-variant={gameMode}
+    >
+      <div className="mx-auto grid min-h-screen max-w-[1440px] lg:grid-cols-[minmax(0,1.08fr)_minmax(430px,0.92fr)]">
+        <section className="relative flex min-h-[44vh] flex-col justify-between overflow-hidden border-b border-line px-5 py-6 sm:px-8 lg:min-h-screen lg:border-b-0 lg:border-r lg:px-14 lg:py-12">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+            <div className="absolute -right-48 top-1/4 h-[34rem] w-[34rem] rounded-full bg-quantum/[0.08] blur-3xl" />
+            <div className="absolute bottom-0 left-1/4 h-px w-2/3 bg-gradient-to-r from-transparent via-quantum/40 to-transparent" />
+          </div>
 
-        {/* ── Left branding panel (desktop only) ── */}
-        <div className="hidden flex-col justify-center px-14 lg:flex lg:w-[42%]">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <span className="font-serif text-7xl leading-none text-accent">♛</span>
-            <h1 className="mt-6 font-serif text-5xl leading-[1.08] text-white">
-              Gambito<br />de Dama
-            </h1>
-            <p className="mt-3 text-sm font-semibold uppercase tracking-[0.2em] text-accent">
-              {t.quantum}
-            </p>
-            <div className="rule my-8 w-16" />
-            <p className="max-w-xs text-sm leading-relaxed text-neutral-500">
-              {t.tagline}
-            </p>
-            <p className="mt-2 text-ui-sm text-neutral-600">
-              {t.subtitle}
-            </p>
-          </motion.div>
-        </div>
+          <header className="relative z-10 flex items-center justify-between gap-4">
+            <QuantumLogo className="h-10 w-[4.25rem] shrink-0 sm:h-11 sm:w-[4.7rem]" title={copy.appName} />
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="grid min-h-11 min-w-11 shrink-0 place-items-center border border-transparent text-ink-secondary transition-colors hover:border-line hover:bg-surface-1 hover:text-ink"
+              aria-label={copy.settings}
+            >
+              <GameIcon name="settings" className="h-5 w-5" />
+            </button>
+          </header>
 
-        {/* ── Right form panel ── */}
-        <div className="flex flex-1 flex-col justify-center px-6 py-10 lg:border-l lg:border-surface-4 lg:px-16">
+          <div className="relative z-10 flex flex-1 flex-col justify-center gap-8 py-8 lg:gap-10 lg:py-6">
+            <div className="mx-auto flex w-full max-w-[36rem] flex-col items-center gap-4 text-center sm:gap-5">
+              <QuantumLogo
+                className="h-16 w-[6.8rem] shrink-0 sm:h-20 sm:w-[8.5rem] lg:h-24 lg:w-[10.2rem]"
+                title={copy.appName}
+              />
+              <h1 className="max-w-[14ch] font-sans text-[2.1rem] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[2.5rem] sm:leading-[1.02] lg:text-[3rem] xl:text-[3.5rem]">
+                {copy.appName}
+              </h1>
+              <p className="max-w-[34ch] text-base leading-7 text-ink-secondary sm:text-lg">
+                {copy.title}
+              </p>
+            </div>
 
-          {/* Mobile-only compact header */}
-          <motion.div
-            className="mb-8 lg:hidden"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <div className="flex items-center gap-3">
-              <span className="font-serif text-3xl text-accent">♛</span>
-              <div>
-                <h1 className="font-serif text-lg text-white">Gambito de Dama</h1>
-                <span className="text-ui-xs font-semibold uppercase tracking-[0.15em] text-accent">
-                  {t.quantum}
+            <nav className="grid gap-px border border-line bg-line sm:grid-cols-2" aria-label={language === 'es' ? 'Centro de juego' : 'Game hub'}>
+              <HubAction
+                icon="atom"
+                title={copy.quantum}
+                detail={copy.quantumDetail}
+                active={gameMode === 'quantum' && opponentMode !== 'online'}
+                quantum
+                testId="start-mode-quantum"
+                onClick={() => selectMode('quantum', 'ai')}
+              />
+              <HubAction
+                icon="classic"
+                title={copy.classic}
+                detail={copy.classicDetail}
+                active={gameMode === 'classic' && opponentMode !== 'online'}
+                testId="start-mode-classic"
+                onClick={() => selectMode('classic', 'ai')}
+              />
+              <HubAction
+                icon="globe"
+                title={copy.online}
+                detail={copy.onlineDetail}
+                active={opponentMode === 'online'}
+                testId="start-hub-online"
+                onClick={() => setOpponentMode('online')}
+              />
+              <HubAction
+                icon="book"
+                title={copy.academy}
+                detail={copy.academyDetail}
+                testId="start-quantum-tutorial"
+                onClick={onQuantumTutorial}
+              />
+            </nav>
+          </div>
+        </section>
+
+        <section className="flex min-h-[56vh] items-center bg-surface-1 px-5 py-10 sm:px-8 lg:min-h-screen lg:px-12 xl:px-16">
+          <div className="mx-auto w-full max-w-[34rem]">
+            <p className="text-xs font-semibold tracking-[0.14em] text-ink-muted">{copy.setupEyebrow}</p>
+            <h2 className="mt-3 font-serif text-4xl leading-tight sm:text-5xl">{copy.setupTitle}</h2>
+            <p className="mt-3 max-w-lg text-sm leading-6 text-ink-secondary">{copy.setupIntro}</p>
+
+            {autosaveSummary && (
+              <button
+                type="button"
+                onClick={handleContinue}
+                className="group mt-7 flex min-h-[76px] w-full items-center gap-4 border border-quantum/45 bg-quantum/[0.06] p-4 text-left transition-colors hover:border-quantum hover:bg-quantum/[0.1]"
+              >
+                <span className="grid h-11 w-11 shrink-0 place-items-center border border-quantum/35 text-quantum">
+                  <GameIcon name="history" className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-ink">{copy.continue}</span>
+                  <span className="mt-1 block text-xs text-ink-secondary">
+                    {autosaveSummary.type === 'quantum' ? copy.quantum : copy.classic} · {autosaveSummary.moveCount} {copy.moves}
+                  </span>
+                </span>
+                <GameIcon name="chevron" className="h-5 w-5 text-quantum transition-transform group-hover:translate-x-1" />
+              </button>
+            )}
+
+            <fieldset className="mt-8">
+              <legend className="mb-3 text-xs font-semibold text-ink-secondary">{copy.rival}</legend>
+              <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={copy.rival}>
+                <OptionButton
+                  active={opponentMode === 'ai'}
+                  label={copy.ai}
+                  icon="bot"
+                  testId="start-opponent-ai"
+                  onClick={() => setOpponentMode('ai')}
+                />
+                <OptionButton
+                  active={opponentMode === 'local'}
+                  label={copy.local}
+                  icon="users"
+                  testId="start-opponent-local"
+                  onClick={() => setOpponentMode('local')}
+                />
+                <OptionButton
+                  active={opponentMode === 'online'}
+                  label={copy.onlineRival}
+                  icon="globe"
+                  testId="start-opponent-online"
+                  onClick={() => setOpponentMode('online')}
+                />
+              </div>
+            </fieldset>
+
+            {opponentMode === 'online' && (
+              <div className="mt-3"><OnlineBetaNotice language={language} variant="compact" /></div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setCustomizeOpen((value) => !value)}
+              className="mt-5 flex min-h-11 w-full items-center justify-between border-y border-line py-3 text-sm font-semibold text-ink transition-colors hover:text-quantum"
+              aria-expanded={customizeOpen}
+              aria-controls="game-customization"
+            >
+              <span>{customizeOpen ? copy.closePersonalize : copy.personalize}</span>
+              <GameIcon name="chevron" className={`h-4 w-4 transition-transform ${customizeOpen ? 'rotate-90' : ''}`} />
+            </button>
+
+            <AnimatePresence initial={false}>
+              {customizeOpen && (
+                <motion.div
+                  id="game-customization"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-6 py-6">
+                    <ChoiceGroup
+                      legend={copy.pieces}
+                      value={color}
+                      options={[
+                        { value: 'w', label: `♔ ${copy.white}`, ariaLabel: copy.white },
+                        { value: 'random', label: copy.random },
+                        { value: 'b', label: `♚ ${copy.black}`, ariaLabel: copy.black },
+                      ]}
+                      onChange={(value) => setColor(value as PlayerColorChoice)}
+                    />
+
+                    {opponentMode === 'ai' && (
+                      <fieldset>
+                        <legend className="mb-3 text-xs font-semibold text-ink-secondary">{copy.difficulty}</legend>
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5" role="radiogroup" aria-label={copy.difficulty}>
+                          {DIFFICULTIES.map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              data-testid={`start-difficulty-${item.key}`}
+                              role="radio"
+                              aria-checked={difficulty === item.key}
+                              onClick={() => setDifficulty(item.key)}
+                              className={`min-h-11 border px-2 py-2 text-xs font-semibold transition-colors ${
+                                difficulty === item.key
+                                  ? isQuantum ? 'border-quantum bg-quantum/10 text-quantum' : 'border-accent bg-accent/10 text-accent'
+                                  : 'border-line bg-surface-0 text-ink-secondary hover:text-ink'
+                              }`}
+                            >
+                              {getDifficultyLabel(item.key, language)}
+                            </button>
+                          ))}
+                        </div>
+                      </fieldset>
+                    )}
+
+                    <fieldset>
+                      <legend className="mb-3 text-xs font-semibold text-ink-secondary">{copy.clock}</legend>
+                      <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={copy.clock}>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={!useTimer}
+                          onClick={() => setUseTimer(false)}
+                          className={`min-h-11 border px-2 text-xs font-semibold transition-colors ${!useTimer ? 'border-ink bg-ink text-surface-0' : 'border-line bg-surface-0 text-ink-secondary'}`}
+                        >
+                          {copy.noClock}
+                        </button>
+                        {TIMER_OPTIONS.map((minutes) => (
+                          <button
+                            key={minutes}
+                            type="button"
+                            role="radio"
+                            aria-checked={useTimer && timerMinutes === minutes}
+                            onClick={() => { setUseTimer(true); setTimerMinutes(minutes) }}
+                            className={`min-h-11 border px-2 font-mono text-xs font-semibold transition-colors ${useTimer && timerMinutes === minutes ? 'border-ink bg-ink text-surface-0' : 'border-line bg-surface-0 text-ink-secondary'}`}
+                          >
+                            {minutes} min
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="mt-6 border border-line bg-surface-0 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs font-semibold text-ink-muted">{copy.summary}</span>
+                <span className="text-right text-sm font-medium text-ink">
+                  {isQuantum ? copy.quantum : copy.classic} · {opponentMode === 'ai' ? copy.ai : opponentMode === 'local' ? copy.local : copy.online}
                 </span>
               </div>
+              <div className="mt-3 flex items-center justify-between gap-4 border-t border-line pt-3 text-xs text-ink-secondary">
+                <span>{color === 'w' ? copy.white : color === 'b' ? copy.black : copy.random}</span>
+                <span className="font-mono">{useTimer ? `${timerMinutes}:00` : copy.noClock}</span>
+              </div>
             </div>
-            <p className="mt-2 text-ui-sm text-neutral-500">{t.subtitle}</p>
-          </motion.div>
 
-          <div className="w-full max-w-md">
-            {/* Game mode */}
-            <motion.div className="mb-7" custom={0} variants={stagger} initial="hidden" animate="show">
-              <Label>{t.gameMode}</Label>
-              <div className="flex overflow-hidden rounded border border-surface-4">
-                {([
-                  { value: 'classic' as GameMode, label: `♛ ${t.classic}` },
-                  { value: 'quantum' as GameMode, label: `⚛ ${t.quantum}` },
-                ] as const).map((opt, i) => (
-                  <button
-                    key={opt.value}
-                    data-testid={`start-mode-${opt.value}`}
-                    onClick={() => {
-                      setGameMode(opt.value)
-                      if (opt.value === 'quantum') setDifficulty('medium')
-                    }}
-                    className={`flex-1 py-3 text-center text-ui-sm font-semibold uppercase tracking-wider transition-colors
-                      ${i > 0 ? 'border-l border-surface-4' : ''}
-                      ${gameMode === opt.value
-                        ? opt.value === 'quantum'
-                          ? 'bg-indigo-500/10 text-indigo-400'
-                          : 'bg-accent/10 text-accent'
-                        : 'bg-transparent text-neutral-500 hover:bg-surface-2 hover:text-neutral-300'
-                      }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Color */}
-            <motion.div className="mb-7" custom={1} variants={stagger} initial="hidden" animate="show">
-              <Label>{t.yourPieces}</Label>
-              <div className="flex overflow-hidden rounded border border-surface-4">
-                {([
-                  { value: 'w' as PlayerColorChoice, label: `♔ ${t.white}` },
-                  { value: 'random' as PlayerColorChoice, label: `⤮ ${t.random}` },
-                  { value: 'b' as PlayerColorChoice, label: `♚ ${t.black}` },
-                ] as const).map((opt, i) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setColor(opt.value)}
-                    className={`flex-1 py-3 text-center text-ui-sm font-semibold transition-colors
-                      ${i > 0 ? 'border-l border-surface-4' : ''}
-                      ${color === opt.value
-                        ? 'bg-accent/10 text-accent'
-                        : 'bg-transparent text-neutral-500 hover:bg-surface-2 hover:text-neutral-300'
-                      }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Opponent */}
-            <motion.div className="mb-7" custom={2} variants={stagger} initial="hidden" animate="show">
-              <Label>{t.opponent}</Label>
-              <div className="flex overflow-hidden rounded border border-surface-4">
-                {([
-                  { value: 'ai' as OpponentMode, label: t.vsAi },
-                  { value: 'local' as OpponentMode, label: t.twoPlayers },
-                  { value: 'online' as OpponentMode, label: t.online },
-                ] as const).map((opt, i) => (
-                  <button
-                    key={opt.value}
-                    data-testid={`start-opponent-${opt.value}`}
-                    onClick={() => setOpponentMode(opt.value)}
-                    className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-center text-ui-sm font-semibold transition-colors
-                      ${i > 0 ? 'border-l border-surface-4' : ''}
-                      ${opponentMode === opt.value
-                        ? isQuantum
-                          ? 'bg-indigo-500/10 text-indigo-400'
-                          : 'bg-accent/10 text-accent'
-                        : 'bg-transparent text-neutral-500 hover:bg-surface-2 hover:text-neutral-300'
-                      }`}
-                  >
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-              {isQuantum && (
-                <p className="mt-3 rounded border border-indigo-500/20 bg-indigo-500/5 px-4 py-3 text-ui-sm text-indigo-300">
-                  ⚛ {t.quantumInfo}
-                </p>
-              )}
-              {isQuantum && opponentMode === 'ai' && (
-                <p className="mt-2 text-ui-sm text-neutral-500">{t.quantumAiInfo}</p>
-              )}
-              {opponentMode === 'online' && (
-                <div className="mt-3">
-                  <OnlineBetaNotice language={language} variant="compact" />
+            {requiresStockfish && !serverReady && !checking && (
+              <div className="mt-4 border-l-2 border-amber-400 bg-amber-400/[0.07] p-4" role="alert">
+                <p className="font-semibold text-ink">{copy.unavailable}</p>
+                <p className="mt-1 text-sm leading-5 text-ink-secondary">{copy.offlineDetail}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <SmallAction icon="retry" label={copy.retry} onClick={() => void pollHealth()} />
+                  <SmallAction icon="users" label={copy.playLocal} onClick={() => setOpponentMode('local')} />
+                  <SmallAction icon="atom" label={copy.quantumAi} onClick={() => selectMode('quantum', 'ai')} />
                 </div>
-              )}
-            </motion.div>
-
-            {/* Difficulty */}
-            <motion.div className="mb-7" custom={3} variants={stagger} initial="hidden" animate="show">
-              <Label>{t.difficulty}</Label>
-              {gameMode === 'classic' && opponentMode === 'local' && (
-                <p className="mb-2 text-ui-sm text-neutral-600">{t.diffUnused}</p>
-              )}
-              {isQuantum && opponentMode === 'ai' && (
-                <p className="mb-2 text-ui-sm text-neutral-600">{t.quantumAiInfo}</p>
-              )}
-              <div className="flex overflow-hidden rounded border border-surface-4">
-                {DIFFICULTIES.map((d, i) => (
-                  <button
-                    key={d.key}
-                    data-testid={`start-difficulty-${d.key}`}
-                    onClick={() => setDifficulty(d.key)}
-                    disabled={!requiresEngine && !(isQuantum && opponentMode === 'ai')}
-                    className={`flex flex-1 flex-col items-center gap-1.5 py-3 transition-colors
-                      ${i > 0 ? 'border-l border-surface-4' : ''}
-                      ${difficulty === d.key && (requiresEngine || (isQuantum && opponentMode === 'ai'))
-                        ? isQuantum && opponentMode === 'ai'
-                          ? 'bg-indigo-500/10 text-indigo-400'
-                          : 'bg-accent/10 text-accent'
-                        : (requiresEngine || (isQuantum && opponentMode === 'ai'))
-                          ? 'bg-transparent text-neutral-500 hover:bg-surface-2 hover:text-neutral-300'
-                          : 'cursor-not-allowed bg-surface-1/60 text-neutral-700'
-                      }`}
-                  >
-                    <div className="flex items-end gap-[2px]">
-                      {[1, 2, 3, 4, 5].map((bar) => (
-                        <div
-                          key={bar}
-                          className={`w-[2.5px] rounded-[0.5px] transition-colors
-                            ${bar <= d.bars
-                              ? difficulty === d.key && (requiresEngine || (isQuantum && opponentMode === 'ai'))
-                                ? isQuantum && opponentMode === 'ai' ? 'bg-indigo-400' : 'bg-accent'
-                                : 'bg-neutral-600'
-                              : 'bg-surface-4'
-                            }`}
-                          style={{ height: `${5 + bar * 2}px` }}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-ui-xs font-semibold leading-tight">
-                      {getDifficultyLabel(d.key, language)}
-                    </span>
-                  </button>
-                ))}
               </div>
-            </motion.div>
+            )}
 
-            {/* Timer */}
-            <motion.div className="mb-8" custom={4} variants={stagger} initial="hidden" animate="show">
-              <div className="flex items-center justify-between">
-                <Label className="mb-0">{t.clock}</Label>
-                <button
-                  onClick={() => setUseTimer(!useTimer)}
-                  className={`relative h-5 w-9 rounded-full transition-colors ${useTimer ? 'bg-accent' : 'bg-surface-3'}`}
-                >
-                  <motion.div
-                    className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm"
-                    animate={{ left: useTimer ? 18 : 2 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  />
-                </button>
-              </div>
-              <AnimatePresence>
-                {useTimer && (
-                  <motion.div
-                    className="mt-3 flex overflow-hidden rounded border border-surface-4"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {TIMER_OPTIONS.map((tm, i) => (
-                      <button
-                        key={tm}
-                        onClick={() => setTimerMinutes(tm)}
-                        className={`flex-1 py-2.5 text-center text-ui-sm font-medium transition-colors
-                          ${i > 0 ? 'border-l border-surface-4' : ''}
-                          ${timerMinutes === tm
-                            ? 'bg-accent/10 text-accent'
-                            : 'text-neutral-500 hover:bg-surface-2'
-                          }`}
-                      >
-                        {tm}′
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-
-            <div className="rule mb-8" />
-
-            {/* Play button */}
-            <motion.div custom={5} variants={stagger} initial="hidden" animate="show">
-              <button
-                data-testid="start-play"
-                onClick={handlePlay}
-                disabled={!canPlay}
-                className={`w-full rounded py-4 text-ui-sm font-semibold uppercase tracking-[0.2em] transition-all
-                  ${canPlay
-                    ? isQuantum
-                      ? 'border-2 border-indigo-400 bg-indigo-500/5 text-indigo-300 hover:bg-indigo-500 hover:text-white'
-                      : 'border-2 border-accent bg-accent/5 text-accent hover:bg-accent hover:text-surface-0'
-                    : 'cursor-wait border-2 border-surface-4 bg-surface-2 text-neutral-600'
-                  }`}
-              >
-                {canPlay
-                  ? isOnlineMode
-                    ? `🌐  ${t.playOnline}`
-                    : isQuantum
-                      ? opponentMode === 'ai'
-                        ? `⚛  ${language === 'es' ? 'Cuántico vs IA' : 'Quantum vs AI'}`
-                        : `⚛  ${t.playQuantum}`
-                      : `▸  ${t.playClassic}`
-                  : checking
-                    ? t.connecting
-                    : t.unavailable}
-              </button>
-            </motion.div>
-
-            {/* Footer links */}
-            <motion.div
-              className="mt-6 flex flex-wrap items-center justify-between gap-3"
-              custom={6} variants={stagger} initial="hidden" animate="show"
+            <button
+              type="button"
+              data-testid="start-play"
+              onClick={handleStart}
+              disabled={!canStart}
+              className={`mt-5 flex min-h-[56px] w-full items-center justify-between border px-5 text-sm font-semibold transition-colors ${
+                canStart
+                  ? isQuantum
+                    ? 'border-quantum bg-quantum text-on-quantum hover:bg-quantum-light'
+                    : 'border-accent bg-accent text-surface-0 hover:bg-accent-hover'
+                  : 'cursor-wait border-line bg-surface-2 text-ink-muted'
+              }`}
             >
-              <div className="flex flex-wrap items-center gap-4">
-                <button
-                  type="button"
-                  onClick={onRules}
-                  data-testid="start-rules"
-                  className="min-h-[44px] text-ui-sm font-medium text-neutral-500 transition-colors hover:text-accent"
-                >
-                  {t.rules} →
-                </button>
-                <button
-                  type="button"
-                  onClick={onQuantumTutorial}
-                  data-testid="start-quantum-tutorial"
-                  className="min-h-[44px] text-ui-sm font-medium text-neutral-500 transition-colors hover:text-indigo-300"
-                >
-                  ⚛ {t.tutorial}
-                </button>
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  className="min-h-[44px] text-ui-sm font-medium text-neutral-500 transition-colors hover:text-accent"
-                >
-                  ⚙ {t.settings}
-                </button>
-              </div>
+              <span>{checking && requiresStockfish ? copy.checking : copy.start}</span>
+              <GameIcon name={isOnline ? 'globe' : isQuantum ? 'atom' : 'play'} className="h-5 w-5" />
+            </button>
 
-              {gameMode === 'classic' && (
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      serverReady ? 'bg-emerald-500' : checking ? 'bg-amber-500 animate-pulse' : 'bg-red-500'
-                    }`}
-                  />
-                  <span className="text-ui-xs text-neutral-600">
-                    {serverReady ? t.ready : checking ? t.looking : t.offline}
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-secondary">
+              <button type="button" data-testid="start-rules" onClick={onRules} className="min-h-11 hover:text-ink">{copy.rules}</button>
+              <div className="flex items-center gap-4">
+                {gameMode === 'classic' && (
+                  <span className="flex items-center gap-2" role="status">
+                    <span className={`h-1.5 w-1.5 rounded-full ${serverReady ? 'bg-emerald-400' : checking ? 'animate-pulse bg-amber-400' : 'bg-red-400'}`} />
+                    {serverReady ? copy.ready : checking ? copy.checking : copy.unavailable}
                   </span>
-                </div>
-              )}
-            </motion.div>
+                )}
+                {isOnline && <span className="text-quantum">{copy.beta}</span>}
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
-    </div>
+    </main>
   )
 }
 
-function Label({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function HubAction({
+  icon,
+  title,
+  detail,
+  active = false,
+  quantum = false,
+  testId,
+  onClick,
+}: {
+  icon: GameIconName
+  title: string
+  detail: string
+  active?: boolean
+  quantum?: boolean
+  testId?: string
+  onClick: () => void
+}) {
   return (
-    <label className={`mb-2.5 block text-ui-xs font-semibold uppercase tracking-[0.15em] text-neutral-500 ${className}`}>
-      {children}
-    </label>
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      aria-pressed={active}
+      className={`group flex min-h-[92px] items-center gap-4 bg-surface-0 p-4 text-left transition-colors hover:bg-surface-2 ${active ? quantum ? 'text-quantum' : 'text-accent' : 'text-ink'}`}
+    >
+      <span className={`grid h-11 w-11 shrink-0 place-items-center border ${active ? 'border-current' : 'border-line text-ink-secondary'}`}>
+        <GameIcon name={icon} className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">{title}</span>
+        <span className="mt-1 block text-xs text-ink-secondary">{detail}</span>
+      </span>
+      <GameIcon name="chevron" className="h-4 w-4 opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
+    </button>
+  )
+}
+
+function OptionButton({
+  active,
+  label,
+  icon,
+  testId,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  icon: GameIconName
+  testId: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      role="radio"
+      aria-checked={active}
+      onClick={onClick}
+      className={`flex min-h-[72px] flex-col items-center justify-center gap-2 border px-2 py-3 text-center text-xs font-semibold transition-colors ${active ? 'border-quantum bg-quantum/[0.08] text-quantum' : 'border-line bg-surface-0 text-ink-secondary hover:text-ink'}`}
+    >
+      <GameIcon name={icon} className="h-5 w-5" />
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function ChoiceGroup({
+  legend,
+  value,
+  options,
+  onChange,
+}: {
+  legend: string
+  value: string
+  options: Array<{ value: string; label: ReactNode; ariaLabel?: string }>
+  onChange: (value: string) => void
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-3 text-xs font-semibold text-ink-secondary">{legend}</legend>
+      <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={legend}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            aria-label={option.ariaLabel}
+            onClick={() => onChange(option.value)}
+            className={`min-h-11 border px-3 text-sm font-semibold transition-colors ${value === option.value ? 'border-ink bg-ink text-surface-0' : 'border-line bg-surface-0 text-ink-secondary hover:text-ink'}`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+function SmallAction({ icon, label, onClick }: { icon: GameIconName; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex min-h-11 items-center gap-2 border border-line bg-surface-0 px-3 text-xs font-semibold text-ink transition-colors hover:border-ink"
+    >
+      <GameIcon name={icon} />
+      {label}
+    </button>
   )
 }

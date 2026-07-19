@@ -3,21 +3,24 @@ import { useReducedMotion } from 'framer-motion'
 import { ui } from '../lib/i18n'
 import { useModalA11y } from '../hooks/useModalA11y'
 import type { Language } from '../lib/types'
+import GameIcon from './GameIcon'
 
 interface OnlineSessionEndedModalProps {
   visible: boolean
   onMenu: () => void
+  onRetry: () => void
   language: Language
 }
 
 export default function OnlineSessionEndedModal({
   visible,
   onMenu,
+  onRetry,
   language,
 }: OnlineSessionEndedModalProps) {
   const t = ui(language)
   const reduceMotion = useReducedMotion()
-  const { containerRef, onBackdropClick } = useModalA11y(visible, onMenu, true)
+  const { containerRef } = useModalA11y(visible, undefined, false)
   const titleId = 'online-session-ended-title'
 
   return (
@@ -28,7 +31,6 @@ export default function OnlineSessionEndedModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onBackdropClick}
           role="presentation"
         >
           <motion.div
@@ -51,8 +53,16 @@ export default function OnlineSessionEndedModal({
             <div className="rule my-8" />
             <button
               type="button"
+              onClick={onRetry}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 border border-quantum bg-quantum/10 py-3 text-ui-sm font-semibold text-quantum"
+            >
+              <GameIcon name="retry" />
+              {language === 'es' ? 'Intentar reconectar' : 'Try reconnecting'}
+            </button>
+            <button
+              type="button"
               onClick={onMenu}
-              className="w-full rounded border-2 border-accent py-3 text-ui-sm font-semibold text-accent"
+              className="mt-2 min-h-11 w-full rounded border border-line py-3 text-ui-sm font-semibold text-ink-secondary"
             >
               {t.menu}
             </button>

@@ -3,11 +3,13 @@ import { useReducedMotion } from 'framer-motion'
 import type { Language } from '../lib/types'
 import { ui } from '../lib/i18n'
 import { useModalA11y } from '../hooks/useModalA11y'
+import GameIcon from './GameIcon'
 
 interface GameMobileStatsSheetProps {
   open: boolean
   onClose: () => void
   language: Language
+  title?: string
   children: React.ReactNode
 }
 
@@ -15,6 +17,7 @@ export default function GameMobileStatsSheet({
   open,
   onClose,
   language,
+  title,
   children,
 }: GameMobileStatsSheetProps) {
   const t = ui(language)
@@ -48,7 +51,7 @@ export default function GameMobileStatsSheet({
           >
             <div className="flex shrink-0 items-center justify-between border-b border-surface-4 px-4 py-3">
               <h2 id={titleId} className="text-ui-sm font-semibold text-white">
-                {language === 'es' ? 'Evaluación e historial' : 'Eval & history'}
+                {title ?? (language === 'es' ? 'Inspector de partida' : 'Game inspector')}
               </h2>
               <button
                 type="button"
@@ -56,7 +59,7 @@ export default function GameMobileStatsSheet({
                 className="min-h-[44px] min-w-[44px] rounded px-3 text-ui-sm font-medium text-neutral-500 hover:text-white"
                 aria-label={t.cancel}
               >
-                ✕
+                <GameIcon name="close" className="h-5 w-5" />
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-3">

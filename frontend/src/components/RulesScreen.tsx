@@ -7,6 +7,7 @@ import PieceExplorer from './rules/PieceExplorer'
 import CaptureFlowLab from './rules/CaptureFlowLab'
 import Glossary from './rules/Glossary'
 import QuantumTutorial from './rules/QuantumTutorial'
+import GameIcon from './GameIcon'
 import {
   getClassicRules,
   getQuantumRules,
@@ -112,7 +113,7 @@ export default function RulesScreen({ onBack, language, initialTab = 'quantum' }
       <header className="sticky top-0 z-30 border-b border-surface-4 bg-surface-0/95 backdrop-blur-sm">
         <motion.div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 lg:px-8">
           <motion.div className="flex items-center gap-2.5">
-            <span className="font-serif text-lg text-accent">♛</span>
+            <GameIcon name="queen" className="h-5 w-5 text-accent" />
             <span className="text-ui-sm font-semibold text-white">
               Gambito de Dama <span className="text-accent">Cuántico</span>
             </span>
@@ -122,7 +123,10 @@ export default function RulesScreen({ onBack, language, initialTab = 'quantum' }
             onClick={onBack}
             className="min-h-[44px] rounded-md border border-surface-4 bg-surface-1 px-4 py-2 text-ui-sm font-semibold text-neutral-300 transition-colors hover:border-accent/30 hover:text-white"
           >
-            ← {es ? 'Menú' : 'Menu'}
+            <span className="inline-flex items-center gap-2">
+              <GameIcon name="chevron" className="rotate-180" />
+              {es ? 'Menú' : 'Menu'}
+            </span>
           </button>
         </motion.div>
       </header>
@@ -158,7 +162,7 @@ export default function RulesScreen({ onBack, language, initialTab = 'quantum' }
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <h1 className="font-serif text-3xl text-white lg:text-4xl">
+            <h1 className="text-3xl font-semibold text-white lg:text-4xl">
               {es ? 'Reglas del juego' : 'Game rules'}
             </h1>
             <p className="mt-2 text-ui-sm text-neutral-500">
@@ -169,32 +173,40 @@ export default function RulesScreen({ onBack, language, initialTab = 'quantum' }
           </motion.div>
 
           <motion.div className="mb-8 flex justify-center lg:justify-start">
-            <motion.div className="flex overflow-hidden rounded border border-surface-4">
+            <motion.div
+              role="tablist"
+              aria-label={es ? 'Contenido de aprendizaje' : 'Learning content'}
+              className="flex rounded-lg bg-surface-2 p-1"
+            >
               {(
                 [
-                  { key: 'classic' as Tab, label: es ? '♛ Clásico' : '♛ Classic' },
-                  { key: 'quantum' as Tab, label: es ? '⚛ Cuántico' : '⚛ Quantum' },
-                  { key: 'tutorial' as Tab, label: es ? '⚛ Tutorial' : '⚛ Tutorial' },
+                  { key: 'classic' as Tab, label: es ? 'Clásico' : 'Classic', icon: 'classic' as const },
+                  { key: 'quantum' as Tab, label: es ? 'Cuántico' : 'Quantum', icon: 'atom' as const },
+                  { key: 'tutorial' as Tab, label: es ? 'Academia' : 'Academy', icon: 'book' as const },
                 ] as const
-              ).map((t, i) => (
+              ).map((t) => (
                 <button
                   key={t.key}
                   data-testid={`rules-tab-${t.key}`}
                   type="button"
+                  role="tab"
+                  aria-selected={tab === t.key}
                   onClick={() => {
                     setTab(t.key)
                   }}
-                  className={`min-h-[44px] px-5 py-2 text-ui-sm font-semibold transition-colors
-                    ${i > 0 ? 'border-l border-surface-4' : ''}
+                  className={`min-h-[44px] rounded-md px-5 py-2 text-ui-sm font-semibold transition-colors
                     ${
                       tab === t.key
                         ? t.key === 'quantum' || t.key === 'tutorial'
-                          ? 'bg-indigo-500/10 text-indigo-400'
-                          : 'bg-accent/10 text-accent'
+                          ? 'bg-surface-0 text-indigo-400 shadow-subtle'
+                          : 'bg-surface-0 text-accent shadow-subtle'
                         : 'text-neutral-500 hover:text-neutral-300'
                     }`}
                 >
-                  {t.label}
+                  <span className="inline-flex items-center gap-2">
+                    <GameIcon name={t.icon} />
+                    {t.label}
+                  </span>
                 </button>
               ))}
             </motion.div>
@@ -212,10 +224,10 @@ export default function RulesScreen({ onBack, language, initialTab = 'quantum' }
               <h2 className="mb-3 text-ui-xs font-semibold uppercase tracking-wider text-neutral-600">
                 {es ? 'Resumen rápido' : 'Quick summary'} — {tabTitle}
               </h2>
-              <motion.div className="grid gap-3 sm:grid-cols-3">
+              <motion.div className="divide-y divide-line/70 border-y border-line/70">
                 {quickStart.map((item) => (
-                  <motion.div key={item.text} className="rules-quickstart-card">
-                    <span className="text-xl">{item.icon}</span>
+                  <motion.div key={item.text} className="flex items-center gap-3 py-3">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-quantum" aria-hidden="true" />
                     <p className="text-ui-sm text-neutral-300">{item.text}</p>
                   </motion.div>
                 ))}

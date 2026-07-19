@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { CaptureScenario } from './types'
 import MiniBoard from './MiniBoard'
 import { useMiniSqPx } from './useMiniSqPx'
+import GameIcon from '../GameIcon'
 
 interface CaptureFlowLabProps {
   scenarios: CaptureScenario[]
@@ -44,8 +45,10 @@ export default function CaptureFlowLab({ scenarios, es }: CaptureFlowLabProps) {
             className={`rules-capture-card ${activeId === s.id ? 'rules-capture-card-active' : ''}`}
             aria-pressed={activeId === s.id}
           >
-            <span className="text-ui-xs font-bold uppercase tracking-wide text-neutral-500">
-              {s.attacker === 'quantum' ? '⚛' : '♟'} → {s.defender === 'quantum' ? '⚛' : '♟'}
+            <span className="flex items-center justify-center gap-1.5 text-ui-xs font-bold text-neutral-500" aria-hidden="true">
+              {s.attacker === 'quantum' ? <GameIcon name="atom" /> : <span className="text-base">♟</span>}
+              <GameIcon name="chevron" className="h-3 w-3" />
+              {s.defender === 'quantum' ? <GameIcon name="atom" /> : <span className="text-base">♟</span>}
             </span>
             <span className="mt-1 text-ui-sm font-semibold text-white">{s.label}</span>
           </button>
@@ -99,7 +102,7 @@ export default function CaptureFlowLab({ scenarios, es }: CaptureFlowLabProps) {
                     onClick={() => setStep((s) => s - 1)}
                     aria-label={es ? 'Paso anterior' : 'Previous step'}
                   >
-                    ←
+                    <GameIcon name="chevron" className="rotate-180" />
                   </button>
                   <span className="min-w-[4.5rem] text-center text-ui-xs text-neutral-500">
                     {step + 1} / {active.steps.length}
@@ -111,7 +114,7 @@ export default function CaptureFlowLab({ scenarios, es }: CaptureFlowLabProps) {
                     onClick={() => setStep((s) => s + 1)}
                     aria-label={es ? 'Paso siguiente' : 'Next step'}
                   >
-                    →
+                    <GameIcon name="chevron" />
                   </button>
                 </div>
               )}

@@ -6,21 +6,26 @@ import type {
   OnlineRoomRow,
   QPendingMeasurement,
   OnlineStatus,
+  OnlineClockState,
   QuantumRoomState,
+  RoomGameState,
 } from '../lib/onlineTypes'
-import { quantumRoomFingerprint, quantumStateFingerprint } from '../lib/onlineTypes'
+import { hashClassicState, quantumRoomFingerprint, quantumStateFingerprint } from '../lib/onlineTypes'
 import type { OnlineMeta } from '../lib/types'
 import {
   abandonOnlineRoom,
-  finishOnlineRoom,
+  classicResultFromFen,
   fetchOnlineRoom,
   getInviteUrl,
   isLegalMoveFromFen,
+  initialRoomState,
   pushRoomState,
   subscribeToRoom,
   subscribeToRoomPresence,
 } from '../lib/onlineRoom'
 import type { QState } from '../lib/types'
+import type { GameResult } from '../lib/types'
+import { hashQuantumState } from '../lib/quantumEngine'
 
 interface UseOnlineGameSyncOptions {
   config: GameConfig
@@ -48,6 +53,17 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
   const isOnline = enabled && !!online
 
   const syncRoom = useCallback((next: OnlineRoomRow | null) => {
+    if (next?.state) {
+      const expectedHash = next.state.type === 'quantum'
+        ? hashQuantumState(next.state.qstate)
+        : hashClassicState(next.state.fen, next.state.pgn)
+      if (
+        (next.state.stateHash && next.state.stateHash !== expectedHash)
+        || (next.state.revision !== undefined && next.state.revision !== next.version)
+      ) {
+        setSyncError('STATE_HASH_MISMATCH')
+      }
+    }
     roomRef.current = next
     setRoom(next)
   }, [])
@@ -77,6 +93,13 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     }
     return fresh
   }, [online?.roomId, syncRoom])
+
+  const retryConnection = useCallback(async (): Promise<OnlineRoomRow | null> => {
+    setOpponentLeft(false)
+    setOpponentOnline(null)
+    setSyncError(null)
+    return refreshRoomFromServer()
+  }, [refreshRoomFromServer])
 
   const leaveRoom = useCallback(async (): Promise<boolean> => {
     if (!online?.roomId || hasAbandonedRef.current) return false
@@ -157,7 +180,7 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
       ? room.state.fen
       : null
 
-  const isMyTurn = isOnline && room ? room.turn === config.playerColor : true
+  const isMyTurn = isOnline && room ? room.status === 'playing' && room.turn === config.playerColor : true
 
   const isBoardInSync = useCallback(
     (localFen: string) => {
@@ -213,6 +236,8 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
         ? 'conflict'
         : !room
           ? 'connecting'
+          : room.status === 'finished'
+            ? 'ended'
           : room.status === 'waiting' || !room.white_player_id || !room.black_player_id
             ? 'waiting'
             : opponentOnline === false
@@ -225,6 +250,7 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
       turn: PieceColor,
       lastMove?: { from: string; to: string } | null,
       pgn?: string,
+      metadata?: { clocks?: OnlineClockState; result?: GameResult | null },
     ) => {
       if (!online?.roomId || applyingRemote.current || pushingRef.current) return false
       pushingRef.current = true
@@ -249,7 +275,18 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
             return false
           }
 
-          const state: ClassicRoomState = { type: 'classic', fen, lastMove, pgn: pgn ?? '' }
+          const normalizedPgn = pgn ?? ''
+          const state: ClassicRoomState = {
+            type: 'classic',
+            fen,
+            lastMove,
+            pgn: normalizedPgn,
+            revision: active.version + 1,
+            stateHash: hashClassicState(fen, normalizedPgn),
+            rngCounter: 0,
+            clocks: metadata?.clocks ?? active.state.clocks ?? { whiteTime: null, blackTime: null, paused: false },
+            result: metadata?.result === undefined ? classicResultFromFen(fen) : metadata.result,
+          }
           try {
             const updated = await pushRoomState(active.id, active.version, {
               state,
@@ -289,6 +326,7 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
       qstate: QState,
       turn: PieceColor,
       pending: QPendingMeasurement | null | undefined = undefined,
+      metadata?: { clocks?: OnlineClockState; result?: GameResult | null },
     ) => {
       if (!online?.roomId || applyingRemote.current || pushingRef.current) return false
       pushingRef.current = true
@@ -310,6 +348,13 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
           type: 'quantum',
           qstate,
           pendingMeasurement: pending === undefined ? (serverRoom.pendingMeasurement ?? null) : pending,
+          revision: active.version + 1,
+          stateHash: hashQuantumState(qstate),
+          rngCounter: qstate.rngCounter,
+          clocks: metadata?.clocks ?? serverRoom.clocks ?? { whiteTime: null, blackTime: null, paused: Boolean(pending) },
+          result: metadata?.result === undefined
+            ? qstate.gameOver ? { winner: qstate.gameOver.winner, cause: qstate.gameOver.cause } : null
+            : metadata.result,
         }
         if (quantumRoomFingerprint(serverRoom) === quantumRoomFingerprint(nextRoom)) {
           setSyncError(null)
@@ -353,14 +398,92 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     [online?.roomId, config.playerColor, refreshRoomFromServer, syncRoom, waitForRoom],
   )
 
-  const finishGame = useCallback(async () => {
+  const finishGame = useCallback(async (
+    result?: GameResult | null,
+    clocks?: OnlineClockState,
+  ) => {
     if (!online?.roomId) return
     try {
-      await finishOnlineRoom(online.roomId)
+      const active = await waitForRoom()
+      if (!active || active.status === 'finished') return
+
+      const derivedResult = active.state.type === 'classic'
+        ? classicResultFromFen(active.state.fen)
+        : active.state.qstate.gameOver
+          ? {
+              winner: active.state.qstate.gameOver.winner,
+              cause: active.state.qstate.gameOver.cause,
+            } satisfies GameResult
+          : null
+      const state: RoomGameState = {
+        ...active.state,
+        revision: active.version + 1,
+        clocks: clocks ?? active.state.clocks,
+        result: result === undefined ? derivedResult : result,
+      }
+      const updated = await pushRoomState(active.id, active.version, {
+        state,
+        turn: active.turn,
+        status: 'finished',
+        actorColor: config.playerColor,
+      })
+      syncRoom(updated)
+      lastAppliedVersion.current = updated.version
     } catch {
       /* ignore */
     }
-  }, [online?.roomId])
+  }, [config.playerColor, online?.roomId, syncRoom, waitForRoom])
+
+  const requestRematch = useCallback(async (): Promise<boolean> => {
+    if (!online?.roomId) return false
+    let active = await waitForRoom()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!active || active.status !== 'finished') return false
+      const votes = {
+        w: active.state.rematch?.w ?? false,
+        b: active.state.rematch?.b ?? false,
+        [config.playerColor]: true,
+      }
+      const accepted = votes.w && votes.b
+      const nextState = accepted
+        ? {
+            ...initialRoomState(active.mode),
+            revision: active.version + 1,
+            clocks: {
+              whiteTime: config.useTimer ? config.timerMinutes * 60 : null,
+              blackTime: config.useTimer ? config.timerMinutes * 60 : null,
+              paused: false,
+            },
+            result: null,
+            rematch: null,
+          }
+        : {
+            ...active.state,
+            revision: active.version + 1,
+            rematch: votes,
+          }
+      try {
+        const updated = await pushRoomState(active.id, active.version, {
+          state: nextState,
+          turn: accepted ? 'w' : active.turn,
+          status: accepted ? 'playing' : 'finished',
+          measurement_seed: accepted && active.measurement_seed
+            ? `${active.measurement_seed}:r${active.version + 1}`
+            : active.measurement_seed,
+          actorColor: config.playerColor,
+          move: accepted ? { type: 'rematch' } : { type: 'rematch-request' },
+        })
+        syncRoom(updated)
+        lastAppliedVersion.current = updated.version
+        return true
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        if (message !== 'VERSION_CONFLICT' || attempt === 1) return false
+        active = await refreshRoomFromServer()
+      }
+    }
+    return false
+  }, [config.playerColor, config.timerMinutes, config.useTimer, online?.roomId, refreshRoomFromServer, syncRoom, waitForRoom])
 
   const copyInviteLink = useCallback(() => {
     if (!online?.code) return
@@ -411,9 +534,13 @@ export function useOnlineGameSync({ config, enabled }: UseOnlineGameSyncOptions)
     pushClassicState,
     pushQuantumState,
     finishGame,
+    requestRematch,
+    rematchRequestedByMe: Boolean(room?.state.rematch?.[config.playerColor]),
+    rematchRequestedByOpponent: Boolean(room?.state.rematch?.[config.playerColor === 'w' ? 'b' : 'w']),
     leaveRoom,
     copyInviteLink,
     refreshRoomFromServer,
+    retryConnection,
     shouldApplyRemote,
     markRemoteApplied,
     beginRemoteApply,

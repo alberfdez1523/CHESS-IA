@@ -1,6 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="18" fill="#0a0a0b"/>
-  <path d="M50 18c-8 0-14 6-14 14v6h-4c-2 0-4 2-4 4v28c0 2 2 4 4 4h36c2 0 4-2 4-4V42c0-2-2-4-4-4h-4v-6c0-8-6-14-14-14z" fill="#c8a951"/>
-  <circle cx="50" cy="32" r="6" fill="#818cf8" opacity="0.85"/>
-  <path d="M50 52v22M38 58h24" stroke="#ebe5da" stroke-width="3" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <style>
+    .surface { fill: #0b0c10; }
+    .outline { stroke: #8b84ff; }
+    .measure { stroke: #d4b44c; fill: #d4b44c; }
+    .solid { fill: #d4b44c; }
+    @media (prefers-color-scheme: light) {
+      .surface { fill: #f7f7f5; }
+      .outline { stroke: #554cc7; }
+      .measure { stroke: #765b00; fill: #765b00; }
+      .solid { fill: #191b20; }
+    }
+  </style>
+  <rect class="surface" width="96" height="96" rx="18"/>
+  <g transform="translate(8 22) scale(.74)">
+    <g transform="translate(2 2)" class="outline" stroke-width="2.8" stroke-dasharray=".1 4.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 1.5 20.5 6.5 17 10.5 13.5 6.5Z"/>
+      <path d="M3.5 13 11 17.8 8.5 8.5 17 16 25.5 8.5 23 17.8 30.5 13 27.5 24C26.6 27.4 24.5 30.5 22.9 33.7 21.1 37.1 20.7 40.6 22.4 44.2L25.2 49.4H8.8L11.6 44.2C13.3 40.6 12.9 37.1 11.1 33.7 9.5 30.5 7.4 27.4 6.5 24Z"/>
+      <path d="M7.8 50.8H26.2L29.2 57.5H4.8Z"/>
+    </g>
+    <path class="measure" d="M54 5V59" stroke-width="1.8"/>
+    <circle class="measure" cx="54" cy="32" r="4.2" stroke="none"/>
+    <g transform="translate(72 2)" class="solid">
+      <path d="M17 1.5 20.5 6.5 17 10.5 13.5 6.5Z"/>
+      <path d="M3.5 13 11 17.8 8.5 8.5 17 16 25.5 8.5 23 17.8 30.5 13 27.5 24C26.6 27.4 24.5 30.5 22.9 33.7 21.1 37.1 20.7 40.6 22.4 44.2L25.2 49.4H8.8L11.6 44.2C13.3 40.6 12.9 37.1 11.1 33.7 9.5 30.5 7.4 27.4 6.5 24Z"/>
+      <path d="M7.8 50.8H26.2L29.2 57.5H4.8Z"/>
+    </g>
+  </g>
 </svg>

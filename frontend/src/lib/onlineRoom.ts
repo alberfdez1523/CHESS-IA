@@ -1,9 +1,9 @@
 import { Chess } from 'chess.js'
-import type { GameConfig, GameMode, PieceColor } from './types'
-import type { ClassicRoomState, OnlineRoomRow, QuantumRoomState, RoomGameState } from './onlineTypes'
+import type { GameConfig, GameMode, GameResult, PieceColor } from './types'
+import { hashClassicState, type ClassicRoomState, type OnlineRoomRow, type QuantumRoomState, type RoomGameState } from './onlineTypes'
 import { getSupabase } from './supabase'
 import { getInviteUrl, isSupabaseConfigured, parseRoomCodeFromUrl } from './onlineConfig'
-import { QuantumChessEngine } from './quantumEngine'
+import { hashQuantumState, QuantumChessEngine } from './quantumEngine'
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -79,19 +79,46 @@ function randomSeed(): string {
 
 export function initialClassicState(): ClassicRoomState {
   const game = new Chess()
+  const fen = game.fen()
   return {
     type: 'classic',
-    fen: game.fen(),
+    fen,
     lastMove: null,
     pgn: '',
+    revision: 0,
+    stateHash: hashClassicState(fen),
+    rngCounter: 0,
+    clocks: { whiteTime: null, blackTime: null, paused: false },
+    result: null,
+    rematch: null,
   }
 }
 
 export function initialQuantumState(): QuantumRoomState {
   const engine = new QuantumChessEngine()
+  const qstate = engine.exportState()
   return {
     type: 'quantum',
-    qstate: engine.exportState(),
+    qstate,
+    revision: 0,
+    stateHash: hashQuantumState(qstate),
+    rngCounter: qstate.rngCounter,
+    clocks: { whiteTime: null, blackTime: null, paused: false },
+    result: null,
+    rematch: null,
+  }
+}
+
+export function classicResultFromFen(fen: string): GameResult | null {
+  try {
+    const game = new Chess(fen)
+    if (!game.game_over()) return null
+    if (game.in_checkmate()) {
+      return { winner: game.turn() === 'w' ? 'b' : 'w', cause: 'checkmate' }
+    }
+    return { winner: null, cause: 'draw' }
+  } catch {
+    return null
   }
 }
 
@@ -253,7 +280,7 @@ export async function pushRoomState(
     .eq('id', roomId)
     .eq('version', expectedVersion)
     .select()
-    .single()
+    .maybeSingle()
 
   if (error) throw new Error(error.message)
   if (!data) throw new Error('VERSION_CONFLICT')

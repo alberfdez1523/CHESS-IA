@@ -1,4 +1,5 @@
-import type { GameConfig, GameMode, PieceColor, QMeasurementEvent, QState } from './types'
+import type { GameConfig, GameMode, GameOverInfo, GameResult, Language, PieceColor, QMeasurementEvent, QState } from './types'
+import { hashQuantumState } from './quantumEngine'
 
 export interface QPendingMeasurement {
   event: QMeasurementEvent
@@ -11,12 +12,34 @@ export interface QPendingMeasurement {
 export type RoomStatus = 'waiting' | 'playing' | 'finished'
 export type OnlineStatus = 'connecting' | 'waiting' | 'synced' | 'reconnecting' | 'conflict' | 'ended'
 
+export interface OnlineClockState {
+  whiteTime: number | null
+  blackTime: number | null
+  paused: boolean
+}
+
+export interface OnlineStateMeta {
+  /** Revisión lógica duplicada dentro del payload para detectar filas/estado incoherentes. */
+  revision?: number
+  stateHash?: string
+  rngCounter?: number
+  clocks?: OnlineClockState
+  result?: GameResult | null
+  rematch?: { w: boolean; b: boolean } | null
+}
+
 export interface ClassicRoomState {
   type: 'classic'
   fen: string
   lastMove?: { from: string; to: string } | null
   /** PGN completo para reconstruir el historial de jugadas en ambos clientes */
   pgn?: string
+  revision?: OnlineStateMeta['revision']
+  stateHash?: OnlineStateMeta['stateHash']
+  rngCounter?: OnlineStateMeta['rngCounter']
+  clocks?: OnlineStateMeta['clocks']
+  result?: OnlineStateMeta['result']
+  rematch?: OnlineStateMeta['rematch']
 }
 
 export interface QuantumRoomState {
@@ -24,15 +47,57 @@ export interface QuantumRoomState {
   qstate: QState
   /** Bloquea al rival hasta que el iniciador cierre la ruleta. */
   pendingMeasurement?: QPendingMeasurement | null
+  revision?: OnlineStateMeta['revision']
+  stateHash?: OnlineStateMeta['stateHash']
+  rngCounter?: OnlineStateMeta['rngCounter']
+  clocks?: OnlineStateMeta['clocks']
+  result?: OnlineStateMeta['result']
+  rematch?: OnlineStateMeta['rematch']
 }
 
 export type RoomGameState = ClassicRoomState | QuantumRoomState
 
 /** Huella ligera para comparar estado cuántico sin JSON completo (evita falsos desajustes). */
 export function quantumStateFingerprint(q: QState): string {
-  const last = q.history[q.history.length - 1]
-  const lastKey = last ? `${last.from}-${last.to}-${last.pieceType}` : ''
-  return `${q.turn}|${q.moveNumber}|${q.history.length}|${lastKey}|${q.gameOver?.winner ?? ''}`
+  return hashQuantumState(q)
+}
+
+export function hashClassicState(fen: string, pgn = ''): string {
+  const source = `${fen.trim()}\n${pgn.trim()}`
+  let hash = 0x811c9dc5
+  for (let index = 0; index < source.length; index++) {
+    hash ^= source.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `fnv32:${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
+export function onlineResultToGameOverInfo(
+  result: GameResult,
+  playerColor: PieceColor,
+  language: Language,
+): GameOverInfo {
+  const es = language === 'es'
+  const isDraw = result.winner === null
+  const isWin = result.winner === playerColor
+  const cause = {
+    'king-captured': es ? 'Captura del rey' : 'King captured',
+    checkmate: es ? 'Jaque mate' : 'Checkmate',
+    draw: es ? 'Tablas' : 'Draw',
+    'no-legal-actions': es ? 'Sin acciones legales' : 'No legal actions',
+    timeout: es ? 'Tiempo agotado' : 'Time out',
+    resignation: es ? 'Rendición' : 'Resignation',
+    agreement: es ? 'Tablas por acuerdo' : 'Draw by agreement',
+  }[result.cause]
+  return {
+    title: isDraw
+      ? (es ? 'Tablas' : 'Draw')
+      : isWin
+        ? (es ? '¡Victoria!' : 'Victory!')
+        : (es ? 'Derrota' : 'Defeat'),
+    message: cause,
+    result: isDraw ? 'draw' : isWin ? 'win' : 'lose',
+  }
 }
 
 function pendingMeasurementFingerprint(pm: QPendingMeasurement | null | undefined): string {

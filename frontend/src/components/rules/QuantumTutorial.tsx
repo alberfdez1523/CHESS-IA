@@ -4,6 +4,7 @@ import MiniBoard from './MiniBoard'
 import { makeGrid, placeMiniSquare } from './miniBoardUtils'
 import { useMiniSqPx } from './useMiniSqPx'
 import type { MiniSquare } from './types'
+import GameIcon from '../GameIcon'
 
 interface QuantumTutorialProps {
   es: boolean
@@ -17,6 +18,11 @@ interface TutorialStep {
   body: string
   bullets: string[]
   board: MiniSquare[][]
+}
+
+interface MissionChallenge {
+  prompt: string
+  options: Array<{ label: string; correct: boolean }>
 }
 
 const W = {
@@ -75,8 +81,70 @@ function measurementBoard() {
   placeMiniSquare(g, 2, 1, { piece: W.queen, highlight: 'quantum', label: '50%' })
   placeMiniSquare(g, 2, 3, { piece: B.rook, highlight: 'selected' })
   placeMiniSquare(g, 1, 2, { highlight: 'quantum', label: '%' })
-  placeMiniSquare(g, 0, 2, { label: '🎲' })
+  placeMiniSquare(g, 0, 2, { label: 'RNG' })
   return g
+}
+
+function getMissionChallenge(id: string, es: boolean): MissionChallenge {
+  const missions: Record<string, MissionChallenge> = {
+    'classic-move': {
+      prompt: es ? '¿Qué modo deja la pieza al 100% en el destino?' : 'Which mode leaves the piece 100% on its target?',
+      options: [
+        { label: es ? 'Clásico' : 'Classic', correct: true },
+        { label: 'Split', correct: false },
+        { label: es ? 'Medición' : 'Measurement', correct: false },
+      ],
+    },
+    split: {
+      prompt: es ? 'Para crear dos ramas debes…' : 'To create two branches you must…',
+      options: [
+        { label: es ? 'Elegir dos destinos legales vacíos' : 'Choose two legal empty targets', correct: true },
+        { label: es ? 'Capturar dos piezas' : 'Capture two pieces', correct: false },
+        { label: es ? 'Mover un peón' : 'Move a pawn', correct: false },
+      ],
+    },
+    merge: {
+      prompt: es ? '¿Cuándo se permite una fusión?' : 'When is a merge allowed?',
+      options: [
+        { label: es ? 'Todas las ramas alcanzan la misma casilla vacía' : 'Every branch reaches the same empty square', correct: true },
+        { label: es ? 'Una rama puede capturar' : 'One branch can capture', correct: false },
+        { label: es ? 'Las probabilidades son distintas' : 'Probabilities differ', correct: false },
+      ],
+    },
+    measurement: {
+      prompt: es ? '¿Qué hace la ruleta?' : 'What does the roulette do?',
+      options: [
+        { label: es ? 'Revela una medición ya calculada' : 'Reveals an already calculated measurement', correct: true },
+        { label: es ? 'Cambia la probabilidad' : 'Changes the probability', correct: false },
+        { label: es ? 'Elige la mejor jugada' : 'Chooses the best move', correct: false },
+      ],
+    },
+    tunnel: {
+      prompt: es ? '¿Qué bloqueo puede atravesar una pieza lineal?' : 'Which blocker can a sliding piece cross?',
+      options: [
+        { label: es ? 'Una rama cuántica' : 'A quantum branch', correct: true },
+        { label: es ? 'Una pieza clásica al 100%' : 'A 100% classical piece', correct: false },
+        { label: es ? 'Cualquier rey' : 'Any king', correct: false },
+      ],
+    },
+    'quantum-castle': {
+      prompt: es ? 'Tras el enroque cuántico, rey y torre…' : 'After quantum castling, king and rook…',
+      options: [
+        { label: es ? 'Quedan entrelazados en dos configuraciones' : 'Are entangled across two configurations', correct: true },
+        { label: es ? 'Se fusionan en una pieza' : 'Merge into one piece', correct: false },
+        { label: es ? 'Desaparecen hasta el turno siguiente' : 'Disappear until next turn', correct: false },
+      ],
+    },
+    'game-end': {
+      prompt: es ? '¿Cómo termina una partida cuántica?' : 'How does a quantum game end?',
+      options: [
+        { label: es ? 'Capturando el rey' : 'By capturing the king', correct: true },
+        { label: es ? 'Declarando jaque mate' : 'By declaring checkmate', correct: false },
+        { label: es ? 'Al primer split' : 'At the first split', correct: false },
+      ],
+    },
+  }
+  return missions[id]
 }
 
 function classicVsQuantumBoard() {
@@ -131,7 +199,7 @@ function gameEndBoard() {
 }
 
 function getTutorialSteps(es: boolean): TutorialStep[] {
-  return [
+  const steps: TutorialStep[] = [
     {
       id: 'classic-move',
       eyebrow: es ? 'Paso 1' : 'Step 1',
@@ -290,26 +358,48 @@ function getTutorialSteps(es: boolean): TutorialStep[] {
         ? 'En cuántico se gana capturando el rey.'
         : 'In quantum mode, you win by capturing the king.',
       body: es
-        ? 'No se usa jaque mate clásico como condición principal. El rey puede estar en situaciones probabilísticas, así que la partida acaba cuando un rey es capturado tras aplicar las reglas de movimiento y medición.'
-        : 'Classic checkmate is not the main end condition. The king can be probabilistic, so the game ends when a king is captured after movement and measurement rules are applied.',
+        ? 'No existe jaque ni jaque mate en esta variante. El rey puede entrar en una casilla atacada y la partida solo acaba cuando uno de los reyes es capturado tras aplicar movimiento y medición.'
+        : 'There is no check or checkmate in this variant. A king may enter an attacked square and the game only ends when a king is captured after movement and measurement.',
       bullets: es
-        ? ['El jaque clásico sigue ayudando a leer amenazas.', 'La captura del rey termina la partida.', 'Si hay medición, el resultado decide si la captura existe.']
-        : ['Classic check still helps read threats.', 'Capturing the king ends the game.', 'If measurement is involved, the result decides whether the capture exists.'],
+        ? ['Una amenaza al rey no invalida la jugada.', 'La captura del rey termina la partida.', 'Sin acciones legales, la partida es tablas.', 'Si hay medición, el resultado decide si la captura existe.']
+        : ['A threat to the king does not invalidate a move.', 'Capturing the king ends the game.', 'With no legal actions, the game is drawn.', 'If measurement is involved, the result decides whether the capture exists.'],
       board: gameEndBoard(),
     },
   ]
+
+  const academyMissionIds = new Set([
+    'classic-move',
+    'split',
+    'merge',
+    'measurement',
+    'tunnel',
+    'quantum-castle',
+    'game-end',
+  ])
+  return steps.filter((step) => academyMissionIds.has(step.id))
 }
 
 export default function QuantumTutorial({ es }: QuantumTutorialProps) {
   const [index, setIndex] = useState(0)
+  const [completed, setCompleted] = useState<Set<string>>(() => new Set())
+  const [answer, setAnswer] = useState<'correct' | 'incorrect' | null>(null)
   const sqPx = useMiniSqPx()
   const steps = useMemo(() => getTutorialSteps(es), [es])
   const current = steps[index]
   const isFirst = index === 0
   const isLast = index === steps.length - 1
+  const challenge = getMissionChallenge(current.id, es)
 
   const goTo = (next: number) => {
     setIndex(Math.max(0, Math.min(steps.length - 1, next)))
+    setAnswer(null)
+  }
+
+  const answerMission = (correct: boolean) => {
+    setAnswer(correct ? 'correct' : 'incorrect')
+    if (correct) {
+      setCompleted((currentCompleted) => new Set(currentCompleted).add(current.id))
+    }
   }
 
   return (
@@ -320,16 +410,19 @@ export default function QuantumTutorial({ es }: QuantumTutorialProps) {
       aria-labelledby="quantum-tutorial-title"
     >
       <div className="mb-6">
-        <span className="text-ui-xs font-semibold uppercase tracking-[0.16em] text-indigo-400">
-          {es ? 'Tutorial guiado' : 'Guided tutorial'}
+        <span className="text-ui-sm font-semibold text-indigo-400">
+          {es ? 'Siete misiones guiadas' : 'Seven guided missions'}
         </span>
-        <h2 id="quantum-tutorial-title" className="mt-2 font-serif text-3xl text-white">
-          {es ? 'Tutorial de ajedrez cuántico' : 'Quantum chess tutorial'}
+        <h2 id="quantum-tutorial-title" className="mt-2 text-3xl font-semibold text-white">
+          {es ? 'Academia cuántica' : 'Quantum Academy'}
         </h2>
         <p className="mt-2 max-w-2xl text-ui-sm text-neutral-500">
           {es
             ? 'Aprende los movimientos especiales y las normas del modo cuántico paso a paso.'
             : 'Learn the special moves and rules of quantum mode step by step.'}
+        </p>
+        <p className="mt-3 font-mono text-ui-xs text-quantum" aria-live="polite">
+          {completed.size} / {steps.length} {es ? 'misiones completadas' : 'missions completed'}
         </p>
       </div>
 
@@ -349,6 +442,12 @@ export default function QuantumTutorial({ es }: QuantumTutorialProps) {
             >
               <span className="block font-semibold uppercase tracking-wider">{step.eyebrow}</span>
               <span className="mt-0.5 block text-ui-sm normal-case tracking-normal">{step.title}</span>
+              {completed.has(step.id) && (
+                <span className="mt-1 flex items-center gap-1.5 text-[11px] text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+                  {es ? 'Completada' : 'Completed'}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -384,6 +483,31 @@ export default function QuantumTutorial({ es }: QuantumTutorialProps) {
 
               <div className="flex flex-col items-center justify-center gap-3">
                 <MiniBoard squares={current.board} sqPx={sqPx} stepKey={current.id} />
+                <fieldset className="w-full max-w-sm border-t border-line pt-4">
+                  <legend className="px-1 text-ui-xs font-semibold text-ink">{challenge.prompt}</legend>
+                  <div className="mt-3 grid gap-2">
+                    {challenge.options.map((option) => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        onClick={() => answerMission(option.correct)}
+                        className="min-h-11 border border-line bg-surface-0 px-3 py-2 text-left text-ui-xs text-ink-secondary transition-colors hover:border-quantum hover:text-ink"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {answer && (
+                    <p
+                      className={`mt-3 border-l-2 px-3 py-2 text-ui-xs ${answer === 'correct' ? 'border-emerald-400 bg-emerald-500/[0.08] text-emerald-300' : 'border-red-400 bg-red-500/[0.08] text-red-300'}`}
+                      role="status"
+                    >
+                      {answer === 'correct'
+                        ? (es ? 'Misión completada. Ya puedes pasar a la siguiente.' : 'Mission complete. You can continue.')
+                        : (es ? 'Todavía no. Revisa la explicación y prueba otra opción.' : 'Not yet. Review the explanation and try again.')}
+                    </p>
+                  )}
+                </fieldset>
               </div>
             </motion.div>
           </AnimatePresence>
@@ -395,8 +519,9 @@ export default function QuantumTutorial({ es }: QuantumTutorialProps) {
               className="rules-step-btn"
               disabled={isFirst}
               onClick={() => goTo(index - 1)}
+              aria-label={es ? 'Misión anterior' : 'Previous mission'}
             >
-              ←
+              <GameIcon name="chevron" className="rotate-180" />
             </button>
             <div className="flex gap-1.5" aria-hidden="true">
               {steps.map((step, stepIndex) => (
@@ -414,8 +539,9 @@ export default function QuantumTutorial({ es }: QuantumTutorialProps) {
               className="rules-step-btn"
               disabled={isLast}
               onClick={() => goTo(index + 1)}
+              aria-label={es ? 'Siguiente misión' : 'Next mission'}
             >
-              →
+              <GameIcon name="chevron" />
             </button>
           </div>
         </article>

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
 import QuantumBoard from './QuantumBoard'
 import BoardSkeleton from './BoardSkeleton'
-import PlayerBar from './PlayerBar'
 import MoveHistory from './MoveHistory'
 import EvalBar from './EvalBar'
 import ActionButtons from './ActionButtons'
@@ -11,9 +9,10 @@ import PromotionModal from './PromotionModal'
 import GameOverModal from './GameOverModal'
 import OnlineSessionEndedModal from './OnlineSessionEndedModal'
 import QuantumMeasurementRoulette from './QuantumMeasurementRoulette'
-import GameViewportShell from './GameViewportShell'
-import GameMobileStatsSheet from './GameMobileStatsSheet'
-import GameIcon from './GameIcon'
+import GameScaffold from './GameScaffold'
+import GameIcon, { type GameIconName } from './GameIcon'
+import QuantumPieceInspector from './QuantumPieceInspector'
+import GameReplayPanel from './GameReplayPanel'
 import { useQuantumChess } from '../hooks/useQuantumChess'
 import { useOnlineGameSync } from '../hooks/useOnlineGameSync'
 import { useSoundFX } from '../hooks/useSoundFX'
@@ -22,10 +21,14 @@ import { useTimer } from '../hooks/useTimer'
 import { getPlayerLabel, ui } from '../lib/i18n'
 import type { AppSettings } from '../lib/settings'
 import {
+  onlineResultToGameOverInfo,
   quantumRoomFingerprint,
   quantumStateFingerprint,
 } from '../lib/onlineTypes'
-import type { GameConfig, Language, PieceColor, QMoveMode, QState } from '../lib/types'
+import type { GameConfig, GameResult, Language, PieceColor, QMoveMode, QState } from '../lib/types'
+import type { GameChromeModel, GameNotice, GameTone } from '../lib/gamePresentation'
+import { gameAutosave, type GameAutosave } from '../lib/gameAutosave'
+import { createSeededQuantumRng } from '../lib/quantumEngine'
 
 interface QuantumGameScreenProps {
   config: GameConfig
@@ -34,6 +37,8 @@ interface QuantumGameScreenProps {
   settings: AppSettings
   onOpenSettings: () => void
   onSettingsChange: (partial: Partial<AppSettings>) => void
+  resumeAutosave?: GameAutosave | null
+  onRematch?: () => void
 }
 
 export default function QuantumGameScreen({
@@ -43,6 +48,8 @@ export default function QuantumGameScreen({
   settings,
   onOpenSettings,
   onSettingsChange,
+  resumeAutosave = null,
+  onRematch,
 }: QuantumGameScreenProps) {
   const sounds = useSoundFX(settings.sfxVolume)
   const music = useAmbientMusic(settings.musicVolume)
@@ -50,9 +57,22 @@ export default function QuantumGameScreen({
     config,
     enabled: config.opponentMode === 'online',
   })
+  const getQuantumRng = useCallback((counter: number) => {
+    const seed = onlineSync.room?.measurement_seed
+    return seed ? createSeededQuantumRng(seed, counter) : Math.random
+  }, [onlineSync.room?.measurement_seed])
   const t = ui(language)
+  const syncedGameOverInfo = useMemo(() => {
+    const result = onlineSync.room?.state.result
+    return result ? onlineResultToGameOverInfo(result, config.playerColor, language) : null
+  }, [config.playerColor, language, onlineSync.room?.state.result])
 
   const leavingRef = useRef(false)
+  const onlineClockRef = useRef({
+    whiteTime: config.useTimer ? config.timerMinutes * 60 : null,
+    blackTime: config.useTimer ? config.timerMinutes * 60 : null,
+    paused: false,
+  })
 
   const handleLeaveToMenu = useCallback(async () => {
     if (leavingRef.current) return
@@ -71,13 +91,16 @@ export default function QuantumGameScreen({
   const measurementBlockingRef = useRef(false)
   const hadPendingRef = useRef(false)
   const [measurementReleased, setMeasurementReleased] = useState(false)
+  const [replayOpen, setReplayOpen] = useState(false)
 
   const onStateChange = useCallback(
     (engine: import('../lib/quantumEngine').QuantumChessEngine, meta?: import('../hooks/useQuantumChess').QuantumStateChangeMeta) => {
       if (config.opponentMode !== 'online') return
       const qstate = engine.exportState()
       const pending = meta?.pendingMeasurement ?? null
-      void onlineSync.pushQuantumState(qstate, engine.state.turn, pending).then((ok) => {
+      void onlineSync.pushQuantumState(qstate, engine.state.turn, pending, {
+        clocks: { ...onlineClockRef.current, paused: Boolean(pending) },
+      }).then((ok) => {
         if (!ok && onlineSync.remoteState?.type === 'quantum') {
           loadQuantumRef.current(onlineSync.remoteState.qstate)
         }
@@ -88,6 +111,7 @@ export default function QuantumGameScreen({
 
   const game = useQuantumChess(config, sounds, language, {
     onStateChange,
+    getRng: getQuantumRng,
     canMove: () => {
       if (measurementBlockingRef.current) return false
       if (config.opponentMode !== 'online') return true
@@ -102,9 +126,7 @@ export default function QuantumGameScreen({
   measurementBlockingRef.current = game.isMeasurementBlocking
   const isOnline = game.isOnline
   const isAIMode = config.opponentMode === 'ai'
-  const reduceMotion = useReducedMotion()
   const [boardReady, setBoardReady] = useState(false)
-  const [mobileStatsOpen, setMobileStatsOpen] = useState(false)
 
   const pending = onlineSync.pendingMeasurement
   const isInitiator = !pending || pending.initiator === config.playerColor
@@ -146,7 +168,33 @@ export default function QuantumGameScreen({
     turn: game.turn,
     gameStarted: true,
     gameOver: game.gameOver,
+    paused: showMeasurementRoulette,
   })
+  onlineClockRef.current = {
+    whiteTime: config.useTimer ? timer.whiteTime : null,
+    blackTime: config.useTimer ? timer.blackTime : null,
+    paused: showMeasurementRoulette,
+  }
+
+  const restoreAttemptedRef = useRef(false)
+  const autosaveEndedRef = useRef(false)
+  const [resumeHydrated, setResumeHydrated] = useState(!resumeAutosave)
+
+  useEffect(() => {
+    if (!resumeAutosave || restoreAttemptedRef.current) return
+    restoreAttemptedRef.current = true
+
+    const matchesConfig = resumeAutosave.type === 'quantum'
+      && config.gameMode === 'quantum'
+      && resumeAutosave.config.opponentMode === config.opponentMode
+      && resumeAutosave.config.playerColor === config.playerColor
+
+    if (matchesConfig && resumeAutosave.type === 'quantum') {
+      game.loadQuantumState(resumeAutosave.qstate, resumeAutosave.lastMove)
+      timer.restore(resumeAutosave.clocks)
+    }
+    setResumeHydrated(true)
+  }, [config.gameMode, config.opponentMode, config.playerColor, game.loadQuantumState, resumeAutosave, timer.restore])
 
   useEffect(() => {
     if (timer.timedOut && !game.gameOverInfo) {
@@ -154,6 +202,51 @@ export default function QuantumGameScreen({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer.timedOut])
+
+  useEffect(() => {
+    const opponentMode = config.opponentMode
+    if (opponentMode === 'online') return
+    if (game.gameOver) {
+      autosaveEndedRef.current = true
+      gameAutosave.clear()
+      return
+    }
+    if (!resumeHydrated || autosaveEndedRef.current) return
+
+    const timeoutId = window.setTimeout(() => {
+      gameAutosave.save({
+        type: 'quantum',
+        config: {
+          gameMode: 'quantum',
+          opponentMode,
+          playerColor: config.playerColor,
+          difficulty: config.difficulty,
+          useTimer: config.useTimer,
+          timerMinutes: config.timerMinutes,
+        },
+        qstate: game.exportState(),
+        lastMove: game.lastMove,
+        clocks: { whiteTime: timer.whiteTime, blackTime: timer.blackTime },
+      })
+    }, 200)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [
+    config.difficulty,
+    config.gameMode,
+    config.opponentMode,
+    config.playerColor,
+    config.timerMinutes,
+    config.useTimer,
+    game.board,
+    game.gameOver,
+    game.history,
+    game.lastMove,
+    game.turn,
+    resumeHydrated,
+    timer.blackTime,
+    timer.whiteTime,
+  ])
 
   useEffect(() => {
     if (!onlineSync.shouldApplyRemote || !onlineSync.remoteState) return
@@ -173,6 +266,10 @@ export default function QuantumGameScreen({
 
     onlineSync.beginRemoteApply()
     game.loadQuantumState(remoteRoom.qstate)
+    const clocks = remoteRoom.clocks
+    if (clocks && clocks.whiteTime !== null && clocks.blackTime !== null) {
+      timer.restore({ whiteTime: clocks.whiteTime, blackTime: clocks.blackTime })
+    }
     game.syncRemotePendingMeasurement(remoteRoom.pendingMeasurement ?? null)
     onlineSync.markRemoteApplied(onlineSync.remoteVersion)
     onlineSync.endRemoteApply()
@@ -197,9 +294,18 @@ export default function QuantumGameScreen({
 
   useEffect(() => {
     if (game.gameOverInfo && config.opponentMode === 'online') {
-      void onlineSync.finishGame()
+      const qResult = game.exportState().gameOver
+      let result: GameResult | null = qResult
+        ? { winner: qResult.winner, cause: qResult.cause }
+        : null
+      if (timer.timedOut) {
+        result = { winner: timer.timedOut === 'w' ? 'b' : 'w', cause: 'timeout' }
+      } else if (/rendici|resign/i.test(`${game.gameOverInfo.title} ${game.gameOverInfo.message}`)) {
+        result = { winner: config.playerColor === 'w' ? 'b' : 'w', cause: 'resignation' }
+      }
+      void onlineSync.finishGame(result, onlineClockRef.current)
     }
-  }, [game.gameOverInfo, config.opponentMode, onlineSync])
+  }, [config.opponentMode, config.playerColor, game, onlineSync, timer.timedOut])
 
   const opponentColor: PieceColor = config.playerColor === 'w' ? 'b' : 'w'
   const topColor: PieceColor = game.boardFlipped ? config.playerColor : opponentColor
@@ -251,17 +357,17 @@ export default function QuantumGameScreen({
     isLow: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
   }), [bottomColor, config, game, timer, language])
 
-  const modeLabels: Record<QMoveMode, { icon: string; label: string; desc: string }> = {
-    classical: { icon: '♟', label: t.modeClassical, desc: t.modeClassicalDesc },
-    quantum: { icon: '⚛', label: t.modeQuantum, desc: t.modeQuantumDesc },
-    merge: { icon: '⊕', label: t.modeMerge, desc: t.modeMergeDesc },
+  const modeLabels: Record<QMoveMode, { icon: GameIconName; label: string; desc: string }> = {
+    classical: { icon: 'classic', label: t.modeClassical, desc: t.modeClassicalDesc },
+    quantum: { icon: 'atom', label: t.modeQuantum, desc: t.modeQuantumDesc },
+    merge: { icon: 'merge', label: t.modeMerge, desc: t.modeMergeDesc },
   }
 
   const modeButtons: QMoveMode[] = ['classical', 'quantum', 'merge']
 
   const modeColor = (mode: QMoveMode, active: boolean) => {
     if (!active) return 'border-surface-4 bg-surface-2 text-neutral-500 hover:bg-surface-3 hover:text-neutral-300'
-    if (mode === 'quantum') return 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300'
+    if (mode === 'quantum') return 'border-quantum/30 bg-quantum/10 text-quantum'
     if (mode === 'merge') return 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
     return 'border-accent/30 bg-accent/10 text-accent'
   }
@@ -280,18 +386,6 @@ export default function QuantumGameScreen({
               ? t.onlineStatusEnded
               : t.onlineStatusSynced
 
-  const onlineStatusClass = onlineSync.isPushing
-    ? 'border-amber-400/30 text-amber-300'
-    : onlineSync.onlineStatus === 'synced'
-      ? 'border-emerald-400/30 text-emerald-300'
-      : onlineSync.onlineStatus === 'conflict' || onlineSync.onlineStatus === 'ended'
-        ? 'border-red-400/30 text-red-300'
-        : 'border-surface-4 text-neutral-500'
-
-  const boardMotion = reduceMotion
-    ? { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } }
-    : { initial: { opacity: 0, scale: 0.97 }, animate: { opacity: 1, scale: 1 }, transition: { duration: 0.4, delay: 0.1 } }
-
   const renderModeButton = (mode: QMoveMode, compact = false) => {
     const info = modeLabels[mode]
     const active = game.moveMode === mode
@@ -305,11 +399,11 @@ export default function QuantumGameScreen({
         aria-label={`${info.label}: ${info.desc}`}
         onClick={() => game.chooseMoveMode(mode)}
         disabled={!enabled || game.gameOver}
-        className={`${compact ? 'min-h-[36px] min-w-0 flex-1 flex-row items-center justify-center gap-1 px-1.5 py-1.5' : 'w-full px-3.5 py-3 text-left'} rounded border text-ui-sm transition-colors
+        className={`${compact ? 'flex min-h-[36px] min-w-0 flex-1 items-center justify-center gap-1 px-1.5 py-1.5' : 'block w-full px-3.5 py-3 text-left'} rounded border text-ui-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-quantum/70
           ${active ? modeColor(mode, true) : enabled && !game.gameOver ? modeColor(mode, false) : 'cursor-not-allowed border-surface-4 bg-surface-1 text-neutral-700'}`}
       >
-        <span className={compact ? 'text-sm leading-none' : 'mr-2 text-sm'}>{info.icon}</span>
-        <span className={`font-semibold ${compact ? 'truncate text-[10px] leading-tight' : ''}`}>{info.label}</span>
+        <GameIcon name={info.icon} className={compact ? 'h-3.5 w-3.5' : 'mr-2 h-4 w-4'} />
+        <span className={`font-semibold ${compact ? 'truncate text-[11px] leading-tight' : ''}`}>{info.label}</span>
         {!compact && <span className="mt-0.5 block text-ui-sm text-neutral-500">{info.desc}</span>}
       </button>
     )
@@ -318,163 +412,193 @@ export default function QuantumGameScreen({
   const showMeasureBanner = showMeasurementRoulette
   const showReleasedBanner = measurementReleased && isOnline && onlineSync.isMyTurn && !pending
   const showAiErrorBanner = isAIMode && !!game.engineError
-  const bannerCount = (
-    (showMeasureBanner ? 1 : 0)
-    + (showReleasedBanner ? 1 : 0)
-    + (showAiErrorBanner ? 1 : 0)
-  ) as 0 | 1 | 2 | 3
   const hasCastleButtons =
     (game.classicalCastleOptions.length > 0 || game.quantumCastleOptions.length > 0)
     && !game.gameOver && !game.isThinking && !game.isMeasurementBlocking
 
-  const gameHeader = (
-    <header className="flex items-center justify-between border-b border-surface-4 px-3 py-2 max-lg:py-2 lg:px-6 lg:py-3">
-        <div className="flex items-center gap-3">
-          <GameIcon name="atom" className="h-5 w-5 text-indigo-400" />
-          <span className="hidden font-serif text-sm text-white sm:inline">GdD</span>
-          <span className="flex flex-wrap items-center gap-2 text-ui-xs font-medium uppercase tracking-wider text-neutral-500">
-            {isOnline
-              ? `${t.onlineBadge}${config.online?.code ? ` · ${config.online.code}` : ''}`
-              : isAIMode
-                ? (language === 'es' ? `Cuántico vs IA · ${config.difficulty}` : `Quantum vs AI · ${config.difficulty}`)
-                : t.quantumBadge}
-            {isOnline && (
-              <span
-                className={`rounded-sm border px-1.5 py-0.5 ${onlineStatusClass}`}
-              >
-                {onlineStatusText}
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded px-3 py-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:bg-surface-2 hover:text-white"
-            aria-label={t.settings}
-          >
-            <GameIcon name="settings" /> {t.settings}
-          </button>
-          <button
-            type="button"
-            onClick={handleLeaveToMenu}
-            className="min-h-[44px] rounded px-3 py-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:bg-surface-2 hover:text-white"
-          >
-            {t.menu}
-          </button>
-        </div>
-      </header>
+  const connectionTone: GameTone = onlineSync.isPushing
+    ? 'warning'
+    : onlineSync.onlineStatus === 'synced'
+      ? 'success'
+      : onlineSync.onlineStatus === 'conflict' || onlineSync.onlineStatus === 'ended'
+        ? 'danger'
+        : 'neutral'
+
+  const notices: GameNotice[] = []
+  if (showMeasureBanner) {
+    notices.push({
+      id: 'quantum-measurement',
+      tone: 'neutral',
+      priority: 'high',
+      message: isInitiator
+        ? language === 'es'
+          ? 'Medición en curso — gira la ruleta para revelar el movimiento.'
+          : 'Measurement in progress — spin the roulette to reveal the move.'
+        : language === 'es'
+          ? 'Medición en curso. Comparte la revelación con tu rival.'
+          : 'Measurement in progress. Share the reveal with your opponent.',
+    })
+  }
+  if (showReleasedBanner) {
+    notices.push({
+      id: 'quantum-measurement-released',
+      tone: 'success',
+      priority: 'normal',
+      message: t.measurementCanMove,
+    })
+  }
+  if (showAiErrorBanner) {
+    notices.push({
+      id: 'quantum-ai-fallback',
+      tone: 'warning',
+      priority: 'normal',
+      message: language === 'es'
+        ? 'La IA cuántica no pudo completar la jugada.'
+        : 'Quantum AI could not complete its move.',
+      action: {
+        label: language === 'es' ? 'Reintentar' : 'Retry',
+        onSelect: game.retryAIMove,
+      },
+    })
+  }
+  if (isOnline && onlineSync.syncError) {
+    notices.push({
+      id: 'quantum-sync',
+      tone: onlineSync.syncError === 'CONFLICT' || onlineSync.syncError === 'OUT_OF_SYNC' ? 'warning' : 'danger',
+      priority: 'high',
+      message:
+        onlineSync.syncError === 'CONFLICT' || onlineSync.syncError === 'OUT_OF_SYNC'
+          ? language === 'es'
+            ? 'Estado cuántico resincronizado con el servidor.'
+            : 'Quantum state resynced with the server.'
+          : `${language === 'es' ? 'Error de sincronización: ' : 'Sync error: '}${onlineSync.syncError}`,
+      action: {
+        label: language === 'es' ? 'Reconectar' : 'Reconnect',
+        onSelect: () => void onlineSync.retryConnection(),
+      },
+    })
+  }
+
+  const quantumState = game.exportState()
+  const selectedRailPiece = game.selectedPiece
+    ? quantumState.pieces[game.selectedPiece.id]
+    : null
+
+  const chromeModel: GameChromeModel = {
+    language,
+    variant: 'quantum',
+    modeLabel: isOnline
+      ? `${t.quantumBadge} · ${t.onlineBadge}`
+      : isAIMode
+        ? (language === 'es' ? `Cuántico vs IA · ${config.difficulty}` : `Quantum vs AI · ${config.difficulty}`)
+        : t.quantumBadge,
+    roomCode: isOnline ? config.online?.code : undefined,
+    connection: isOnline ? { label: onlineStatusText, tone: connectionTone } : undefined,
+    players: { top: topBar, bottom: bottomBar },
+    status: {
+      message: game.status.text,
+      tone:
+        game.status.type === 'player'
+          ? 'accent'
+          : game.status.type === 'thinking'
+            ? 'warning'
+            : game.status.type === 'over'
+              ? 'danger'
+              : 'neutral',
+    },
+    notices,
+    labels: {
+      settings: t.settings,
+      menu: t.menu,
+      openInspector: language === 'es' ? 'Abrir inspector cuántico' : 'Open quantum inspector',
+      inspectorTitle: language === 'es' ? 'Inspector cuántico' : 'Quantum inspector',
+      tabs: {
+        game: language === 'es' ? 'Partida' : 'Game',
+        history: language === 'es' ? 'Historial' : 'History',
+        analysis: language === 'es' ? 'Análisis' : 'Analysis',
+      },
+    },
+  }
+
+  const actionButtons = (
+    <ActionButtons
+      onUndo={game.undo}
+      onFlip={game.flip}
+      onResign={game.resign}
+      canUndo={game.canUndo}
+      gameOver={game.gameOver}
+      language={language}
+      showUndo={!isOnline}
+    />
   )
 
-  const gameBanners = (
-    <>
-      {showMeasureBanner && (
-        <motion.div
-          className="border-b border-indigo-500/25 bg-indigo-500/10 px-3 py-2 text-center text-ui-xs text-indigo-200 max-lg:truncate lg:px-4 lg:py-2.5 lg:text-ui-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {isInitiator
-            ? (language === 'es' ? 'Medición en curso — gira la ruleta para revelar el movimiento.' : 'Measurement in progress — spin the roulette to reveal the move.')
-            : (language === 'es' ? '¡Medición en curso! Gira la ruleta y vive el resultado con tu rival.' : 'Measurement in progress! Spin the roulette and share the moment with your opponent.')}
-        </motion.div>
-      )}
-      {showReleasedBanner && (
-        <motion.div
-          className="border-b border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-center text-ui-xs text-emerald-200 max-lg:truncate lg:px-4 lg:py-2.5 lg:text-ui-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {t.measurementCanMove}
-        </motion.div>
-      )}
-      {showAiErrorBanner && (
-        <motion.div
-          className="border-b border-amber-500/25 bg-amber-500/10 px-3 py-2 text-center text-ui-xs text-amber-200 max-lg:truncate lg:px-4 lg:py-2.5 lg:text-ui-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          {language === 'es'
-            ? 'La IA cuántica está usando modo seguro/heurístico.'
-            : 'Quantum AI is using safe/heuristic fallback mode.'}
-        </motion.div>
-      )}
-    </>
+  const mobileActionButtons = (
+    <ActionButtons
+      onUndo={game.undo}
+      onFlip={game.flip}
+      onResign={game.resign}
+      canUndo={game.canUndo}
+      gameOver={game.gameOver}
+      language={language}
+      showUndo={!isOnline}
+      compact
+    />
+  )
+
+  const pieceInspector = (
+    <QuantumPieceInspector
+      state={quantumState}
+      board={game.board}
+      selectedPiece={game.selectedPiece}
+      legalTargets={game.legalTargets}
+      mergeTargets={game.mergeTargets}
+      moveMode={game.moveMode}
+      firstQuantumTarget={game.firstQuantumTarget}
+      language={language}
+      showHints={settings.showHints}
+    />
   )
 
   return (
-    <GameViewportShell
-      variant="quantum"
-      bannerCount={bannerCount}
+    <GameScaffold
+      model={chromeModel}
       hasCastleButtons={hasCastleButtons}
-      header={gameHeader}
-      banners={bannerCount > 0 ? gameBanners : undefined}
-      footer={(
-        <div
-          className="flex items-center gap-2 border-t border-surface-4 px-3 py-2 max-lg:py-2"
-          style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
-        >
-          <button
-            type="button"
-            onClick={() => setMobileStatsOpen(true)}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-surface-4 text-ui-sm text-neutral-400 transition-colors hover:bg-surface-2 hover:text-white"
-            aria-label={language === 'es' ? 'Evaluación e historial' : 'Eval and history'}
-          >
-            <GameIcon name="chart" />
-          </button>
-          <div className="flex min-w-0 flex-1">
-            <ActionButtons
-              onUndo={game.undo}
-              onFlip={game.flip}
-              onResign={game.resign}
-              canUndo={game.canUndo}
-              gameOver={game.gameOver}
-              language={language}
-              showUndo={!isOnline}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={music.toggle}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded text-sm transition-colors
-              ${music.playing ? 'bg-indigo-500/15 text-indigo-400' : 'text-neutral-600 hover:text-neutral-400'}`}
-            aria-label={music.playing ? t.pause : t.play}
-          >
-            <GameIcon name={music.playing ? 'pause' : 'music'} />
-          </button>
+      onOpenSettings={onOpenSettings}
+      onLeave={handleLeaveToMenu}
+      contextRail={(
+        <div className="space-y-5 py-1">
+          <section>
+            <p className="mb-3 text-ui-xs font-semibold text-neutral-400">
+              {t.moveTypes}
+            </p>
+            <div className="space-y-2" role="group" aria-label={t.moveTypes}>
+              {modeButtons.map((mode) => renderModeButton(mode))}
+            </div>
+          </section>
+          {selectedRailPiece ? (
+            <section className="border-t border-surface-4 pt-4">
+              <p className="text-ui-xs font-semibold text-neutral-400">
+                {language === 'es' ? 'Selección' : 'Selection'}
+              </p>
+              <p className="mt-2 text-ui-sm font-medium text-ink">
+                {game.selectedPiece?.square} · {Object.keys(selectedRailPiece.positions).length}{' '}
+                {language === 'es' ? 'rama(s)' : 'branch(es)'}
+              </p>
+              <p className="mt-1 font-mono text-ui-xs text-neutral-600">
+                {Object.keys(selectedRailPiece.positions).join(' / ')}
+              </p>
+            </section>
+          ) : (
+            <p className="border-t border-surface-4 pt-4 text-ui-xs leading-relaxed text-neutral-600">
+              {language === 'es'
+                ? 'Selecciona una pieza para inspeccionar todas sus ramas.'
+                : 'Select a piece to inspect all of its branches.'}
+            </p>
+          )}
         </div>
       )}
-    >
-      <div className="flex min-h-0 w-full flex-1 overflow-hidden lg:items-start lg:justify-center">
-        <motion.div
-          className="hidden w-56 flex-col border-r border-surface-4 pr-4 lg:flex xl:w-64"
-          initial={reduceMotion ? false : { opacity: 0, x: -16 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={reduceMotion ? { duration: 0 } : { duration: 0.4, delay: 0.15 }}
-        >
-          <p className="mb-3 text-ui-xs font-semibold uppercase tracking-[0.15em] text-neutral-500">
-            {t.moveTypes}
-          </p>
-          <div className="space-y-2">
-            {modeButtons.map((mode) => renderModeButton(mode))}
-          </div>
-          <div className="mt-4 flex items-center gap-2 text-ui-sm text-neutral-500" aria-live="polite">
-            <div
-              className={`h-1.5 w-1.5 rounded-full ${
-                game.status.type === 'player' ? 'bg-indigo-400'
-                  : game.status.type === 'over' ? 'bg-red-400'
-                  : 'bg-neutral-600'
-              }`}
-            />
-            <span>{game.status.text}</span>
-          </div>
-        </motion.div>
-
-        <motion.div className="flex min-h-0 w-full max-w-full flex-1 flex-col items-center justify-start overflow-hidden max-lg:pt-0.5 lg:justify-center lg:w-auto lg:flex-none lg:px-6" {...boardMotion}>
-          <PlayerBar {...topBar} />
-
-          {!boardReady ? (
+      board={
+        !boardReady ? (
             <BoardSkeleton />
           ) : (
             <QuantumBoard
@@ -494,40 +618,28 @@ export default function QuantumGameScreen({
               language={language}
               statusText={game.status.text}
               checkSquare={game.checkSquare}
+              entanglements={quantumState.entanglements}
             />
-          )}
-
-          <PlayerBar {...bottomBar} />
-
-          <div className="game-quantum-controls shrink-0 space-y-1.5 py-0.5 max-lg:w-full lg:hidden" style={{ width: 'var(--board-size)' }}>
-            <div>
-              <p className="mb-1 text-ui-xs font-semibold uppercase tracking-[0.15em] text-neutral-500">
+          )
+      }
+      boardControls={(
+        <div className="space-y-1.5">
+          <div className="game-quantum-controls lg:hidden">
+            <p className="mb-1 text-ui-xs font-semibold text-neutral-500">
                 {t.moveTypes}
-              </p>
-              <div className="flex gap-1" role="radiogroup" aria-label={t.moveTypes}>
-                {modeButtons.map((mode) => renderModeButton(mode, true))}
-              </div>
-            </div>
-            <div className="game-status-row flex min-h-0 min-w-0 items-center gap-2 py-0" aria-live="polite">
-              <div
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                  game.status.type === 'player' ? 'bg-indigo-400'
-                    : game.status.type === 'over' ? 'bg-red-400'
-                    : 'bg-neutral-600'
-                }`}
-              />
-              <span className="truncate text-ui-xs text-neutral-500">{game.status.text}</span>
+            </p>
+            <div className="flex gap-1" role="group" aria-label={t.moveTypes}>
+              {modeButtons.map((mode) => renderModeButton(mode, true))}
             </div>
           </div>
-
           {hasCastleButtons && (
-            <div className="flex shrink-0 flex-wrap gap-1.5" style={{ width: 'var(--board-size)' }}>
+            <div className="flex flex-wrap gap-1.5">
               {game.classicalCastleOptions.map((side) => (
                 <button
                   key={`classic-${side}`}
                   type="button"
                   onClick={() => game.doClassicalCastle(side)}
-                  className="min-h-[36px] min-w-0 flex-1 rounded border border-accent/25 bg-accent/5 px-2 py-1 text-ui-xs font-medium text-accent transition-colors hover:bg-accent/15"
+                  className="min-h-[36px] min-w-0 flex-1 rounded border border-accent/25 bg-accent/5 px-2 py-1 text-ui-xs font-medium text-accent transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                 >
                   {t.castleShort(side)}
                 </button>
@@ -537,50 +649,25 @@ export default function QuantumGameScreen({
                   key={`quantum-${side}`}
                   type="button"
                   onClick={() => game.doQuantumCastle(side)}
-                  className="min-h-[36px] min-w-0 flex-1 rounded border border-indigo-500/25 bg-indigo-500/5 px-2 py-1 text-ui-xs font-medium text-indigo-400 transition-colors hover:bg-indigo-500/15"
+                  className="min-h-[36px] min-w-0 flex-1 rounded border border-quantum/25 bg-quantum/5 px-2 py-1 text-ui-xs font-medium text-quantum transition-colors hover:bg-quantum/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-quantum/70"
                 >
                   {t.quantumCastle(side)}
                 </button>
               ))}
             </div>
           )}
-        </motion.div>
-
-        <motion.div
-          className="hidden w-72 flex-col border-l border-surface-4 lg:flex xl:w-80"
-          initial={reduceMotion ? false : { opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={reduceMotion ? { duration: 0 } : { duration: 0.4, delay: 0.2 }}
-        >
-          <div className="p-4">
-            <EvalBar
-              chances={game.chances}
-              playerColor={config.playerColor}
-              language={language}
-              variant="quantum-heuristic"
-            />
-          </div>
-          <div className="rule" />
-          <div className="flex-1 overflow-hidden p-4">
-            <MoveHistory history={classicHistory} language={language} />
-          </div>
-          <div className="rule" />
-          <div className="p-4">
-            <ActionButtons
-              onUndo={game.undo}
-              onFlip={game.flip}
-              onResign={game.resign}
-              canUndo={game.canUndo}
-              gameOver={game.gameOver}
-              language={language}
-              showUndo={!isOnline}
-            />
-            <p className="mt-2 text-ui-xs text-neutral-600">
+        </div>
+      )}
+      inspector={{
+        game: (
+          <div className="space-y-5">
+            {pieceInspector}
+            <div className="rule" />
+            {actionButtons}
+            <p className="text-ui-xs leading-relaxed text-neutral-600">
               {isOnline ? t.quantumUndoOnlineDisabled : t.quantumUndoReady}
             </p>
-          </div>
-          <div className="rule" />
-          <div className="p-4">
+            <div className="rule" />
             <MusicPlayer
               playing={music.playing}
               volume={music.volume}
@@ -589,47 +676,80 @@ export default function QuantumGameScreen({
               language={language}
             />
           </div>
-        </motion.div>
-      </div>
-
-      <GameMobileStatsSheet
-        open={mobileStatsOpen}
-        onClose={() => setMobileStatsOpen(false)}
-        language={language}
-      >
-        <EvalBar
-          chances={game.chances}
-          playerColor={config.playerColor}
-          language={language}
-          variant="quantum-heuristic"
-        />
-        <MoveHistory history={classicHistory} language={language} variant="sheet" />
-      </GameMobileStatsSheet>
-
-      <PromotionModal
-        visible={!!game.promotionPending}
-        color={config.playerColor}
-        onSelect={game.handlePromotion}
-        language={language}
-      />
-      <GameOverModal
-        info={game.gameOverInfo}
-        onNewGame={handleLeaveToMenu}
-        onDismiss={game.dismissGameOver}
-        language={language}
-      />
-      <OnlineSessionEndedModal
-        visible={onlineSync.opponentLeft}
-        onMenu={handleLeaveToMenu}
-        language={language}
-      />
-      <QuantumMeasurementRoulette
-        visible={showMeasurementRoulette}
-        measurement={rouletteMeasurement}
-        onClose={handleDismissMeasurement}
-        canDismiss={!isOnline || isInitiator}
-        language={language}
-      />
-    </GameViewportShell>
+        ),
+        history: <MoveHistory history={classicHistory} language={language} variant="sheet" />,
+        analysis: (
+          <div className="space-y-4">
+            <EvalBar
+              chances={game.chances}
+              playerColor={config.playerColor}
+              language={language}
+              variant="quantum-heuristic"
+            />
+            <p className="text-ui-xs leading-relaxed text-neutral-600">
+              {language === 'es'
+                ? 'Balance material esperado, ponderado por la probabilidad de cada rama. No es una probabilidad de victoria.'
+                : 'Expected material balance weighted by each branch probability. It is not a win probability.'}
+            </p>
+          </div>
+        ),
+      }}
+      mobileActions={mobileActionButtons}
+      mobileAccessory={(
+        <button
+          type="button"
+          onClick={music.toggle}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-quantum/70 ${
+            music.playing ? 'bg-quantum/15 text-quantum' : 'text-neutral-600 hover:text-neutral-400'
+          }`}
+          aria-label={music.playing ? t.pause : t.play}
+        >
+          <GameIcon name={music.playing ? 'pause' : 'music'} />
+        </button>
+      )}
+      overlays={(
+        <>
+          <PromotionModal
+            visible={!!game.promotionPending}
+            color={config.playerColor}
+            onSelect={game.handlePromotion}
+            language={language}
+          />
+          <GameOverModal
+            info={game.gameOverInfo ?? syncedGameOverInfo}
+            onNewGame={handleLeaveToMenu}
+            onRematch={isOnline ? () => void onlineSync.requestRematch() : onRematch}
+            onReplay={() => setReplayOpen(true)}
+            rematchPending={isOnline && onlineSync.rematchRequestedByMe}
+            opponentRequestedRematch={isOnline && onlineSync.rematchRequestedByOpponent}
+            language={language}
+          />
+          <OnlineSessionEndedModal
+            visible={onlineSync.opponentLeft}
+            onMenu={handleLeaveToMenu}
+            onRetry={() => void onlineSync.retryConnection()}
+            language={language}
+          />
+          {replayOpen && (
+            <GameReplayPanel
+              variant="quantum"
+              snapshots={game.replaySnapshots}
+              playerColor={config.playerColor}
+              language={language}
+              onClose={() => setReplayOpen(false)}
+            />
+          )}
+          <QuantumMeasurementRoulette
+            visible={showMeasurementRoulette}
+            measurement={rouletteMeasurement}
+            onClose={handleDismissMeasurement}
+            canDismiss={!isOnline || isInitiator}
+            autoResolve={settings.autoResolveMeasurements}
+            timeoutSeconds={isOnline ? 15 : undefined}
+            language={language}
+          />
+        </>
+      )}
+    />
   )
 }

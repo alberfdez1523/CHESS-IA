@@ -4,7 +4,7 @@ import type { PieceColor, PieceType } from '../lib/types'
 
 interface PlayerBarProps {
   label: string
-  elo: string
+  elo?: string
   color: PieceColor
   isActive: boolean
   captures: PieceType[]
@@ -16,7 +16,7 @@ interface PlayerBarProps {
 }
 
 export default function PlayerBar({
-  label, elo, color, isActive, captures, materialDiff, time, isLow, turnLabel, accent = 'gold',
+  label, elo = '', color, isActive, captures, materialDiff, time, isLow, turnLabel, accent = 'gold',
 }: PlayerBarProps) {
   const sortedCaptures = [...captures].sort(
     (a, b) => CAPTURE_ORDER.indexOf(a) - CAPTURE_ORDER.indexOf(b)

@@ -9,19 +9,60 @@ interface QuantumMeasurementRouletteProps {
   onClose: () => void
   /** En online solo el iniciador cierra y libera el turno; el rival puede girar la ruleta. */
   canDismiss?: boolean
+  /** Gira y libera automáticamente la medición tras una breve revelación. */
+  autoResolve?: boolean
+  /** Límite para liberar una medición online aunque nadie pulse la ruleta. */
+  timeoutSeconds?: number
   language: Language
 }
 
 export default function QuantumMeasurementRoulette({
-  visible, measurement, onClose, canDismiss = true, language,
+  visible,
+  measurement,
+  onClose,
+  canDismiss = true,
+  autoResolve = false,
+  timeoutSeconds,
+  language,
 }: QuantumMeasurementRouletteProps) {
   const [spun, setSpun] = useState(false)
   const [spinDone, setSpinDone] = useState(false)
+  const [secondsLeft, setSecondsLeft] = useState(timeoutSeconds ?? 0)
   const reduceMotion = useReducedMotion()
 
   useEffect(() => {
-    if (!visible) { setSpun(false); setSpinDone(false) }
-  }, [visible])
+    if (!visible) {
+      setSpun(false)
+      setSpinDone(false)
+      setSecondsLeft(timeoutSeconds ?? 0)
+      return
+    }
+    setSecondsLeft(timeoutSeconds ?? 0)
+  }, [timeoutSeconds, visible])
+
+  useEffect(() => {
+    if (!visible || spun || !autoResolve) return
+    const id = window.setTimeout(() => setSpun(true), reduceMotion ? 40 : 350)
+    return () => window.clearTimeout(id)
+  }, [autoResolve, reduceMotion, spun, visible])
+
+  useEffect(() => {
+    if (!visible || !timeoutSeconds || spun) return
+    const startedAt = Date.now()
+    const interval = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+      const next = Math.max(0, timeoutSeconds - elapsed)
+      setSecondsLeft(next)
+      if (next <= 1) setSpun(true)
+    }, 250)
+    return () => window.clearInterval(interval)
+  }, [spun, timeoutSeconds, visible])
+
+  useEffect(() => {
+    if (!visible || !spinDone || !canDismiss || (!autoResolve && !timeoutSeconds)) return
+    const id = window.setTimeout(onClose, reduceMotion ? 120 : 650)
+    return () => window.clearTimeout(id)
+  }, [autoResolve, canDismiss, onClose, reduceMotion, spinDone, timeoutSeconds, visible])
 
   const probability = measurement?.probability ?? 0.5
   const roll = measurement?.roll ?? 0.5
@@ -54,16 +95,16 @@ export default function QuantumMeasurementRoulette({
 
   const outcomeAlive = target === 'attacker'
     ? (es ? 'La atacante existe y la jugada continúa.' : 'The attacker exists and the move continues.')
-    : (es ? 'La objetivo existe y la captura se completa.' : 'The target exists and the capture completes.')
+    : (es ? 'La pieza objetivo existe y la captura se completa.' : 'The target exists and the capture completes.')
   const outcomeDead = target === 'attacker'
     ? (es ? 'La atacante no estaba ahí; la captura falla.' : 'The attacker was not there; capture fails.')
-    : (es ? 'La objetivo no estaba ahí; la captura falla.' : 'The target was not there; capture fails.')
+    : (es ? 'La pieza objetivo no estaba ahí; la captura falla.' : 'The target was not there; capture fails.')
 
   const scenarioText = useMemo(() => {
     switch (scenario) {
       case 'q-vs-q': return {
         title: es ? 'Captura cuántica vs cuántica' : 'Quantum vs quantum capture',
-        text: es ? 'Primero la atacante; si vive, se mide la objetivo.' : 'Attacker first; if alive, measure target.',
+        text: es ? 'Primero la pieza atacante; si vive, se mide la pieza objetivo.' : 'Attacker first; if alive, measure target.',
       }
       case 'q-vs-c': return {
         title: es ? 'Captura cuántica vs clásica' : 'Quantum vs classic capture',
@@ -100,7 +141,7 @@ export default function QuantumMeasurementRoulette({
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="flex max-h-[92dvh] w-full max-w-none flex-col rounded-t-xl border border-indigo-500/20 bg-surface-1 text-center lg:max-h-none lg:max-w-sm lg:rounded-lg"
+            className="flex max-h-[92dvh] w-full max-w-none flex-col rounded-t-xl border border-quantum/20 bg-surface-1 text-center lg:max-h-none lg:max-w-sm lg:rounded-lg"
             initial={reduceMotion ? false : { y: 40, scale: 0.98, opacity: 0 }}
             animate={{ y: 0, scale: 1, opacity: 1 }}
             exit={reduceMotion ? undefined : { y: 40, scale: 0.98, opacity: 0 }}
@@ -110,14 +151,14 @@ export default function QuantumMeasurementRoulette({
               <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-surface-4" aria-hidden />
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-quantum">
                     {es ? 'Medición' : 'Measurement'}
                   </p>
-                  <h3 id={titleId} className="truncate font-serif text-sm text-white">
+                  <h3 id={titleId} className="truncate font-serif text-sm text-ink">
                     {scenarioText.title}
                   </h3>
                 </div>
-                <span className="shrink-0 rounded border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+                <span className="shrink-0 rounded border border-quantum/20 bg-quantum/10 px-2 py-0.5 text-[10px] font-semibold text-quantum">
                   {step}/{totalSteps}
                 </span>
               </div>
@@ -130,28 +171,28 @@ export default function QuantumMeasurementRoulette({
             <div className="hidden border-b border-surface-4 px-5 py-4 text-left lg:block">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-indigo-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-quantum">
                     {es ? 'Medición cuántica' : 'Quantum measurement'}
                   </p>
-                  <h3 id={titleId} className="mt-1 font-serif text-base text-white">{scenarioText.title}</h3>
+                  <h3 id={titleId} className="mt-1 font-serif text-base text-ink">{scenarioText.title}</h3>
                   <p className="mt-1 text-xs leading-tight text-neutral-500">{scenarioText.text}</p>
                 </div>
-                <span className="rounded border border-indigo-500/20 bg-indigo-500/10 px-2 py-1 text-[10px] font-semibold text-indigo-300">
+                <span className="rounded border border-quantum/20 bg-quantum/10 px-2 py-1 text-[10px] font-semibold text-quantum">
                   {es ? 'Paso' : 'Step'} {step}/{totalSteps}
                 </span>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded border border-indigo-500/15 bg-indigo-500/5 px-3 py-2">
-                  <p className="text-[9px] uppercase tracking-wider text-indigo-400">{es ? 'Qué se mide' : 'What is measured'}</p>
-                  <p className="mt-1 font-semibold text-white">{measuredTitle}</p>
+                <div className="rounded border border-quantum/15 bg-quantum/5 px-3 py-2">
+                  <p className="text-[9px] uppercase tracking-wider text-quantum">{es ? 'Qué se mide' : 'What is measured'}</p>
+                  <p className="mt-1 font-semibold text-ink">{measuredTitle}</p>
                   <p className="mt-1 text-neutral-500">{es ? `Se comprueba si la ${measuredLabel} existe.` : `Checks if the ${measuredLabel} exists.`}</p>
                 </div>
                 <div className="rounded border border-surface-4 bg-surface-2 px-3 py-2">
                   <p className="text-[9px] uppercase tracking-wider text-neutral-500">{es ? 'Contexto' : 'Context'}</p>
                   <p className="mt-1 text-neutral-400">
                     {priorStepResult
-                      ? es ? `Antes: ${priorStepResult.target === 'attacker' ? 'atacante' : 'objetivo'} ${priorStepResult.result === 'alive' ? 'viva' : 'muerta'}.`
+                      ? es ? `Antes: ${priorStepResult.target === 'attacker' ? 'atacante' : 'pieza objetivo'} ${priorStepResult.result === 'alive' ? 'viva' : 'muerta'}.`
                            : `Before: ${priorStepResult.target === 'attacker' ? 'attacker' : 'target'} ${priorStepResult.result}.`
                       : es ? 'Tirada directa.' : 'Direct spin.'}
                   </p>
@@ -188,7 +229,7 @@ export default function QuantumMeasurementRoulette({
                     </div>
                   </motion.div>
                   <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2">
-                    <div className="rounded bg-white px-1.5 py-0.5 text-[9px] font-bold text-surface-0">▼</div>
+                    <div className="h-0 w-0 border-x-[6px] border-t-[10px] border-x-transparent border-t-white drop-shadow" />
                   </div>
                 </div>
 
@@ -216,13 +257,13 @@ export default function QuantumMeasurementRoulette({
                 <div className="mt-3 hidden w-full rounded border border-surface-4 bg-surface-2 px-3 py-2 text-left text-[11px] lg:block">
                   <div className="flex items-center justify-between text-neutral-500">
                     <span>{es ? 'Tirada' : 'Roll'}</span>
-                    <span className="font-mono font-semibold text-white">
+                    <span className="font-mono font-semibold text-ink">
                       {revealResult ? `${Math.round(roll * 100)} / 100` : '—'}
                     </span>
                   </div>
                   <div className="mt-1 flex items-center justify-between text-neutral-500">
                     <span>{es ? 'Umbral vivo' : 'Alive threshold'}</span>
-                    <span className="font-mono font-semibold text-indigo-300">&lt; {alivePct}</span>
+                    <span className="font-mono font-semibold text-quantum">&lt; {alivePct}</span>
                   </div>
                 </div>
               </div>
@@ -235,10 +276,14 @@ export default function QuantumMeasurementRoulette({
                   className={`min-h-[44px] flex-1 rounded px-4 py-2 text-xs font-semibold transition-colors lg:flex-none
                     ${spun
                       ? 'cursor-not-allowed border border-surface-4 bg-surface-2 text-neutral-600'
-                      : 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20'
+                      : 'border border-quantum/30 bg-quantum/10 text-quantum hover:bg-quantum/20'
                     }`}
                 >
-                  {spun ? (es ? 'Resuelta' : 'Resolved') : (es ? 'Girar ruleta' : 'Spin roulette')}
+                  {spun
+                    ? (es ? 'Resuelta' : 'Resolved')
+                    : timeoutSeconds
+                      ? `${es ? 'Girar ruleta' : 'Spin roulette'} · ${secondsLeft}s`
+                      : (es ? 'Girar ruleta' : 'Spin roulette')}
                 </button>
                 <button
                   type="button"

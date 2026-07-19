@@ -15,9 +15,16 @@ interface UseTimerProps {
   turn: PieceColor
   gameStarted: boolean
   gameOver: boolean
+  /** Pausa ambos relojes durante estados bloqueantes como una medición cuántica. */
+  paused?: boolean
 }
 
-export function useTimer({ enabled, minutes, turn, gameStarted, gameOver }: UseTimerProps) {
+export interface TimerSnapshot {
+  whiteTime: number
+  blackTime: number
+}
+
+export function useTimer({ enabled, minutes, turn, gameStarted, gameOver, paused = false }: UseTimerProps) {
   const initialSeconds = minutes * 60
   const [whiteTime, setWhiteTime] = useState(initialSeconds)
   const [blackTime, setBlackTime] = useState(initialSeconds)
@@ -32,7 +39,7 @@ export function useTimer({ enabled, minutes, turn, gameStarted, gameOver }: UseT
   }, [minutes])
 
   useEffect(() => {
-    if (!enabled || !gameStarted || gameOver || timedOut) {
+    if (!enabled || !gameStarted || gameOver || timedOut || paused) {
       if (intervalRef.current) clearInterval(intervalRef.current)
       return
     }
@@ -60,7 +67,7 @@ export function useTimer({ enabled, minutes, turn, gameStarted, gameOver }: UseT
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [enabled, gameStarted, gameOver, turn, timedOut])
+  }, [enabled, gameStarted, gameOver, paused, turn, timedOut])
 
   const reset = useCallback(() => {
     setWhiteTime(minutes * 60)
@@ -68,5 +75,13 @@ export function useTimer({ enabled, minutes, turn, gameStarted, gameOver }: UseT
     setTimedOut(null)
   }, [minutes])
 
-  return { whiteTime, blackTime, timedOut, reset }
+  const restore = useCallback(({ whiteTime: white, blackTime: black }: TimerSnapshot) => {
+    const nextWhite = Math.max(0, Math.floor(white))
+    const nextBlack = Math.max(0, Math.floor(black))
+    setWhiteTime(nextWhite)
+    setBlackTime(nextBlack)
+    setTimedOut(nextWhite === 0 ? 'w' : nextBlack === 0 ? 'b' : null)
+  }, [])
+
+  return { whiteTime, blackTime, timedOut, reset, restore }
 }

@@ -12,6 +12,7 @@ import {
 } from '../lib/onlineRoom'
 import type { OnlineRoomRow } from '../lib/onlineTypes'
 import { ui } from '../lib/i18n'
+import GameIcon from './GameIcon'
 
 interface OnlineLobbyProps {
   language: Language
@@ -190,11 +191,33 @@ export default function OnlineLobby({
     }
   }
 
-  const copyLink = () => {
+  const copyLink = async () => {
     if (!room) return
-    void navigator.clipboard?.writeText(getInviteUrl(room.code))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(getInviteUrl(room.code))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError(language === 'es' ? 'No se pudo copiar la invitación.' : 'The invitation could not be copied.')
+    }
+  }
+
+  const shareLink = async () => {
+    if (!room) return
+    const url = getInviteUrl(room.code)
+    if (!navigator.share) {
+      await copyLink()
+      return
+    }
+    try {
+      await navigator.share({
+        title: 'Gambito de Dama Cuántico',
+        text: language === 'es' ? `Únete a mi sala ${room.code}` : `Join my room ${room.code}`,
+        url,
+      })
+    } catch {
+      // Cancelar la hoja nativa no es un error de partida.
+    }
   }
 
   const handleBack = () => {
@@ -218,18 +241,19 @@ export default function OnlineLobby({
   }
 
   return (
-    <motion.div className="chess-grid-bg min-h-screen bg-surface-0 px-4 py-8">
-      <div className="mx-auto max-w-md">
+    <motion.div className="min-h-screen bg-surface-0 px-4 py-6 sm:py-10">
+      <div className="mx-auto max-w-4xl">
         <button
           type="button"
           onClick={handleBack}
-          className="mb-6 text-ui-sm text-neutral-500 hover:text-white"
+          className="mb-6 inline-flex min-h-11 items-center gap-2 text-ui-sm text-neutral-500 hover:text-ink"
         >
+          <GameIcon name="chevron" className="rotate-180" />
           {t.menu}
         </button>
 
         <motion.div className="flex flex-wrap items-center gap-2">
-          <h1 className="font-serif text-2xl text-white">{t.onlineTitle}</h1>
+          <h1 className="font-serif text-4xl text-ink">{t.onlineTitle}</h1>
         </motion.div>
         <p className="mt-2 text-ui-sm text-neutral-500">{t.onlineSubtitle}</p>
 
@@ -240,43 +264,59 @@ export default function OnlineLobby({
         )}
 
         {view === 'menu' && (
-          <div className="mt-8 space-y-3">
-            <label className="block text-ui-xs font-semibold uppercase tracking-wider text-neutral-600">
-              {t.gameMode}
-            </label>
-            <motion.div className="mb-4 flex overflow-hidden rounded border border-surface-4">
-              {(['classic', 'quantum'] as GameMode[]).map((m, i) => (
+          <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <fieldset>
+              <legend className="mb-3 block text-ui-sm font-semibold text-neutral-300">
+                {t.gameMode}
+              </legend>
+              <motion.div role="radiogroup" className="mb-5 flex rounded-lg bg-surface-2 p-1">
+              {(['classic', 'quantum'] as GameMode[]).map((m) => (
                 <button
                   key={m}
                   type="button"
+                  role="radio"
+                  aria-checked={gameMode === m}
                   onClick={() => setGameMode(m)}
-                  className={`flex-1 py-3 text-ui-sm font-semibold ${i > 0 ? 'border-l border-surface-4' : ''} ${
+                  className={`min-h-[44px] flex-1 rounded-md py-3 text-ui-sm font-semibold ${
                     gameMode === m
                       ? m === 'quantum'
-                        ? 'bg-indigo-500/10 text-indigo-400'
-                        : 'bg-accent/10 text-accent'
+                        ? 'bg-surface-0 text-quantum shadow-subtle'
+                        : 'bg-surface-0 text-accent shadow-subtle'
                       : 'text-neutral-500'
                   }`}
                 >
                   {m === 'classic' ? t.modeClassical : t.modeQuantum}
                 </button>
               ))}
-            </motion.div>
+              </motion.div>
 
-            <button
-              type="button"
-              onClick={() => setView('create')}
-              className="w-full rounded border-2 border-accent bg-accent/5 py-4 text-ui-sm font-semibold text-accent"
-            >
-              {t.onlineCreateRoom}
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('join')}
-              className="w-full rounded border border-surface-4 py-4 text-ui-sm font-semibold text-neutral-300"
-            >
-              {t.onlineJoinRoom}
-            </button>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setView('create')}
+                  className={`min-h-[52px] w-full rounded-lg border px-5 text-ui-sm font-semibold ${gameMode === 'quantum' ? 'border-quantum bg-quantum/10 text-quantum' : 'border-accent bg-accent/5 text-accent'}`}
+                >
+                  {t.onlineCreateRoom}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView('join')}
+                  className="min-h-[52px] w-full rounded-lg bg-surface-2 px-5 text-ui-sm font-semibold text-neutral-300 hover:bg-surface-3"
+                >
+                  {t.onlineJoinRoom}
+                </button>
+              </div>
+            </fieldset>
+
+            <aside className="rounded-xl bg-surface-1 p-5" aria-label={language === 'es' ? 'Resumen de sala' : 'Room summary'}>
+              <h2 className="text-ui-base font-semibold text-white">{language === 'es' ? 'Resumen' : 'Summary'}</h2>
+              <dl className="mt-5 space-y-4 text-ui-sm">
+                <div className="flex justify-between gap-4"><dt className="text-neutral-500">{t.gameMode}</dt><dd className={gameMode === 'quantum' ? 'text-quantum' : 'text-accent'}>{gameMode === 'quantum' ? t.modeQuantum : t.modeClassical}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-neutral-500">{language === 'es' ? 'Reloj' : 'Clock'}</dt><dd className="text-neutral-300">{useTimer ? `${timerMinutes} min` : language === 'es' ? 'Sin reloj' : 'No clock'}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-neutral-500">{language === 'es' ? 'Color' : 'Color'}</dt><dd className="text-neutral-300">{color === 'random' ? (language === 'es' ? 'Aleatorio' : 'Random') : color === 'w' ? (language === 'es' ? 'Blancas' : 'White') : (language === 'es' ? 'Negras' : 'Black')}</dd></div>
+              </dl>
+              <p className="mt-6 text-ui-xs leading-relaxed text-neutral-500">{language === 'es' ? 'El multijugador permanece en beta casual mientras se completa la validación autoritativa del servidor.' : 'Multiplayer remains in casual beta while server-authoritative validation is completed.'}</p>
+            </aside>
           </div>
         )}
 
@@ -325,9 +365,10 @@ export default function OnlineLobby({
         )}
 
         {view === 'waiting' && room && (
-          <div className="mt-8 space-y-4 text-center">
+          <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="border border-line bg-surface-1 p-6 text-center">
             <p className="text-ui-xs uppercase tracking-wider text-neutral-600">{t.onlineRoomCode}</p>
-            <p className="font-mono text-3xl font-bold tracking-[0.3em] text-accent">{room.code}</p>
+            <p className="my-5 font-mono text-4xl font-bold tracking-[0.28em] text-accent" aria-label={`${t.onlineRoomCode}: ${room.code}`}>{room.code}</p>
             <p className="text-ui-sm text-neutral-400">
               {room.black_player_id && room.white_player_id
                 ? t.onlineBothConnected
@@ -336,10 +377,19 @@ export default function OnlineLobby({
             <div className="flex flex-col gap-2">
               <button
                 type="button"
-                onClick={copyLink}
-                className="rounded border border-surface-4 py-3 text-ui-sm text-neutral-300"
+                onClick={() => void copyLink()}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded border border-surface-4 py-3 text-ui-sm text-neutral-300"
               >
+                <GameIcon name="copy" />
                 {copied ? t.copied : t.onlineCopyLink}
+              </button>
+              <button
+                type="button"
+                onClick={() => void shareLink()}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded border border-surface-4 py-3 text-ui-sm text-neutral-300"
+              >
+                <GameIcon name="share" />
+                {language === 'es' ? 'Compartir invitación' : 'Share invitation'}
               </button>
               {userId &&
                 room.white_player_id === userId &&
@@ -368,9 +418,42 @@ export default function OnlineLobby({
                   </button>
                 )}
             </div>
+            </div>
+            <aside className="rounded-xl bg-surface-2 p-5 text-left">
+              <h2 className="text-ui-base font-semibold text-white">{language === 'es' ? 'Jugadores' : 'Players'}</h2>
+              <div className="mt-4 space-y-3">
+                <LobbySeat label={room.white_player_id ? (room.white_player_id === userId ? (language === 'es' ? 'Tú' : 'You') : (language === 'es' ? 'Invitado' : 'Guest')) : (language === 'es' ? 'Esperando' : 'Waiting')} color="w" connected={!!room.white_player_id} language={language} />
+                <LobbySeat label={room.black_player_id ? (room.black_player_id === userId ? (language === 'es' ? 'Tú' : 'You') : (language === 'es' ? 'Invitado' : 'Guest')) : (language === 'es' ? 'Esperando' : 'Waiting')} color="b" connected={!!room.black_player_id} language={language} />
+              </div>
+            </aside>
           </div>
         )}
       </div>
     </motion.div>
+  )
+}
+
+function LobbySeat({
+  label,
+  color,
+  connected,
+  language,
+}: {
+  label: string
+  color: PieceColor
+  connected: boolean
+  language: Language
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg bg-surface-1 p-3">
+      <span className={`flex h-9 w-9 items-center justify-center rounded-full ${color === 'w' ? 'player-avatar-white' : 'player-avatar-black'}`} aria-hidden="true">
+        {color === 'w' ? '♔' : '♚'}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-ui-sm font-semibold text-neutral-300">{label}</p>
+        <p className="text-ui-xs text-neutral-500">{color === 'w' ? (language === 'es' ? 'Blancas' : 'White') : (language === 'es' ? 'Negras' : 'Black')}</p>
+      </div>
+      <span className={`h-2 w-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-surface-4'}`} aria-label={connected ? (language === 'es' ? 'Conectado' : 'Connected') : (language === 'es' ? 'Desconectado' : 'Disconnected')} />
+    </div>
   )
 }

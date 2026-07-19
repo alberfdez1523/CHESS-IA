@@ -29,6 +29,7 @@ export default function GameViewportShell({
 
   return (
     <div
+      data-game-variant={variant === 'quantum' ? 'quantum' : 'classic'}
       className={`game-viewport flex h-dvh max-h-dvh flex-col overflow-hidden bg-surface-0 ${
         variant === 'quantum' ? 'bg-atm-quantum game-viewport--quantum' : 'bg-atm-gold'
       } ${bannerClass} ${hasCastleButtons ? 'has-castle-buttons' : ''}`}

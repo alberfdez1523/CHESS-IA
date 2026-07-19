@@ -108,6 +108,66 @@ export interface QMeasurementEvent {
   }
 }
 
+/** Fuente de azar inyectable. Debe devolver valores en el intervalo [0, 1). */
+export interface QuantumRng {
+  (): number
+  /** Permite que `applyAction` revierta también la fuente tras un error. */
+  checkpoint?: () => unknown
+  restore?: (checkpoint: unknown) => void
+}
+
+/**
+ * Acciones admitidas por el motor cuántico. Los nombres conservan la API
+ * histórica que ya utiliza la IA, pero todas se validan en `applyAction`.
+ */
+export type QuantumAction =
+  | {
+      kind: 'classical'
+      pieceId: string
+      from: string
+      to: string
+      promotion?: PieceType
+    }
+  | {
+      kind: 'quantum'
+      pieceId: string
+      from: string
+      toA: string
+      toB: string
+    }
+  | {
+      kind: 'merge'
+      pieceId: string
+      from: string
+      to: string
+    }
+  | {
+      kind: 'quantumCastle'
+      color: PieceColor
+      side: 'k' | 'q'
+    }
+
+export interface MeasurementTrace {
+  events: QMeasurementEvent[]
+  rngCounterStart: number
+  rngCounterEnd: number
+}
+
+export type GameResultCause =
+  | 'king-captured'
+  | 'checkmate'
+  | 'draw'
+  | 'no-legal-actions'
+  | 'timeout'
+  | 'resignation'
+  | 'agreement'
+
+export interface GameResult {
+  /** `null` representa tablas. */
+  winner: PieceColor | null
+  cause: GameResultCause
+}
+
 export interface QMoveRecord {
   pieceId: string
   pieceType: PieceType
@@ -118,6 +178,8 @@ export interface QMoveRecord {
   secondTo?: string
   captured?: { id: string; type: PieceType }
   measurement?: QMeasurementEvent
+  /** Secuencia completa; `measurement` se conserva para la UI/API anterior. */
+  measurements?: QMeasurementEvent[]
   description: string
 }
 
@@ -128,16 +190,22 @@ export interface QuantumUndoEntry {
   gameOverInfo: GameOverInfo | null
 }
 
-export interface QGameOver {
-  winner: PieceColor
+export interface QGameOver extends GameResult {
   reason: string
 }
 
-export interface QEntanglement {
-  id: number
-  type: 'castle' | 'tunnel'
-  data: QCastleEntData | QTunnelEntData
+export interface ActionResult {
+  state: QState
+  record: QMoveRecord
+  measurementTrace: MeasurementTrace
+  gameResult: QGameOver | null
+  /** Huella canónica del nuevo estado (FNV-1a de 64 bits). */
+  stateHash: string
 }
+
+export type QEntanglement =
+  | { id: number; type: 'castle'; data: QCastleEntData }
+  | { id: number; type: 'tunnel'; data: QTunnelEntData }
 
 export interface QCastleEntData {
   kingId: string
@@ -161,5 +229,7 @@ export interface QState {
   moveNumber: number
   entanglements: QEntanglement[]
   nextEntId: number
+  /** Número total de valores aleatorios consumidos por esta partida. */
+  rngCounter: number
   gameOver: QGameOver | null
 }

@@ -13,6 +13,7 @@ interface ActionButtonsProps {
   gameOver: boolean
   language: Language
   showUndo?: boolean
+  compact?: boolean
 }
 
 export default function ActionButtons({
@@ -23,6 +24,7 @@ export default function ActionButtons({
   gameOver,
   language,
   showUndo = true,
+  compact = false,
 }: ActionButtonsProps) {
   const t = ui(language)
   const [confirmResign, setConfirmResign] = useState(false)
@@ -41,31 +43,34 @@ export default function ActionButtons({
 
   return (
     <>
-      <div className="flex gap-4">
+      <div className={compact ? 'flex w-full items-center justify-around gap-1' : 'flex gap-4'}>
         {showUndo && (
           <button
             type="button"
             onClick={onUndo}
             disabled={!canUndo || gameOver}
-            className="inline-flex min-h-[44px] items-center gap-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white disabled:cursor-not-allowed disabled:text-neutral-700"
+            className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:text-neutral-700 ${compact ? 'min-w-[44px] rounded px-2' : ''}`}
+            aria-label={t.undo}
           >
-            <GameIcon name="undo" /> {t.undo}
+            <GameIcon name="undo" /> <span className={compact ? 'sr-only' : undefined}>{t.undo}</span>
           </button>
         )}
         <button
           type="button"
           onClick={onFlip}
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white"
+          className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 text-ui-sm font-medium text-neutral-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${compact ? 'min-w-[44px] rounded px-2' : ''}`}
+          aria-label={t.flip}
         >
-          <GameIcon name="flip" /> {t.flip}
+          <GameIcon name="flip" /> <span className={compact ? 'sr-only' : undefined}>{t.flip}</span>
         </button>
         <button
           type="button"
           onClick={handleResignClick}
           disabled={gameOver}
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-ui-sm font-medium text-red-400/60 transition-colors hover:text-red-400 disabled:cursor-not-allowed disabled:text-neutral-700"
+          className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 text-ui-sm font-medium text-red-400/60 transition-colors hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 disabled:cursor-not-allowed disabled:text-neutral-700 ${compact ? 'min-w-[44px] rounded px-2' : ''}`}
+          aria-label={t.resign}
         >
-          <GameIcon name="flag" /> {t.resign}
+          <GameIcon name="flag" /> <span className={compact ? 'sr-only' : undefined}>{t.resign}</span>
         </button>
       </div>
 

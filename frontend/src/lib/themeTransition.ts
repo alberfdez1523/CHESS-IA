@@ -2,11 +2,11 @@ import { flushSync } from 'react-dom'
 import type { Theme } from './settings'
 
 const THEME_META_COLORS: Record<Theme, string> = {
-  dark: '#0a0a0b',
-  light: '#f5f0e8',
+  dark: '#0b0c10',
+  light: '#f7f7f5',
 }
 
-const TRANSITION_MS = 600
+const TRANSITION_MS = 220
 
 export interface ThemeTransitionOrigin {
   x: number
@@ -28,6 +28,7 @@ export function applyThemeToDom(theme: Theme): void {
   const root = document.documentElement
   root.classList.remove('theme-dark', 'theme-light')
   root.classList.add(theme === 'dark' ? 'theme-dark' : 'theme-light')
+  root.dataset.theme = theme
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute('content', THEME_META_COLORS[theme])

@@ -7,6 +7,8 @@ export interface AppSettings {
   language: Language
   sfxVolume: number
   musicVolume: number
+  showHints: boolean
+  autoResolveMeasurements: boolean
 }
 
 const STORAGE_KEY = 'gdd-settings'
@@ -16,6 +18,8 @@ const DEFAULTS: AppSettings = {
   language: 'es',
   sfxVolume: 0.8,
   musicVolume: 0.3,
+  showHints: true,
+  autoResolveMeasurements: false,
 }
 
 export function loadSettings(): AppSettings {
@@ -28,6 +32,8 @@ export function loadSettings(): AppSettings {
       language: parsed.language === 'en' ? 'en' : 'es',
       sfxVolume: clamp01(parsed.sfxVolume ?? DEFAULTS.sfxVolume),
       musicVolume: clamp01(parsed.musicVolume ?? DEFAULTS.musicVolume),
+      showHints: parsed.showHints !== false,
+      autoResolveMeasurements: parsed.autoResolveMeasurements === true,
     }
   } catch {
     return { ...DEFAULTS }
