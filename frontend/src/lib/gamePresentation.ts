@@ -15,6 +15,11 @@ export interface PlayerModel {
   turnLabel?: string
   time?: number | null
   isLow?: boolean
+  coherence?: {
+    used: number
+    limit: number
+    label: string
+  }
 }
 
 export interface GameNoticeAction {

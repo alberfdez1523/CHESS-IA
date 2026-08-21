@@ -1,6 +1,6 @@
 @font-face {
   font-family: 'Geist Sans';
-  src: url('../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+  src: url('/fonts/Geist-Variable.woff2') format('woff2');
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
@@ -8,7 +8,7 @@
 
 @font-face {
   font-family: 'Geist Mono';
-  src: url('../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+  src: url('/fonts/GeistMono-Variable.woff2') format('woff2');
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
@@ -68,6 +68,12 @@
   --focus-ring: rgb(184 179 255);
   --danger: #f06a72;
   --success: #5fd39a;
+  --action-classic: rgb(var(--accent-rgb));
+  --action-quantum: rgb(var(--quantum-rgb));
+  --action-merge: rgb(var(--merge-rgb));
+  --state-success: var(--success);
+  --state-warning: #e5b95f;
+  --state-danger: var(--danger);
 
   --radius-control: 0.5rem;
   --radius-panel: 0.75rem;
@@ -129,6 +135,60 @@
   --text-main: rgb(var(--text-primary-rgb));
   --sq-light: #e1d4b7;
   --sq-dark: #a38362;
+}
+
+@font-face {
+  font-family: 'Gambito Chess Symbols';
+  src: url('./assets/NotoSansSymbols2-Chess.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+2654-265F;
+}
+
+.high-contrast {
+  --surface-0-rgb: 0 0 0;
+  --surface-1-rgb: 12 12 14;
+  --surface-2-rgb: 24 24 28;
+  --surface-3-rgb: 38 38 44;
+  --surface-4-rgb: 92 92 104;
+  --text-primary-rgb: 255 255 255;
+  --text-primary-soft-rgb: 255 255 255;
+  --text-secondary-rgb: 232 232 238;
+  --text-muted-rgb: 202 202 212;
+  --line-rgb: 128 128 142;
+  --accent-rgb: 255 214 82;
+  --quantum-rgb: 177 172 255;
+  --merge-rgb: 112 245 239;
+  --focus-ring: #ffffff;
+}
+
+.theme-light.high-contrast {
+  --surface-0-rgb: 255 255 255;
+  --surface-1-rgb: 255 255 255;
+  --surface-2-rgb: 238 238 238;
+  --surface-3-rgb: 220 220 220;
+  --surface-4-rgb: 92 92 92;
+  --text-primary-rgb: 0 0 0;
+  --text-primary-soft-rgb: 0 0 0;
+  --text-secondary-rgb: 28 28 28;
+  --text-muted-rgb: 55 55 55;
+  --line-rgb: 80 80 80;
+  --accent-rgb: 91 66 0;
+  --quantum-rgb: 54 39 180;
+  --merge-rgb: 0 92 88;
+  --focus-ring: #000000;
+}
+
+:root[data-board-style='walnut'] {
+  --sq-light: #d7b98c;
+  --sq-dark: #79533b;
+}
+
+:root[data-board-style='contrast'] {
+  --sq-light: #f2ead8;
+  --sq-dark: #4f5968;
+  --sq-legal: rgba(255, 214, 82, 0.82);
 }
 
 @media (min-width: 1280px) {
@@ -292,7 +352,7 @@ html {
 
 body {
   overflow-x: hidden;
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: auto;
   color: var(--text-main);
   background: var(--surface-0);
   font-size: var(--text-ui-base);
@@ -312,6 +372,38 @@ textarea {
 button {
   transition-duration: var(--motion-fast);
   transition-timing-function: var(--ease-out-product);
+}
+
+:where(button:not([data-square])) {
+  min-height: 44px;
+}
+
+.screen-enter {
+  animation: screen-enter var(--motion-base) var(--ease-out-product) both;
+}
+
+@keyframes screen-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+:root[data-motion='reduced'] {
+  scroll-behavior: auto;
+}
+
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 h1,
@@ -400,7 +492,7 @@ p {
 
 .chess-piece {
   /* Noto primero: misma silueta en móvil, tablet y PC (evita emoji de color del sistema). */
-  font-family: 'Noto Sans Symbols 2', 'Segoe UI Symbol', sans-serif;
+  font-family: 'Gambito Chess Symbols', 'Segoe UI Symbol', sans-serif;
   font-size: calc(var(--sq-size) * 0.74);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -452,13 +544,30 @@ p {
     0 0 1px rgba(0, 0, 0, 0.2);
 }
 
+:root[data-piece-style='outline'] .piece-white,
+:root[data-piece-style='outline'] .piece-black {
+  color: transparent;
+  -webkit-text-stroke: max(1px, 0.055em) currentColor;
+  filter: none;
+}
+
+:root[data-piece-style='outline'] .piece-white {
+  -webkit-text-stroke-color: #fff8e8;
+  text-shadow: 0 1px 2px #111;
+}
+
+:root[data-piece-style='outline'] .piece-black {
+  -webkit-text-stroke-color: #17181d;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+
 .sq-drag-source .chess-piece {
   opacity: 0.35;
 }
 
 /* Piezas en historial, capturas y UI compacta (no heredan tamaño del tablero). */
 .chess-piece-inline {
-  font-family: 'Noto Sans Symbols 2', 'Segoe UI Symbol', sans-serif;
+  font-family: 'Gambito Chess Symbols', 'Segoe UI Symbol', sans-serif;
   font-size: 1.05rem;
   line-height: 1;
   display: inline-flex;
@@ -621,6 +730,43 @@ p {
 }
 .quantum-piece-glow {
   animation: quantum-glow 2.5s ease-in-out infinite;
+  outline: 1px dashed rgba(184, 179, 255, 0.62);
+  outline-offset: -3px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0,
+    transparent 6px,
+    rgba(139, 132, 255, 0.08) 6px,
+    rgba(139, 132, 255, 0.08) 8px
+  );
+}
+
+.academy-board-quantum {
+  box-shadow: inset 0 0 0 2px rgba(139, 132, 255, 0.72);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 5px,
+    rgba(139, 132, 255, 0.2) 5px,
+    rgba(139, 132, 255, 0.2) 7px
+  );
+}
+
+.academy-board-target::after,
+.academy-board-merge::after {
+  content: '';
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.academy-board-target::after {
+  border: 2px solid var(--action-classic);
+}
+
+.academy-board-merge::after {
+  border: 2px dashed var(--action-merge);
 }
 .quantum-prob-badge {
   position: absolute;
@@ -679,7 +825,7 @@ p {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Noto Sans Symbols 2', 'Segoe UI Symbol', sans-serif;
+  font-family: 'Gambito Chess Symbols', 'Segoe UI Symbol', sans-serif;
   font-weight: normal;
   line-height: 1;
   position: relative;

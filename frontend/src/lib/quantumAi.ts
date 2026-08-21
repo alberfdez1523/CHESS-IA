@@ -1,4 +1,4 @@
-import { QuantumChessEngine } from './quantumEngine'
+import { createSeededQuantumRng, hashQuantumState, QuantumChessEngine } from './quantumEngine'
 import { requestQuantumEval, requestQuantumEvalBatch } from './api'
 import type {
   Difficulty, PieceColor, PieceType, QMoveRecord, QState, QuantumAction,
@@ -13,6 +13,22 @@ export interface ScoredQAIAction {
   reason: string
   heuristicEval: number
   stockfishEval?: number
+}
+
+export interface QuantumAIOptions {
+  useStockfish?: boolean
+  seed?: string
+  signal?: AbortSignal
+  timeBudgetMs?: number
+  onStage?: (stage: 'enumerating' | 'reply-search' | 'engine' | 'complete') => void
+}
+
+export const QUANTUM_AI_TIME_BUDGET_MS: Record<Difficulty, number> = {
+  beginner: 350,
+  easy: 550,
+  medium: 900,
+  hard: 1400,
+  master: 2200,
 }
 
 const PIECE_VALUES: Record<PieceType, number> = {
@@ -33,7 +49,7 @@ const CENTER_BONUS: Record<string, number> = {
 
 const PROMO_TYPES: PieceType[] = ['q', 'r', 'b', 'n']
 
-function actionKey(action: QAIAction): string {
+export function actionKey(action: QAIAction): string {
   switch (action.kind) {
     case 'classical':
       return `c:${action.pieceId}:${action.from}:${action.to}:${action.promotion ?? ''}`
@@ -108,10 +124,11 @@ export function generateLegalQActions(engine: QuantumChessEngine): QAIAction[] {
     actions.push({ kind: 'quantumCastle', color, side })
   }
 
-  return dedupeActions(actions)
+  return dedupeActions(actions).filter((action) => engine.isActionWithinCoherence(action))
 }
 
 export function isActionStillLegal(engine: QuantumChessEngine, action: QAIAction): boolean {
+  if (!engine.isActionWithinCoherence(action)) return false
   switch (action.kind) {
     case 'classical': {
       const moves = engine.getLegalMoves(action.pieceId, action.from)
@@ -155,8 +172,10 @@ export function applyQAIAction(
 export function simulateQAction(
   engine: QuantumChessEngine,
   action: QAIAction,
+  seed = `${hashQuantumState(engine.state)}:${actionKey(action)}`,
 ): QState | null {
-  const clone = new QuantumChessEngine()
+  const rules = engine.getRulesConfig()
+  const clone = new QuantumChessEngine(createSeededQuantumRng(seed, engine.state.rngCounter), rules)
   clone.loadState(engine.exportState())
   try {
     applyQAIAction(clone, action)
@@ -220,7 +239,10 @@ function scoreActionHeuristic(
   const sim = simulateQAction(engine, action)
   if (!sim) return { score: -99999, reason: 'invalid' }
 
-  const simEngine = new QuantumChessEngine()
+  const simEngine = new QuantumChessEngine(
+    createSeededQuantumRng(`${hashQuantumState(sim)}:evaluate`, sim.rngCounter),
+    engine.getRulesConfig(),
+  )
   simEngine.loadState(sim)
 
   const enemyColor: PieceColor = aiColor === 'w' ? 'b' : 'w'
@@ -277,10 +299,14 @@ function scoreActionHeuristic(
   return { score, reason }
 }
 
-function pickActionForDifficulty(scored: ScoredQAIAction[], difficulty: Difficulty): QAIAction | null {
+function pickActionForDifficulty(
+  scored: ScoredQAIAction[],
+  difficulty: Difficulty,
+  random: () => number,
+): QAIAction | null {
   if (scored.length === 0) return null
 
-  const ordered = [...scored].sort((a, b) => b.score - a.score)
+  const ordered = [...scored].sort((a, b) => b.score - a.score || actionKey(a.action).localeCompare(actionKey(b.action)))
   const poolSize: Record<Difficulty, number> = {
     beginner: 12,
     easy: 8,
@@ -289,19 +315,19 @@ function pickActionForDifficulty(scored: ScoredQAIAction[], difficulty: Difficul
     master: 1,
   }
   const top = ordered.slice(0, Math.min(poolSize[difficulty], ordered.length))
-  const r = Math.random()
+  const r = random()
 
   switch (difficulty) {
     case 'beginner':
-      return top[Math.floor(Math.random() * top.length)].action
+      return top[Math.floor(random() * top.length)].action
     case 'easy':
       if (r < 0.45) return top[0].action
-      return top[Math.floor(Math.random() * top.length)].action
+      return top[Math.floor(random() * top.length)].action
     case 'medium':
       if (r < 0.65) return top[0].action
       if (r < 0.85) return top[Math.min(1, top.length - 1)].action
       if (r < 0.95) return top[Math.min(2, top.length - 1)].action
-      return top[Math.floor(Math.random() * top.length)].action
+      return top[Math.floor(random() * top.length)].action
     case 'hard':
       if (r < 0.85) return top[0].action
       return top[Math.min(1, top.length - 1)].action
@@ -318,21 +344,55 @@ const STOCKFISH_BLEND: Record<Difficulty, { heuristic: number; engine: number; t
   master: { heuristic: 0.1, engine: 0.9, topN: 18 },
 }
 
-export function chooseFallbackLegalQAction(engine: QuantumChessEngine): QAIAction | null {
+export function chooseFallbackLegalQAction(
+  engine: QuantumChessEngine,
+  seed = `${hashQuantumState(engine.state)}:fallback`,
+): QAIAction | null {
   const actions = generateLegalQActions(engine)
   if (actions.length === 0) return null
 
-  const captures = actions.filter((action) => looksLikeCapture(engine, action))
-  if (captures.length > 0) return captures[Math.floor(Math.random() * captures.length)]
+  const random = createSeededQuantumRng(seed, engine.state.rngCounter)
 
-  return actions[Math.floor(Math.random() * actions.length)]
+  const captures = actions.filter((action) => looksLikeCapture(engine, action))
+  if (captures.length > 0) return captures[Math.floor(random() * captures.length)]
+
+  return actions[Math.floor(random() * actions.length)]
+}
+
+/** Deterministic ranking used by the coach and post-game review. */
+export function rankQuantumActions(
+  engine: QuantumChessEngine,
+  limit = 3,
+): ScoredQAIAction[] {
+  const color = engine.state.turn
+  return generateLegalQActions(engine)
+    .map((action) => {
+      const { score, reason } = scoreActionHeuristic(engine, action, color)
+      return { action, score, reason, heuristicEval: score }
+    })
+    .sort((left, right) => (
+      right.score - left.score || actionKey(left.action).localeCompare(actionKey(right.action))
+    ))
+    .slice(0, Math.max(1, limit))
 }
 
 export async function chooseQuantumAIMove(
   engine: QuantumChessEngine,
   difficulty: Difficulty = 'medium',
-  options?: { useStockfish?: boolean },
+  options: QuantumAIOptions = {},
 ): Promise<QAIAction | null> {
+  const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  const budget = options.timeBudgetMs ?? QUANTUM_AI_TIME_BUDGET_MS[difficulty]
+  const deadline = startedAt + budget
+  const now = () => typeof performance !== 'undefined' ? performance.now() : Date.now()
+  const throwIfCancelled = () => {
+    if (options.signal?.aborted) throw new DOMException('Quantum AI cancelled', 'AbortError')
+  }
+  const seed = options.seed ?? `${hashQuantumState(engine.state)}:${difficulty}:${engine.state.rngCounter}`
+  const random = createSeededQuantumRng(seed)
+
+  options.onStage?.('enumerating')
+  throwIfCancelled()
   const actions = generateLegalQActions(engine)
   if (actions.length === 0) return null
 
@@ -345,25 +405,74 @@ export async function chooseQuantumAIMove(
     return { action, score, reason, heuristicEval: score }
   })
 
-  scored.sort((a, b) => b.score - a.score)
+  scored.sort((a, b) => b.score - a.score || actionKey(a.action).localeCompare(actionKey(b.action)))
   const candidates = scored.slice(0, Math.min(blend.topN, scored.length))
 
-  if (options?.useStockfish) {
+  const replyCandidateCount: Record<Difficulty, number> = {
+    beginner: 0,
+    easy: 0,
+    medium: 2,
+    hard: 4,
+    master: 6,
+  }
+  const replyWeight: Record<Difficulty, number> = {
+    beginner: 0,
+    easy: 0,
+    medium: 0.12,
+    hard: 0.2,
+    master: 0.3,
+  }
+
+  // Second iteration: inspect a bounded opponent reply set. Completed
+  // iterations remain usable if the time budget expires midway through search.
+  if (replyCandidateCount[difficulty] > 0 && now() < deadline) {
+    options.onStage?.('reply-search')
+    for (const entry of candidates.slice(0, replyCandidateCount[difficulty])) {
+      throwIfCancelled()
+      if (now() >= deadline) break
+      const sim = simulateQAction(engine, entry.action, `${seed}:root:${actionKey(entry.action)}`)
+      if (!sim) continue
+      const replyEngine = new QuantumChessEngine(
+        createSeededQuantumRng(`${seed}:reply:${actionKey(entry.action)}`, sim.rngCounter),
+        engine.getRulesConfig(),
+      )
+      replyEngine.loadState(sim)
+      const replies = generateLegalQActions(replyEngine).slice(0, 48)
+      let bestReply = Number.NEGATIVE_INFINITY
+      for (const reply of replies) {
+        if (now() >= deadline) break
+        bestReply = Math.max(
+          bestReply,
+          scoreActionHeuristic(replyEngine, reply, replyEngine.state.turn).score,
+        )
+      }
+      if (Number.isFinite(bestReply)) entry.score -= bestReply * replyWeight[difficulty]
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    }
+    candidates.sort((a, b) => b.score - a.score || actionKey(a.action).localeCompare(actionKey(b.action)))
+  }
+
+  if (options.useStockfish && now() < deadline) {
+    options.onStage?.('engine')
     try {
       const payloads: object[] = []
       const evalEntries: ScoredQAIAction[] = []
       for (const entry of candidates) {
-        const sim = simulateQAction(engine, entry.action)
+        throwIfCancelled()
+        const sim = simulateQAction(engine, entry.action, `${seed}:stockfish:${actionKey(entry.action)}`)
         if (!sim) continue
-        const simEngine = new QuantumChessEngine()
+        const simEngine = new QuantumChessEngine(
+          createSeededQuantumRng(`${seed}:payload:${actionKey(entry.action)}`, sim.rngCounter),
+          engine.getRulesConfig(),
+        )
         simEngine.loadState(sim)
         payloads.push(simEngine.toPayload())
         evalEntries.push(entry)
       }
       const evalResults = payloads.length > 1
-        ? await requestQuantumEvalBatch(payloads)
+        ? await requestQuantumEvalBatch(payloads, 8, options.signal)
         : payloads.length === 1
-          ? [await requestQuantumEval(payloads[0])]
+          ? [await requestQuantumEval(payloads[0], 8, options.signal)]
           : []
       for (let i = 0; i < evalEntries.length; i++) {
         const entry = evalEntries[i]
@@ -376,19 +485,22 @@ export async function chooseQuantumAIMove(
           entry.score += evalRes.mate > 0 ? 5000 : -5000
         }
       }
-      candidates.sort((a, b) => b.score - a.score)
-    } catch {
+      candidates.sort((a, b) => b.score - a.score || actionKey(a.action).localeCompare(actionKey(b.action)))
+    } catch (error) {
+      if (options.signal?.aborted) throw error
       // Solo heurística local si Stockfish falla
     }
   }
 
-  return pickActionForDifficulty(candidates, difficulty)
+  throwIfCancelled()
+  options.onStage?.('complete')
+  return pickActionForDifficulty(candidates, difficulty, random)
 }
 
 /** @deprecated Usar chooseQuantumAIMove */
 export async function chooseQuantumAIMoveMedium(
   engine: QuantumChessEngine,
-  options?: { useStockfish?: boolean },
+  options?: QuantumAIOptions,
 ): Promise<QAIAction | null> {
   return chooseQuantumAIMove(engine, 'medium', options)
 }

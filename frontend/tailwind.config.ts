@@ -48,7 +48,7 @@ export default {
         // Backwards-compatible display alias while legacy `font-serif` classes migrate.
         serif: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'ui-monospace', 'monospace'],
-        symbol: ['Noto Sans Symbols 2', 'Segoe UI Symbol', 'sans-serif'],
+        symbol: ['Gambito Chess Symbols', 'Segoe UI Symbol', 'sans-serif'],
       },
       fontSize: {
         'ui-xs': 'var(--text-ui-xs)',

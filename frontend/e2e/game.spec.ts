@@ -189,13 +189,13 @@ test('local quantum game can be saved and resumed from the hub', async ({ page }
   await expect(page.locator('[data-square="e2"] .piece-white')).toHaveCount(0)
 })
 
-test('quantum tutorial opens from the menu and advances through steps', async ({ page }) => {
+test('Academy opens from the menu and exposes the quantum learning route', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('start-quantum-tutorial').click()
-  await expect(page.getByTestId('quantum-tutorial')).toBeVisible()
-  await expect(page.getByRole('heading', { name: /Academia cuántica/i })).toBeVisible()
-  await page.getByTestId('tutorial-next').click()
-  await expect(page.getByRole('heading', { name: /Movimiento cuántico/i })).toBeVisible()
+  await expect(page).toHaveURL(/\/learn$/)
+  await expect(page.getByRole('heading', { name: /Dos tableros/i })).toBeVisible()
+  await page.getByRole('radio', { name: 'Ruta cuántica' }).click()
+  await expect(page.locator('[data-lesson-id="quantum-model-lesson"]')).toBeVisible()
 })
 
 test('rules and settings remain reachable from the menu', async ({ page }) => {
@@ -226,6 +226,10 @@ test('finished local game keeps replay, board access, and rematch available', as
   const replay = page.getByRole('dialog', { name: 'Repetición de la partida' })
   await expect(replay).toBeVisible()
   await expect(replay.locator('.board-root')).toBeVisible()
+  await replay.getByRole('button', { name: 'Siguiente' }).click()
+  await replay.getByRole('button', { name: 'Explorar' }).click()
+  await expect(replay.getByText('LABORATORIO', { exact: true })).toBeVisible()
+  await replay.getByRole('button', { name: 'Salir' }).click()
   await replay.getByRole('button', { name: 'Cerrar repetición' }).click()
 
   await page.getByRole('button', { name: 'Ver tablero' }).click()
@@ -316,6 +320,9 @@ test('resumed quantum scenarios expose merge, tunnel, castle, promotion, and dou
   }))
   await page.locator('[data-square="a1"]').click()
   await page.locator('[data-square="a4"]').click()
+  const outcomeTree = page.getByRole('dialog', { name: 'Árbol de resultados' })
+  await expect(outcomeTree).toBeVisible()
+  await outcomeTree.getByRole('button', { name: 'Confirmar y medir' }).click()
   const measurement = page.getByRole('dialog', { name: 'Captura cuántica vs cuántica' })
   await expect(measurement).toBeVisible()
   await expect(measurement.getByText('Paso 2/2')).toBeVisible()

@@ -1,6 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Language } from '../lib/types'
-import type { AppSettings, Theme } from '../lib/settings'
+import type {
+  AppSettings,
+  BoardStyle,
+  MotionPreference,
+  PieceStyle,
+  ScreenReaderNarration,
+  Theme,
+} from '../lib/settings'
 import type { SettingsChangeMeta } from '../lib/themeTransition'
 import { ui } from '../lib/i18n'
 import { useModalA11y } from '../hooks/useModalA11y'
@@ -78,6 +85,7 @@ export default function SettingsPanel({
                 label={t.theme}
                 value={settings.theme}
                 options={[
+                  { value: 'system', label: es ? 'Sistema' : 'System' },
                   { value: 'dark', label: t.themeDark },
                   { value: 'light', label: t.themeLight },
                 ]}
@@ -87,6 +95,52 @@ export default function SettingsPanel({
                     { themeOrigin: { x: event.clientX, y: event.clientY } },
                   )
                 }
+              />
+
+              <ChoiceGroup
+                id="settings-motion"
+                label={es ? 'Movimiento' : 'Motion'}
+                value={settings.motionPreference}
+                options={[
+                  { value: 'system', label: es ? 'Sistema' : 'System' },
+                  { value: 'reduced', label: es ? 'Reducido' : 'Reduced' },
+                  { value: 'full', label: es ? 'Completo' : 'Full' },
+                ]}
+                onChange={(value) => onChange({ motionPreference: value as MotionPreference })}
+              />
+
+              <ChoiceGroup
+                id="settings-board"
+                label={es ? 'Tablero' : 'Board'}
+                value={settings.boardStyle}
+                options={[
+                  { value: 'editorial', label: es ? 'Editorial' : 'Editorial' },
+                  { value: 'walnut', label: es ? 'Nogal' : 'Walnut' },
+                  { value: 'contrast', label: es ? 'Contraste' : 'Contrast' },
+                ]}
+                onChange={(value) => onChange({ boardStyle: value as BoardStyle })}
+              />
+
+              <ChoiceGroup
+                id="settings-pieces"
+                label={es ? 'Piezas' : 'Pieces'}
+                value={settings.pieceStyle}
+                options={[
+                  { value: 'solid', label: es ? 'Sólidas' : 'Solid' },
+                  { value: 'outline', label: es ? 'Contorno' : 'Outline' },
+                ]}
+                onChange={(value) => onChange({ pieceStyle: value as PieceStyle })}
+              />
+
+              <ChoiceGroup
+                id="settings-narration"
+                label={es ? 'Narración del lector de pantalla' : 'Screen reader narration'}
+                value={settings.screenReaderNarration}
+                options={[
+                  { value: 'concise', label: es ? 'Concisa' : 'Concise' },
+                  { value: 'detailed', label: es ? 'Detallada' : 'Detailed' },
+                ]}
+                onChange={(value) => onChange({ screenReaderNarration: value as ScreenReaderNarration })}
               />
 
               <ChoiceGroup
@@ -116,6 +170,12 @@ export default function SettingsPanel({
 
               <div className="divide-y divide-line/70 border-y border-line/70">
                 <SwitchSetting
+                  label={es ? 'Alto contraste' : 'High contrast'}
+                  description={es ? 'Refuerza bordes, estados y separación entre superficies.' : 'Strengthens borders, states, and surface separation.'}
+                  checked={settings.highContrast}
+                  onChange={(highContrast) => onChange({ highContrast })}
+                />
+                <SwitchSetting
                   label={es ? 'Ayudas contextuales' : 'Contextual hints'}
                   description={es ? 'Explica acciones cuánticas al seleccionar una pieza.' : 'Explains quantum actions when a piece is selected.'}
                   checked={settings.showHints}
@@ -126,6 +186,18 @@ export default function SettingsPanel({
                   description={es ? 'Omite el giro manual de la ruleta cuando juegas.' : 'Skips the manual roulette spin while playing.'}
                   checked={settings.autoResolveMeasurements}
                   onChange={(autoResolveMeasurements) => onChange({ autoResolveMeasurements })}
+                />
+                <SwitchSetting
+                  label={es ? 'Vibración' : 'Haptics'}
+                  description={es ? 'Señales opcionales en movimiento, captura y medición compatibles.' : 'Optional cues for moves, captures, and measurements on supported devices.'}
+                  checked={settings.haptics}
+                  onChange={(haptics) => onChange({ haptics })}
+                />
+                <SwitchSetting
+                  label={es ? 'Analítica anónima' : 'Anonymous analytics'}
+                  description={es ? 'Solo ruta, concepto, duración, puntuación y nivel de pista. Nunca tableros completos.' : 'Only route, concept, duration, score, and hint level. Never full board states.'}
+                  checked={settings.telemetryConsent}
+                  onChange={(telemetryConsent) => onChange({ telemetryConsent })}
                 />
               </div>
             </div>

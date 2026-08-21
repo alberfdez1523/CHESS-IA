@@ -7,9 +7,17 @@ import type {
   QMeasurementEvent,
   QMoveRecord,
   QState,
+  QuantumAction,
 } from './types'
+import type { NeutralQuantumReplayStep } from './gameReplay'
+import {
+  clearLocalGameAutosave,
+  loadLocalGameAutosave,
+  saveLocalGameAutosave,
+} from './academyStore'
 
 export const GAME_AUTOSAVE_STORAGE_KEY = 'gdd-game-autosave'
+export const GAME_AUTOSAVE_UPDATED_EVENT = 'gdd:autosave-updated'
 export const GAME_AUTOSAVE_VERSION = 1 as const
 export const GAME_AUTOSAVE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
@@ -52,6 +60,10 @@ export interface QuantumAutosaveSnapshot {
   type: 'quantum'
   config: AutosaveGameConfig<'quantum'>
   qstate: QState
+  /** Neutral, language-independent action log used to resume exact replays. */
+  replayActions?: NeutralQuantumReplayStep[]
+  /** In-progress visual checkpoints; final stored replays use initialState + actions. */
+  replaySnapshots?: QState[]
   lastMove: AutosaveLastMove | null
   clocks: AutosaveClockState
 }
@@ -139,6 +151,18 @@ function isAutosaveConfig<Mode extends GameMode>(
     && typeof value.useTimer === 'boolean'
     && isFiniteInteger(value.timerMinutes, 1)
     && value.timerMinutes <= MAX_TIMER_MINUTES
+    && (
+      value.rulesetId === undefined
+      || (gameMode === 'classic' && value.rulesetId === 'classic')
+      || (gameMode === 'quantum' && (value.rulesetId === 'quantum-standard' || value.rulesetId === 'quantum-coherence'))
+    )
+    && (
+      value.options === undefined
+      || (
+        isRecord(value.options)
+        && (value.options.maxCoherence === undefined || value.options.maxCoherence === 2 || value.options.maxCoherence === 4 || value.options.maxCoherence === 6)
+      )
+    )
 }
 
 function isFen(value: unknown): value is string {
@@ -200,6 +224,30 @@ function isMeasurement(value: unknown): value is QMeasurementEvent {
       && (prior.target === 'attacker' || prior.target === 'defender')
       && (prior.result === 'alive' || prior.result === 'dead')
     ))
+}
+
+function isQuantumAction(value: unknown): value is QuantumAction {
+  if (!isRecord(value) || typeof value.kind !== 'string') return false
+  if (value.kind === 'quantumCastle') {
+    return isColor(value.color) && (value.side === 'k' || value.side === 'q')
+  }
+  if (typeof value.pieceId !== 'string' || !isSquare(value.from)) return false
+  if (value.kind === 'classical') {
+    return isSquare(value.to)
+      && (value.promotion === undefined || (
+        typeof value.promotion === 'string' && PIECE_TYPES.has(value.promotion)
+      ))
+  }
+  if (value.kind === 'quantum') return isSquare(value.toA) && isSquare(value.toB)
+  if (value.kind === 'merge') return isSquare(value.to)
+  return false
+}
+
+function isNeutralQuantumReplayStep(value: unknown): value is NeutralQuantumReplayStep {
+  return isRecord(value)
+    && isQuantumAction(value.action)
+    && Array.isArray(value.measurements)
+    && value.measurements.every(isMeasurement)
 }
 
 function isQMoveRecord(value: unknown): value is QMoveRecord {
@@ -300,6 +348,16 @@ function isQuantumSnapshot(value: unknown): value is QuantumAutosaveSnapshot {
   return value.type === 'quantum'
     && isAutosaveConfig(value.config, 'quantum')
     && isQState(value.qstate)
+    && (value.replayActions === undefined || (
+      Array.isArray(value.replayActions)
+      && value.replayActions.every(isNeutralQuantumReplayStep)
+      && value.replayActions.length === value.qstate.history.length
+    ))
+    && (value.replaySnapshots === undefined || (
+      Array.isArray(value.replaySnapshots)
+      && value.replaySnapshots.length === value.qstate.history.length + 1
+      && value.replaySnapshots.every(isQState)
+    ))
     && isLastMove(value.lastMove)
     && isClockState(value.clocks)
 }
@@ -337,6 +395,18 @@ function removeStoredValue(storage: LocalStorageLike): void {
   }
 }
 
+function dispatchAutosaveUpdated(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(GAME_AUTOSAVE_UPDATED_EVENT))
+}
+
+function mirrorAutosave(candidate: GameAutosave): void {
+  void saveLocalGameAutosave(candidate).catch(() => undefined)
+}
+
+function clearMirroredAutosave(): void {
+  void clearLocalGameAutosave().catch(() => undefined)
+}
+
 /** Saves only local and AI games. Returns false when storage or data is invalid. */
 export function save(snapshot: GameAutosaveSnapshot): boolean {
   const storage = getLocalStorage()
@@ -354,6 +424,8 @@ export function save(snapshot: GameAutosaveSnapshot): boolean {
     const parsed: unknown = JSON.parse(serialized)
     if (!isGameAutosave(parsed, savedAt)) return false
     storage.setItem(GAME_AUTOSAVE_STORAGE_KEY, serialized)
+    mirrorAutosave(parsed)
+    dispatchAutosaveUpdated()
     return true
   } catch {
     return false
@@ -371,6 +443,7 @@ export function load(): GameAutosave | null {
     const parsed: unknown = JSON.parse(raw)
     if (!isGameAutosave(parsed, Date.now())) {
       removeStoredValue(storage)
+      clearMirroredAutosave()
       return null
     }
     return parsed
@@ -381,13 +454,36 @@ export function load(): GameAutosave | null {
 }
 
 export function clear(): boolean {
+  clearMirroredAutosave()
   const storage = getLocalStorage()
   if (!storage) return false
   try {
     storage.removeItem(GAME_AUTOSAVE_STORAGE_KEY)
+    dispatchAutosaveUpdated()
     return true
   } catch {
     return false
+  }
+}
+
+/** Restores the synchronous compatibility copy from IndexedDB after startup. */
+export async function hydrateFromIndexedDb(): Promise<GameAutosave | null> {
+  const local = load()
+  if (local) return local
+
+  try {
+    const candidate = await loadLocalGameAutosave()
+    if (!isGameAutosave(candidate, Date.now())) {
+      if (candidate !== null) await clearLocalGameAutosave()
+      return null
+    }
+
+    const storage = getLocalStorage()
+    if (storage) storage.setItem(GAME_AUTOSAVE_STORAGE_KEY, JSON.stringify(candidate))
+    dispatchAutosaveUpdated()
+    return candidate
+  } catch {
+    return null
   }
 }
 
@@ -426,4 +522,4 @@ function classicPlyCount(fen: string): number {
   return Math.max(0, (Number(fullmove) - 1) * 2 + (turn === 'b' ? 1 : 0))
 }
 
-export const gameAutosave = { load, save, clear, has, getSummary }
+export const gameAutosave = { load, save, clear, has, getSummary, hydrateFromIndexedDb }

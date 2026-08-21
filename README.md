@@ -1,211 +1,163 @@
-﻿# Gambito de Dama Cuántico
+# Academia Estratégica Cuántica
 
-https://gambito-dama-cuantico.onrender.com/
+Evolución de **Gambito de Dama Cuántico** hacia una PWA educativa bilingüe y accesible para aprender y jugar ajedrez clásico y cuántico. El reglamento anterior se conserva en `classic` y `quantum-standard`; la nueva mecánica vive de forma aislada en `quantum-coherence`.
 
-Aplicación web de ajedrez con dos modos de juego:
+## Qué incluye
 
-| Modo | Opciones |
-|------|----------|
-| **Clásico** | Vs IA (Stockfish), 2 jugadores local, online |
-| **Cuántico** | Vs IA cuántica, 2 jugadores local, online |
+- Academia local-first con 2 rutas, 16 módulos y 64 actividades validadas con Zod.
+- Diagnóstico opcional, recomendación adaptativa, dominio por habilidad, repaso espaciado, cuaderno de errores, reto diario y Puzzle Sprint de 3, 5 o 10 minutos.
+- Puntuación 0–100, dominio `0,7 × anterior + 0,3 × intento`, desbloqueo por dominio y resoluciones independientes, y escalera de cuatro pistas.
+- Ajedrez clásico, cuántico estándar y variante **Coherencia limitada** con capacidades 2, 4 o 6.
+- IA cuántica determinista en Web Worker, cancelable, con semilla y presupuesto por dificultad.
+- Vista previa de resultados probabilísticos antes de capturas complejas.
+- Replays con acciones neutrales al idioma, análisis posterior y laboratorio ramificable «¿Qué habría pasado si…?».
+- Invitado persistente, IndexedDB, sincronización append-only idempotente y vinculación opcional por enlace mágico o Google.
+- PWA instalable con shell y contenido educativo offline, actualización diferida durante partidas.
+- Temas claro, oscuro y sistema, alto contraste, movimiento reducido explícito, piezas/tableros seleccionables, narración ajustable, sonido y vibración opcional.
+- API v1 para progreso, coach, retos, replays, telemetría consentida, perfil y partidas autoritativas.
+- Migraciones Supabase versionadas con RLS y escritura de estados de partida reservada al servicio.
 
-El modo cuántico añade superposición, fusión, enroque cuántico, medición probabilística y efecto túnel.
+El contenido educativo esencial, las reglas, el tutor y los retos no dependen de una membresía. La integración de apoyo solo admite cosméticos accesibles y está apagada por defecto.
 
-Desde el inicio hay un **Tutorial cuántico** opcional con ejemplos paso a paso de movimientos especiales, capturas con medición y normas propias del modo cuántico.
+## Rutas de la PWA
 
----
+| Ruta | Uso |
+|---|---|
+| `/` | Inicio adaptado a usuario nuevo o recurrente |
+| `/learn` | Mapa de habilidades, diagnóstico, repaso y reto diario |
+| `/learn/:lessonId` | Actividad profunda con versión de contenido fijada |
+| `/learn/sprint/:minutes` | Puzzle Sprint de 3, 5 o 10 minutos |
+| `/play` | Partida activa local o contra IA |
+| `/online` | Lobby online de transición |
+| `/join/:code` | Unión mediante código; `?room=` se redirige aquí |
+| `/profile` | Cuenta, exportación, borrado y apoyo opcional |
+| `/rules` | Referencia de reglas |
 
-## Modo clásico
+## Reglas y motores
 
-- Reglas completas vía `chess.js`
-- 5 niveles de dificultad contra Stockfish (`beginner` → `master`)
-- Partida local a 2 jugadores, multijugador online (Supabase)
-- Historial descriptivo, barra de evaluación (vs IA), reloj opcional
-- Promoción, enroque, jaque, mate y tablas
+### Modos estables
 
----
+- `classic`: reglas completas mediante `chess.js` y Stockfish para IA/análisis.
+- `quantum-standard`: split, fusión, medición, túnel y enroque cuántico sin cambio de contrato.
+- En ajedrez cuántico, capturar el rey gana y no disponer de acciones legales produce tablas.
 
-## Modo cuántico
+### Coherencia limitada
 
-### Reglas principales
+- Cada jugador parte de una capacidad configurable de 2, 4 o 6; el valor competitivo previsto es 4.
+- Cada rama adicional consume una unidad.
+- Un entrelazamiento de túnel activo consume una unidad adicional.
+- El enroque cuántico requiere dos unidades libres.
+- Fusiones y colapsos liberan capacidad; no hay regeneración ni gasto permanente.
+- La UI comunica uso y disponibilidad con número, segmentos y etiqueta accesible.
 
-- **Movimiento cuántico (split):** piezas no peón en dos casillas (probabilidades repartidas).
-- **Fusión:** reunir fragmentos de la misma pieza en una casilla al 100 %.
-- **Enroque cuántico:** con entrelazamiento rey/torre.
-- **Efecto túnel:** atravesar piezas cuánticas en línea.
-- **Medición:** al capturar entre estados clásico/cuántico, una ruleta decide el colapso.
+### Tutor y análisis
 
-### Capturas y medición
+- Clásico: Stockfish MultiPV, pérdida en centipawns y detectores deterministas de captura, jaque y seguridad del rey.
+- Cuántico: enumeración legal y evaluación reproducible de material esperado, seguridad, ramas y coherencia.
+- Las explicaciones se resuelven mediante claves localizadas; las posiciones no se envían a modelos generativos.
 
-| Atacante | Defensor | Comportamiento |
-|----------|----------|----------------|
-| Clásica | Clásica | Captura normal |
-| Clásica | Cuántica | Se mide la defensora |
-| Cuántica | Clásica | Se mide la atacante |
-| Cuántica | Cuántica | Primero atacante, luego defensora |
+## Arquitectura
 
-**Experiencia de medición (local y online):**
-
-1. El tablero **no muestra el resultado** del movimiento hasta cerrar la ruleta.
-2. **Ambos jugadores** ven la ruleta y pueden girarla (suspense compartido).
-3. En online, quien hizo el movimiento cierra la ruleta y libera el turno; el rival puede girar antes pero espera el cierre del iniciador.
-
-### Modo Cuántico vs IA
-
-La IA **no** usa `bestmove` clásico de Stockfish como jugada cuántica. Flujo:
-
-```
-QuantumChessEngine → acciones legales → simular → heurística + eval Stockfish opcional → elegir → ejecutar
-```
-
-- **5 niveles de dificultad** (`beginner` … `master`): más aleatoriedad en niveles bajos, más precisión en `hard`/`master`.
-- **Heurística local** siempre activa; **Stockfish** solo evalúa posiciones simuladas (`/api/quantum/eval` o batch) si el servidor está disponible.
-- Movimientos legales: clásicos, splits, fusiones, enroque cuántico, capturas con medición.
-
-Archivos clave:
-
-```txt
-frontend/src/lib/quantumEngine.ts   # Motor de reglas
-frontend/src/lib/quantumAi.ts       # IA cuántica
-frontend/src/hooks/useQuantumChess.ts
+```mermaid
+flowchart LR
+    UI["React PWA"] <--> IDB["IndexedDB"]
+    UI --> API["FastAPI + API v1"]
+    API --> MATCH["Servicio autoritativo"]
+    API --> DB["Supabase Postgres"]
+    DB -. "Realtime de lectura" .-> UI
+    API --> POOL["Pool Stockfish"]
 ```
 
----
+- Frontend: React 18, TypeScript, Vite, Tailwind, React Router, Zod e IndexedDB.
+- Backend: FastAPI, contratos Pydantic estrictos, repositorios de progreso/partidas y pool acotado de Stockfish.
+- Datos: migraciones SQL versionadas bajo `supabase/migrations`.
+- Entrega: cada bloque de riesgo se controla mediante feature flags.
 
-## API backend
+El adaptador API incluido conserva datos en memoria para desarrollo y pruebas. Las migraciones definen el esquema de producción; conectar el repositorio del servicio a un proyecto Supabase real es una tarea de despliegue, no una precondición para el modo local-first.
 
-| Endpoint | Uso |
-|----------|-----|
-| `POST /api/move` | Mejor jugada clásica (FEN) |
-| `POST /api/eval` | Evaluación clásica |
-| `POST /api/quantum/eval` | Evaluación ponderada de estado cuántico |
-| `POST /api/quantum/eval-batch` | Varias evaluaciones en una petición (IA) |
-| `POST /api/quantum/move` | Experimental (no usado por la UI) |
-| `GET /api/health` | Estado del motor |
+## Instalación local
 
----
+Requisitos: Node.js 20+, Python 3.12+ y Stockfish en `PATH` o dentro de `engine/`. Para trabajar sin Stockfish se puede usar `SKIP_STOCKFISH=1`.
 
-## Stack técnico
-
-- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Framer Motion
-- **Clásico:** `chess.js`
-- **Cuántico:** motor propio `QuantumChessEngine`
-- **Backend:** FastAPI (`server.py`)
-- **IA clásica:** Stockfish vía `python-chess`
-- **Online:** Supabase (Auth anónimo, Postgres, Realtime, Presence)
-
-## Estructura del proyecto
-
-```txt
-frontend/
-  src/
-    components/
-      StartMenu.tsx
-      GameScreen.tsx
-      QuantumGameScreen.tsx
-      QuantumMeasurementRoulette.tsx
-    hooks/
-      useChessGame.ts
-      useQuantumChess.ts
-      useOnlineGameSync.ts
-    lib/
-      quantumEngine.ts
-      quantumAi.ts
-      api.ts
-  e2e/
-    game.spec.ts
-    quantum-ai.spec.ts
-server.py
-tests/
-```
-
----
-
-## Instalación
-
-### Requisitos
-
-- Python 3.10+
-- Node.js 18+
-- Stockfish (en `PATH` o en `engine/`)
-
-### Backend
-
-```bash
+```powershell
 py -m venv .venv
-# Windows
-.venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-py server.py
-```
 
-### Frontend
-
-```bash
-cd frontend
+Set-Location frontend
 npm ci
-npm run build   # genera frontend/dist
+npm run build
+Set-Location ..
+
+python server.py
 ```
 
-La app se sirve en `http://localhost:8000` desde FastAPI con `frontend/dist`.
+La aplicación compilada queda servida en `http://localhost:8000`. Para hot reload:
 
-Desarrollo con hot reload:
-
-```bash
-cd frontend
-npm run dev     # http://localhost:5173
+```powershell
+Set-Location frontend
+npm run dev
 ```
 
-### Variables de entorno (online)
+Vite abre `http://localhost:5173` y proxifica `/api` al backend configurado.
 
-En `frontend/.env` o build:
+## Configuración
 
-```env
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-VITE_API_BASE=          # opcional; por defecto /api o localhost:8000 en dev
+Copiar `.env.example` para el backend/despliegue y `frontend/.env.example` para las variables de compilación. No se versionan secretos.
+
+Variables principales:
+
+- `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`: verificación de JWT en la API.
+- `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`: Auth/Realtime desde el navegador.
+- `STOCKFISH_POOL_SIZE` y `STOCKFISH_QUEUE_TIMEOUT`: capacidad y espera del pool.
+- `VITE_SUPPORTER_CHECKOUT_URL`: URL HTTPS de Stripe Checkout; solo se usa con su flag activo.
+- `FEATURE_AUTHORITATIVE_QUANTUM`: mantiene apagadas las acciones cuánticas online hasta completar el núcleo compartido y la prueba de carga.
+
+Los valores y defaults completos están en los dos archivos de ejemplo.
+
+## Migraciones Supabase
+
+Las migraciones crean perfiles, eventos de progreso, dominio, logros, retos, partidas, eventos de partida, ratings, entitlements, analítica consentida y replays terminados. La escritura de progreso y partidas se reserva al rol de servicio; el cliente autenticado recibe políticas de lectura sobre sus propios datos.
+
+```powershell
+npx supabase@2.113.0 db reset
 ```
 
-La configuración de Supabase (variables reales, esquema, políticas y funciones privadas) no se versiona en este repositorio. Debe mantenerse en el entorno privado de despliegue/desarrollo.
+El comando requiere Docker para la base local. En este entorno se validó la CLI y el SQL se revisó, pero no se ejecutó `db reset` porque Docker no está instalado.
 
----
+## Verificación
 
-## Pruebas
-
-```bash
+```powershell
 # Backend
-pytest -q
+python -m pytest -q
 
-# Frontend unitario
-cd frontend
+# Frontend unitario y build
+Set-Location frontend
 npm test
-
-# Build
 npm run build
 
-# E2E (Playwright)
+# Matriz E2E: Chromium, Firefox y WebKit
 npm run e2e
+
+# Build PWA real y recarga offline
+npm run e2e:pwa
+
+# Gates de entrega apagados
+npm run e2e:flags
 ```
 
-Prueba de humo multijugador (dos navegadores):
+Playwright usa un worker para que la matriz con Web Workers y múltiples viewports sea determinista en CI de pocos recursos. Los E2E cubren 320×568, 390×844, 768×1024, 1280×720 y 1440×900, teclado, movimiento reducido, persistencia, modos avanzados y Academia.
 
-```bash
-cd frontend
-npm run smoke:multiplayer
-```
+Baseline verificada de esta entrega:
 
-Requisitos smoke: backend en `http://localhost:8000`, build con Supabase configurado, Chrome/Edge.
+- 71 pruebas unitarias frontend.
+- 18 pruebas backend.
+- 60 recorridos E2E: 20 en cada motor de navegador, más dos pruebas PWA de producción y una de gates apagados.
+- Build de producción correcto y entrada crítica de ~133,9 kB gzip (JS + CSS), por debajo de 150 kB.
 
-La suite E2E valida flujos clásico/cuántico, IA cuántica y viewports `390×844`, `768×1024`, `1280×720`, `1440×900`.
+## Estado de lanzamiento
 
-En CI, `SKIP_STOCKFISH=1` desactiva el motor; los tests de eval devuelven `503` controlado.
-
----
-
-## Notas de uso
-
-- **Clásico vs IA** y **cuántico vs IA** mejoran con Stockfish en marcha; sin motor, la IA cuántica sigue con heurística local.
-- **Cuántico 2 jugadores** y **online** no requieren Stockfish.
+La experiencia local, Academia, PWA, Coherencia limitada local/IA, replays y análisis están implementados. El online cuántico autoritativo y el competitivo aún no se exponen; el servidor mantiene su gate cuántico cerrado hasta completar núcleo compartido, carga y beta. La membresía sí está preparada tras un flag y una URL válida de Checkout. Véase [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
 ## Licencia
 

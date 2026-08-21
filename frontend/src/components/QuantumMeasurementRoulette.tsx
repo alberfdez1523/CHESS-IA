@@ -206,7 +206,7 @@ export default function QuantumMeasurementRoulette({
                   <motion.div
                     className="relative h-full w-full rounded-full p-2 lg:p-2.5"
                     animate={{ rotate: finalWheelRotation }}
-                    transition={reduceMotion ? { duration: 0 } : { duration: 1.35, ease: [0.1, 0.9, 0.2, 1] }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 1.2, ease: [0.1, 0.9, 0.2, 1] }}
                     onAnimationComplete={() => { if (spun) setSpinDone(true) }}
                   >
                     <div

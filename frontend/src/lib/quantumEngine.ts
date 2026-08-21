@@ -9,6 +9,15 @@ import type {
   QState, QGameOver, QMeasurementEvent, QuantumAction, QuantumRng,
   ActionResult, GameResultCause,
 } from './types'
+import type { CoherenceLimit, RulesetId } from './types'
+import {
+  actionCoherenceColor,
+  getActionCoherenceCost,
+  getCoherenceStatus,
+  normalizeCoherenceLimit,
+  type CoherenceStatus,
+  type QuantumRulesConfig,
+} from './coherence'
 
 const PROBABILITY_EPSILON = 1e-9
 const UINT64_MASK = 0xffffffffffffffffn
@@ -299,10 +308,32 @@ interface ClassicalCastleInfo {
 export class QuantumChessEngine {
   state: QState
   private rng: QuantumRng
+  private readonly rulesConfig: QuantumRulesConfig
 
-  constructor(rng: QuantumRng = Math.random) {
+  constructor(
+    rng: QuantumRng = Math.random,
+    options: { rulesetId?: RulesetId; maxCoherence?: CoherenceLimit } = {},
+  ) {
     this.state = createInitialState()
     this.rng = rng
+    this.rulesConfig = {
+      rulesetId: options.rulesetId === 'quantum-coherence' ? 'quantum-coherence' : 'quantum-standard',
+      maxCoherence: normalizeCoherenceLimit(options.maxCoherence),
+    }
+  }
+
+  getRulesConfig(): QuantumRulesConfig {
+    return { ...this.rulesConfig }
+  }
+
+  getCoherence(color: PieceColor): CoherenceStatus {
+    return getCoherenceStatus(this.state, color, this.rulesConfig.maxCoherence)
+  }
+
+  isActionWithinCoherence(action: QuantumAction): boolean {
+    if (this.rulesConfig.rulesetId !== 'quantum-coherence') return true
+    const color = actionCoherenceColor(this, action)
+    return getActionCoherenceCost(this, action) <= this.getCoherence(color).available
   }
 
   /** Sustituye la fuente de azar sin alterar el estado; online la deriva de semilla + contador. */
@@ -404,6 +435,10 @@ export class QuantumChessEngine {
   getQuantumSplitTargets(pieceId: string, fromSquare: string): string[] {
     const piece = this.state.pieces[pieceId]
     if (!piece || piece.type === 'p') return []
+    if (
+      this.rulesConfig.rulesetId === 'quantum-coherence'
+      && this.getCoherence(piece.color).available < 1
+    ) return []
     return this.getLegalMoves(pieceId, fromSquare)
       .filter((move) => {
         if (move.isCapture) return false
@@ -447,6 +482,10 @@ export class QuantumChessEngine {
   canQuantumCastle(color: PieceColor): ('k' | 'q')[] {
     const sides: ('k' | 'q')[] = []
     if (this.state.gameOver || color !== this.state.turn) return sides
+    if (
+      this.rulesConfig.rulesetId === 'quantum-coherence'
+      && this.getCoherence(color).available < 2
+    ) return sides
     const c = this.state.castling[color]
     const rank = color === 'w' ? '1' : '8'
     const kingId = `${color}_k`
@@ -519,6 +558,13 @@ export class QuantumChessEngine {
       }
 
       this._refreshTerminalState()
+      if (this.rulesConfig.rulesetId === 'quantum-coherence') {
+        for (const color of ['w', 'b'] as PieceColor[]) {
+          if (this.getCoherence(color).used > this.rulesConfig.maxCoherence) {
+            throw new QuantumActionError('La acción supera la capacidad de coherencia')
+          }
+        }
+      }
       validateQuantumState(this.state)
       const nextState = this.exportState()
       const events = record.measurements ?? (record.measurement ? [record.measurement] : [])
@@ -995,6 +1041,13 @@ export class QuantumChessEngine {
   loadState(next: QState): void {
     const normalized = normalizeLoadedState(next)
     validateQuantumState(normalized)
+    if (this.rulesConfig.rulesetId === 'quantum-coherence') {
+      for (const color of ['w', 'b'] as PieceColor[]) {
+        if (getCoherenceStatus(normalized, color, this.rulesConfig.maxCoherence).used > this.rulesConfig.maxCoherence) {
+          throw new QuantumActionError('El estado supera la capacidad de coherencia')
+        }
+      }
+    }
     this.state = normalized
   }
 
@@ -1009,6 +1062,7 @@ export class QuantumChessEngine {
       if (!this.canQuantumCastle(action.color).includes(action.side)) {
         throw new QuantumActionError('Enroque cuántico no disponible')
       }
+      this._assertCoherenceAvailable(action)
       return
     }
 
@@ -1034,6 +1088,7 @@ export class QuantumChessEngine {
       if (!isPromotion && action.promotion !== undefined) {
         throw new QuantumActionError('Promoción fuera de la última fila')
       }
+      this._assertCoherenceAvailable(action)
       return
     }
 
@@ -1046,6 +1101,7 @@ export class QuantumChessEngine {
       if (!legalNonCaptures.has(action.toA) || !legalNonCaptures.has(action.toB)) {
         throw new QuantumActionError('Destino de split ilegal')
       }
+      this._assertCoherenceAvailable(action)
       return
     }
 
@@ -1053,10 +1109,21 @@ export class QuantumChessEngine {
       if (!isBoardSquare(action.to) || !this.getMergeTargets(action.pieceId, action.from).includes(action.to)) {
         throw new QuantumActionError('Fusión inválida')
       }
+      this._assertCoherenceAvailable(action)
       return
     }
 
     throw new QuantumActionError('Acción cuántica desconocida')
+  }
+
+  private _assertCoherenceAvailable(action: QuantumAction): void {
+    if (!this.isActionWithinCoherence(action)) {
+      const color = actionCoherenceColor(this, action)
+      const status = this.getCoherence(color)
+      throw new QuantumActionError(
+        `Coherencia insuficiente: ${status.used}/${status.limit} unidades ocupadas`,
+      )
+    }
   }
 
   private _nextRandom(): number {
@@ -1073,7 +1140,15 @@ export class QuantumChessEngine {
     for (const piece of Object.values(this.state.pieces)) {
       if (!piece.alive || piece.color !== this.state.turn) continue
       for (const from of Object.keys(piece.positions)) {
-        if (this.getLegalMoves(piece.id, from).length > 0) return true
+        const hasClassical = this.getLegalMoves(piece.id, from).some((move) => this.isActionWithinCoherence({
+          kind: 'classical',
+          pieceId: piece.id,
+          from,
+          to: move.square,
+          promotion: piece.type === 'p' && (move.square[1] === '1' || move.square[1] === '8') ? 'q' : undefined,
+        }))
+        if (hasClassical) return true
+        if (this.getQuantumSplitTargets(piece.id, from).length >= 2) return true
         if (this.getMergeTargets(piece.id, from).length > 0) return true
       }
     }

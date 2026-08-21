@@ -1,7 +1,9 @@
 import { flushSync } from 'react-dom'
-import type { Theme } from './settings'
+import type { AppSettings, Theme } from './settings'
 
-const THEME_META_COLORS: Record<Theme, string> = {
+type ResolvedTheme = Exclude<Theme, 'system'>
+
+const THEME_META_COLORS: Record<ResolvedTheme, string> = {
   dark: '#0b0c10',
   light: '#f7f7f5',
 }
@@ -25,13 +27,36 @@ export interface ThemeTransitionOptions {
 
 /** Aplica clases de tema y meta theme-color sin animación */
 export function applyThemeToDom(theme: Theme): void {
+  const resolved = resolveTheme(theme)
   const root = document.documentElement
   root.classList.remove('theme-dark', 'theme-light')
-  root.classList.add(theme === 'dark' ? 'theme-dark' : 'theme-light')
-  root.dataset.theme = theme
+  root.classList.add(resolved === 'dark' ? 'theme-dark' : 'theme-light')
+  root.dataset.theme = resolved
+  root.dataset.themePreference = theme
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', THEME_META_COLORS[theme])
+    ?.setAttribute('content', THEME_META_COLORS[resolved])
+}
+
+export function resolveTheme(theme: Theme): ResolvedTheme {
+  if (theme !== 'system') return theme
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches
+    ? 'light'
+    : 'dark'
+}
+
+export function applyDisplaySettingsToDom(settings: AppSettings): void {
+  const root = document.documentElement
+  const systemReduced = typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const reduced = settings.motionPreference === 'reduced'
+    || (settings.motionPreference === 'system' && systemReduced)
+
+  root.classList.toggle('high-contrast', settings.highContrast)
+  root.dataset.motion = reduced ? 'reduced' : 'full'
+  root.dataset.boardStyle = settings.boardStyle
+  root.dataset.pieceStyle = settings.pieceStyle
+  root.dataset.narration = settings.screenReaderNarration
 }
 
 /**

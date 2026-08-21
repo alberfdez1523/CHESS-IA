@@ -1,106 +1,69 @@
-# Design System — Editorial Chess Instrument
+# Sistema visual — Instrumento editorial de ajedrez
 
-Figma contract: [Redesign contract — desktop, mobile, Academy, lobby and tokens](https://www.figma.com/design/R6UrlElyPpXxYlcx18Kwte)
+Referencia de diseño: [contrato desktop, móvil, Academia, lobby y tokens](https://www.figma.com/design/R6UrlElyPpXxYlcx18Kwte).
 
-Implemented reference frames: Home/Desktop, Quantum game/Desktop,
-Quantum game/Mobile, Academy/Desktop, Online lobby/Desktop and Tokens/components.
+## Dirección
 
-## Scene and register
+El tablero sigue siendo el ancla. La interfaz debe retirarse durante el cálculo y recuperar presencia cuando explica, recomienda o confirma una decisión. Se usa `DESIGN_VARIANCE 5`, `VISUAL_DENSITY 5` y `MOTION_INTENSITY 4`; una medición puede llegar a 7 durante un máximo de 1,2 segundos.
 
-A player sits close to a laptop or phone in a quiet room, concentrating on a
-position. The interface should recede around the board, keep secondary information
-readable in low ambient light and make quantum events feel exceptional rather than noisy.
+## Lenguaje visual
 
-This is product UI. Familiar controls, predictable state and information hierarchy
-take priority over decorative novelty.
+- Grafito: shell y superficies de inspector.
+- Marfil: texto principal y material claro del tablero.
+- Latón: ajedrez clásico y acciones clásicas.
+- Violeta eléctrico: selección, ramas y medición cuánticas.
+- Cian: fusión y entrelazamiento.
+- Rojo: peligro o acción destructiva.
 
-## Visual language
+El color siempre se acompaña de texto, contorno, icono, porcentaje o patrón. Los tokens semánticos de superficie, texto, acción clásica, acción cuántica, fusión, éxito, aviso y peligro sustituyen excepciones locales.
 
-- **Graphite** carries the product shell and inspector surfaces.
-- **Ivory** is the principal text and light board material.
-- **Brass** is exclusive to classic chess and primary classic actions.
-- **Electric violet** is exclusive to quantum selection, branches and measurement.
-- **Cyan** identifies merge/entanglement; red is reserved for destructive or losing states.
-- Color is always paired with text, shape, icon or pattern.
+## Tipografía y forma
 
-Dark theme starts with `#0b0c10`, `#12141a`, `#1b1e26`, `#f2f0ea`,
-`#b8bbc4`, `#9297a3`, `#2a2e38`, `#d4b44c`, `#8b84ff` and `#56d6d0`.
-Light theme starts with `#f7f7f5`, `#ffffff`, `#eceef1`, `#191b20`,
-`#4b505a`, `#626875`, `#d9dce2`, `#765b00`, `#554cc7` and `#006e6b`.
-Tokens may only move toward greater contrast during implementation.
+- Geist Sans para marca, títulos, controles y cuerpo.
+- Geist Mono para relojes, códigos, probabilidades y notación.
+- Fuentes y glifos de piezas autoalojados para uso offline.
+- Escala: 13, 15, 17, 20, 24, 32 y 44 px.
+- Controles con radio 8 px; paneles con 12 px; píldoras solo para estados compactos.
+- Escala de espacio: 4, 8, 12, 16, 24, 32 y 48 px.
 
-## Brand mark
+## Anatomía
 
-The selected mark is concept F: a dotted queen in superposition, a central
-measurement axis and the resulting solid queen. The dark version pairs electric
-violet with brass; the light version keeps violet for the quantum state and uses
-graphite for the measured state, with a restrained brass measurement axis.
+### Inicio
 
-- Keep the mark horizontal and preserve its clear space; do not place it inside a chessboard tile.
-- Use the live SVG component in product UI so it follows the selected app theme.
-- Use `gambito-quantum-mark-dark.svg` and `gambito-quantum-mark-light.svg` for external exports.
-- Below 44 px wide, prefer the adaptive favicon rather than compressing the full mark further.
+- Usuario nuevo: «Empezar a aprender» domina y «Jugar» es secundaria.
+- Usuario recurrente: próxima lección, repasos, reto diario y partida guardada.
+- Navegación estable: Inicio, Aprender, Jugar y Perfil; barra inferior móvil fuera de la partida.
 
-## Typography
+### Academia
 
-- Geist Sans: wordmark, editorial titles, controls, labels and body copy.
-- Geist Mono: clocks, room codes, probabilities and notation only.
-- Both families are self-hosted from Vercel's official `geist` package.
-- Fixed product scale: 13, 15, 17, 20, 24, 32 and 44 px.
-- Body copy is limited to 70 characters per line; headings use balanced wrapping.
+- El mapa expresa curso, módulos, progreso, bloqueos y próximo paso.
+- Cada actividad mantiene objetivo, concepto, ejercicio, escalera de pistas y cierre recuperable.
+- Diagnóstico, repaso, error, reto diario y sprint se distinguen por texto y estructura, no solo por acento.
 
-## Shape, depth and spacing
+### Partida
 
-- Controls use 8 px radius; panels use 12 px; pills are reserved for compact status.
-- Prefer a border or a compact shadow, never both as decoration.
-- Spacing follows 4, 8, 12, 16, 24, 32 and 48 px.
-- The board is the visual anchor. Empty space must support focus, not expose missing layout.
-- Repeated card grids, decorative chessboard backgrounds and glass surfaces are prohibited.
+- Desktop: rail contextual, tablero y panel de estado/análisis.
+- Móvil: cabecera compacta, jugadores, tablero, controles y bottom sheets para instrucciones o inspector.
+- Ramas con porcentaje visible, contorno compartido y patrón; split numerado, fusión en cian y entrelazamiento conectado.
+- Las capturas complejas abren un árbol de resultados antes de confirmar.
+- La coherencia aparece junto a cada jugador con número, segmentos y `aria-label` actualizado.
 
-## Application anatomy
+### Medición
 
-### Home
+El tablero permanece visible detrás de una superficie enfocada. Se explica qué se mide, con qué probabilidad y qué consecuencia tiene. Con movimiento reducido el resultado se presenta sin animación; en online el diseño contempla un máximo de 15 segundos.
 
-The home surface is a 55/45 editorial composition on wide screens and a single
-column on mobile. `Play quantum` is the primary route, followed by Classic, Online
-and Academy. Match setup expands progressively; advanced options remain collapsed.
+## Accesibilidad
 
-### Game
+- Contraste AA como mínimo y modo de alto contraste independiente.
+- Objetivos interactivos de al menos 44×44 CSS px.
+- Foco visible, tablero con tabindex móvil, flechas, Enter/Espacio y región viva.
+- `document.lang`, `theme-color`, narración y etiquetas responden a ajustes.
+- Temas claro, oscuro y sistema; movimiento sistema, completo o reducido.
+- `overscroll-behavior` se limita a la partida y no hay scroll suave con movimiento reducido.
+- Sonidos distintos para movimiento, split, fusión, captura y medición; vibración siempre opcional.
 
-- Desktop: contextual quantum rail, board stage and tabbed inspector.
-- Classic desktop: the rail collapses and the board remains centered against the inspector.
-- Mobile: 48 px header, player bar, board, contextual controls and a bottom toolbar.
-- History and analysis use a bottom sheet on mobile, not permanent squeezed columns.
+## Contrato responsive
 
-### Quantum state
+El shell usa grid y el escenario calcula el tablero con el mínimo entre ancho disponible, alto restante y 720 px. Ninguna altura fija depende de que una traducción ocupe una sola línea.
 
-Branches retain at least 75% piece opacity and show an explicit percentage badge.
-Selected fragments share a recognisable outline. Split targets are numbered; merge
-targets use a cyan joining mark; entanglement uses a restrained connector. Capture
-preview names attacker, defender and effective outcomes before commitment.
-
-### Measurement
-
-The board remains visible behind a focused measurement sheet. The sequence states
-what is measured, the probability and the consequence. Motion may last up to 1.2 s
-for this earned moment; reduced motion resolves immediately. A 15 s online timeout
-prevents a disconnected initiator from blocking play.
-
-## Interaction and accessibility
-
-- Standard transitions last 150–250 ms using ease-out curves.
-- Loading uses skeletons; empty states explain the next useful action.
-- Segmented choices use radios or tabs with selected state semantics.
-- Switches expose `aria-checked`; ranges have programmatic labels and visible values.
-- Focus never relies on the browser default being visible against the theme.
-- The board keeps roving tabindex, arrow navigation, Enter/Space activation and a live region.
-- `document.lang`, `theme-color` and translated labels update with settings.
-
-## Responsive contract
-
-The shell uses CSS Grid for content rows and a measured board stage. Board size is
-the minimum of available width, actual remaining height and 720 px. No fixed-height
-budget may depend on copy staying on one line.
-
-Required visual baselines: 320×568, 390×844, 768×1024, 1280×720 and 1440×900,
-for classic/quantum and dark/light where relevant.
+Baselines verificadas: 320×568, 390×844, 768×1024, 1280×720 y 1440×900 en los tres motores de navegador. La pantalla de partida no muestra la barra inferior global para no competir con el tablero.

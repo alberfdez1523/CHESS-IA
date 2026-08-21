@@ -5,8 +5,19 @@ export type PieceType = 'p' | 'n' | 'b' | 'r' | 'q' | 'k'
 export type Difficulty = 'beginner' | 'easy' | 'medium' | 'hard' | 'master'
 export type PlayerColorChoice = 'w' | 'b' | 'random'
 export type GameMode = 'classic' | 'quantum'
+export type RulesetId = 'classic' | 'quantum-standard' | 'quantum-coherence'
 export type OpponentMode = 'ai' | 'local' | 'online'
 export type Language = 'es' | 'en'
+export type CoherenceLimit = 2 | 4 | 6
+
+export interface TimeControl {
+  initialSeconds: number
+  incrementSeconds: number
+}
+
+export interface GameRulesetOptions {
+  maxCoherence?: CoherenceLimit
+}
 
 export interface OnlineMeta {
   roomId: string
@@ -23,8 +34,55 @@ export interface GameConfig {
   useTimer: boolean
   timerMinutes: number
   gameMode: GameMode
+  /** Identificador v2. Si falta, se deriva de `gameMode` para autosaves antiguos. */
+  rulesetId?: RulesetId
+  timeControl?: TimeControl
+  options?: GameRulesetOptions
   /** Presente cuando opponentMode === 'online' */
   online?: OnlineMeta
+}
+
+export interface GameConfigV2 extends GameConfig {
+  rulesetId: RulesetId
+  timeControl: TimeControl
+  options: GameRulesetOptions
+}
+
+export interface StateEnvelope<T> {
+  schemaVersion: number
+  rulesetId: RulesetId
+  revision: number
+  hash: string
+  state: T
+}
+
+export interface GameActionEnvelope<TAction = QuantumAction> {
+  actionId: string
+  expectedVersion: number
+  action: TAction
+  clientTimestamp: string
+}
+
+export interface CoachCandidate<TAction = QuantumAction> {
+  action: TAction
+  score: number
+  probability?: number
+}
+
+export interface CoachFeedback<TAction = QuantumAction> {
+  classification: 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder'
+  concepts: string[]
+  candidates: CoachCandidate<TAction>[]
+  probabilities?: number[]
+  explanationKey: string
+}
+
+export interface DailyChallenge {
+  date: string
+  seed: string
+  rulesetId: RulesetId
+  difficulty: Difficulty
+  scoringPolicy: string
 }
 
 export interface DifficultyMeta {

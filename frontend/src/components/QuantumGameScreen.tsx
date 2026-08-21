@@ -9,6 +9,7 @@ import PromotionModal from './PromotionModal'
 import GameOverModal from './GameOverModal'
 import OnlineSessionEndedModal from './OnlineSessionEndedModal'
 import QuantumMeasurementRoulette from './QuantumMeasurementRoulette'
+import QuantumCapturePreviewModal from './QuantumCapturePreviewModal'
 import GameScaffold from './GameScaffold'
 import GameIcon, { type GameIconName } from './GameIcon'
 import QuantumPieceInspector from './QuantumPieceInspector'
@@ -29,6 +30,8 @@ import type { GameConfig, GameResult, Language, PieceColor, QMoveMode, QState } 
 import type { GameChromeModel, GameNotice, GameTone } from '../lib/gamePresentation'
 import { gameAutosave, type GameAutosave } from '../lib/gameAutosave'
 import { createSeededQuantumRng } from '../lib/quantumEngine'
+import { createQuantumFinishedReplay } from '../lib/gameReplay'
+import { saveFinishedReplay } from '../lib/replayStore'
 
 interface QuantumGameScreenProps {
   config: GameConfig
@@ -51,7 +54,7 @@ export default function QuantumGameScreen({
   resumeAutosave = null,
   onRematch,
 }: QuantumGameScreenProps) {
-  const sounds = useSoundFX(settings.sfxVolume)
+  const sounds = useSoundFX(settings.sfxVolume, settings.haptics)
   const music = useAmbientMusic(settings.musicVolume)
   const onlineSync = useOnlineGameSync({
     config,
@@ -92,6 +95,7 @@ export default function QuantumGameScreen({
   const hadPendingRef = useRef(false)
   const [measurementReleased, setMeasurementReleased] = useState(false)
   const [replayOpen, setReplayOpen] = useState(false)
+  const finishedReplaySavedRef = useRef(false)
 
   const onStateChange = useCallback(
     (engine: import('../lib/quantumEngine').QuantumChessEngine, meta?: import('../hooks/useQuantumChess').QuantumStateChangeMeta) => {
@@ -190,7 +194,12 @@ export default function QuantumGameScreen({
       && resumeAutosave.config.playerColor === config.playerColor
 
     if (matchesConfig && resumeAutosave.type === 'quantum') {
-      game.loadQuantumState(resumeAutosave.qstate, resumeAutosave.lastMove)
+      game.loadQuantumState(
+        resumeAutosave.qstate,
+        resumeAutosave.lastMove,
+        resumeAutosave.replayActions,
+        resumeAutosave.replaySnapshots,
+      )
       timer.restore(resumeAutosave.clocks)
     }
     setResumeHydrated(true)
@@ -223,8 +232,13 @@ export default function QuantumGameScreen({
           difficulty: config.difficulty,
           useTimer: config.useTimer,
           timerMinutes: config.timerMinutes,
+          rulesetId: config.rulesetId ?? 'quantum-standard',
+          timeControl: config.timeControl,
+          options: config.options,
         },
         qstate: game.exportState(),
+        replayActions: game.replayActions,
+        replaySnapshots: game.replaySnapshots,
         lastMove: game.lastMove,
         clocks: { whiteTime: timer.whiteTime, blackTime: timer.blackTime },
       })
@@ -235,7 +249,10 @@ export default function QuantumGameScreen({
     config.difficulty,
     config.gameMode,
     config.opponentMode,
+    config.options,
     config.playerColor,
+    config.rulesetId,
+    config.timeControl,
     config.timerMinutes,
     config.useTimer,
     game.board,
@@ -247,6 +264,20 @@ export default function QuantumGameScreen({
     timer.blackTime,
     timer.whiteTime,
   ])
+
+  useEffect(() => {
+    const result = game.gameOverInfo ?? syncedGameOverInfo
+    const initialState = game.replaySnapshots[0]
+    if (!result || !initialState || finishedReplaySavedRef.current || game.history.length === 0) return
+    finishedReplaySavedRef.current = true
+    void saveFinishedReplay(createQuantumFinishedReplay(
+      initialState,
+      game.exportState(),
+      game.replayActions,
+      config,
+      result,
+    ))
+  }, [config, game, syncedGameOverInfo])
 
   useEffect(() => {
     if (!onlineSync.shouldApplyRemote || !onlineSync.remoteState) return
@@ -342,6 +373,11 @@ export default function QuantumGameScreen({
     materialDiff: 0,
     time: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
     isLow: config.useTimer ? (topColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
+    coherence: game.coherence ? {
+      used: game.coherence[topColor].used,
+      limit: game.coherence[topColor].limit,
+      label: language === 'es' ? 'Coherencia usada' : 'Coherence used',
+    } : undefined,
   }), [topColor, config, game, timer, language])
 
   const bottomBar = useMemo(() => ({
@@ -355,6 +391,11 @@ export default function QuantumGameScreen({
     materialDiff: 0,
     time: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) : null,
     isLow: config.useTimer ? (bottomColor === 'w' ? timer.whiteTime : timer.blackTime) < 60 : false,
+    coherence: game.coherence ? {
+      used: game.coherence[bottomColor].used,
+      limit: game.coherence[bottomColor].limit,
+      label: language === 'es' ? 'Coherencia usada' : 'Coherence used',
+    } : undefined,
   }), [bottomColor, config, game, timer, language])
 
   const modeLabels: Record<QMoveMode, { icon: GameIconName; label: string; desc: string }> = {
@@ -490,8 +531,12 @@ export default function QuantumGameScreen({
     modeLabel: isOnline
       ? `${t.quantumBadge} · ${t.onlineBadge}`
       : isAIMode
-        ? (language === 'es' ? `Cuántico vs IA · ${config.difficulty}` : `Quantum vs AI · ${config.difficulty}`)
-        : t.quantumBadge,
+        ? (language === 'es'
+            ? `${config.rulesetId === 'quantum-coherence' ? 'Coherencia limitada' : 'Cuántico'} vs IA · ${config.difficulty}`
+            : `${config.rulesetId === 'quantum-coherence' ? 'Limited coherence' : 'Quantum'} vs AI · ${config.difficulty}`)
+        : config.rulesetId === 'quantum-coherence'
+          ? (language === 'es' ? 'Coherencia limitada' : 'Limited coherence')
+          : t.quantumBadge,
     roomCode: isOnline ? config.online?.code : undefined,
     connection: isOnline ? { label: onlineStatusText, tone: connectionTone } : undefined,
     players: { top: topBar, bottom: bottomBar },
@@ -567,6 +612,31 @@ export default function QuantumGameScreen({
       onLeave={handleLeaveToMenu}
       contextRail={(
         <div className="space-y-5 py-1">
+          {game.coherence && (
+            <section className="border border-cyan-400/25 bg-cyan-500/[0.06] p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-ui-xs font-semibold text-cyan-300">
+                  {language === 'es' ? 'Coherencia limitada' : 'Limited coherence'}
+                </p>
+                <span className="font-mono text-ui-xs text-cyan-300">
+                  {game.coherence[game.turn].used}/{game.coherence[game.turn].limit}
+                </span>
+              </div>
+              <div className="mt-3 flex gap-1" aria-hidden="true">
+                {Array.from({ length: game.coherence[game.turn].limit }, (_, index) => (
+                  <span
+                    key={index}
+                    className={`h-2 flex-1 border ${index < game.coherence![game.turn].used ? 'border-cyan-300 bg-cyan-300' : 'border-cyan-300/30 bg-transparent'}`}
+                  />
+                ))}
+              </div>
+              <p className="mt-3 text-[0.68rem] leading-5 text-neutral-500">
+                {language === 'es'
+                  ? 'Cada rama adicional y túnel activo ocupa una unidad. Fusionar o colapsar la libera.'
+                  : 'Each extra branch and active tunnel uses one unit. Merging or collapsing releases it.'}
+              </p>
+            </section>
+          )}
           <section>
             <p className="mb-3 text-ui-xs font-semibold text-neutral-400">
               {t.moveTypes}
@@ -715,6 +785,12 @@ export default function QuantumGameScreen({
             onSelect={game.handlePromotion}
             language={language}
           />
+          <QuantumCapturePreviewModal
+            preview={game.capturePreview}
+            language={language}
+            onConfirm={game.confirmComplexCapture}
+            onCancel={game.cancelComplexCapture}
+          />
           <GameOverModal
             info={game.gameOverInfo ?? syncedGameOverInfo}
             onNewGame={handleLeaveToMenu}
@@ -734,6 +810,9 @@ export default function QuantumGameScreen({
             <GameReplayPanel
               variant="quantum"
               snapshots={game.replaySnapshots}
+              actions={game.replayActions}
+              rulesetId={config.rulesetId === 'quantum-coherence' ? 'quantum-coherence' : 'quantum-standard'}
+              maxCoherence={config.options?.maxCoherence}
               playerColor={config.playerColor}
               language={language}
               onClose={() => setReplayOpen(false)}

@@ -21,3 +21,18 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      # La API verifica el JWT con las credenciales públicas del mismo proyecto.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: STOCKFISH_POOL_SIZE
+        value: "2"
+      - key: STOCKFISH_QUEUE_TIMEOUT
+        value: "3"
+      # Gates de seguridad: activar solo tras las pruebas descritas en
+      # IMPLEMENTATION_STATUS.md.
+      - key: FEATURE_AUTHORITATIVE_QUANTUM
+        value: "0"
+      - key: VITE_FEATURE_SUPPORTER
+        value: "0"

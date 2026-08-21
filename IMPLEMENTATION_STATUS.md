@@ -1,0 +1,41 @@
+# Estado de implementación
+
+Fecha de corte: 12 de agosto de 2026.
+
+| Área | Estado | Evidencia o condición |
+|---|---|---|
+| Contratos, currículo y progreso | Implementado | Tipos públicos, Zod, 16 módulos, 64 actividades, scoring, dominio, diagnóstico y repaso |
+| Inicio, navegación y Academia | Implementado | Rutas profundas, inicio nuevo/recurrente, diagnóstico, mapa, error, diario y sprint |
+| Coherencia limitada local/IA | Implementado | Capacidad 2/4/6, validación del motor, medidores accesibles y pruebas de propiedades |
+| IA cuántica | Implementado | Web Worker, semilla, búsqueda presupuestada, cancelación y fallback local |
+| PWA y accesibilidad | Implementado | App shell offline, paquetes educativos, actualización segura, fuentes locales y preferencias |
+| Cuenta y progreso local-first | Implementado | Invitado persistente, IndexedDB, magic link/Google opcionales y cola append-only |
+| Replays y análisis | Implementado | Acciones neutrales, mediciones reproducibles, análisis clásico/cuántico y laboratorio ramificado |
+| API v1 | Implementado | Progreso, recomendación, coach, diario, replay, analítica, partidas, exportación y borrado |
+| Esquema Supabase y RLS | Implementado en repositorio | Tres migraciones versionadas; falta aplicarlas y probarlas contra el proyecto de destino |
+| Persistencia API en Supabase | Preparado, no conectado | El adaptador local es en memoria; producción debe implementar el repositorio con `service_role` |
+| Online clásico autoritativo | Contrato/beta técnica | Servicio de acciones disponible; el lobby legado sigue durante la transición |
+| Online cuántico autoritativo | No expuesto; gate de servidor cerrado | Requiere núcleo TS compartido en servidor y simulación concurrente sin divergencias |
+| Competitivo 10+5 y Glicko-2 | No implementado en UI | Requiere beta cerrada estable, carga y operación; no se expone aún al usuario |
+| Membresía Stripe | UI preparada, apagada | Requiere Checkout real, webhook/entitlements y revisión de cosméticos |
+| Clasificación semanal | No publicada | Solo se habilitará con validación online y controles de integridad |
+
+## Servicios externos pendientes
+
+1. Crear o seleccionar el proyecto Supabase, ejecutar migraciones y configurar Auth anónimo, enlace mágico y Google.
+2. Implementar el adaptador de persistencia del backend con credencial `service_role`; esa clave nunca entra en Vite.
+3. Configurar Stripe Checkout, webhook idempotente y escritura de entitlements desde servidor.
+4. Ejecutar carga del pool Stockfish y del servicio de acciones con concurrencia representativa.
+5. Extraer el Game Core a un paquete TypeScript importable por navegador, worker y servicio autoritativo.
+6. Completar beta online cerrada antes de añadir y activar el flag competitivo de cliente.
+
+## Verificación completada
+
+- `npm ci`: lockfile reproducible.
+- Frontend unitario: 71 pruebas aprobadas.
+- Backend: 18 pruebas aprobadas.
+- E2E: 20 Chromium + 20 Firefox + 20 WebKit aprobadas en serie, más dos pruebas PWA de producción y una de gates apagados.
+- Build: TypeScript y Vite correctos; entrada crítica ~133,9 kB gzip sumando JS y CSS.
+- Seguridad de contrato: deduplicación UUID, rechazo de snapshots/acciones inválidas, analítica con allow-list y RLS definida.
+
+No se declara listo el competitivo: las pruebas locales validan el código entregado, pero no sustituyen aplicar las migraciones, carga real ni beta operativa.

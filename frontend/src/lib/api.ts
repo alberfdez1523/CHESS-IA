@@ -36,7 +36,7 @@ export async function parseAPIError(res: Response): Promise<string> {
   return `Error del servidor: ${res.status}`
 }
 
-async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const tried = new Set<string>()
   const bases = cachedApiBase
     ? [cachedApiBase, ...getApiCandidates().filter((base) => base !== cachedApiBase)]
@@ -97,11 +97,13 @@ export interface QuantumEvalResponse {
 export async function requestQuantumEval(
   quantumState: object,
   depth = 8,
+  signal?: AbortSignal,
 ): Promise<QuantumEvalResponse> {
   const res = await apiFetch('/quantum/eval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ quantum_state: quantumState, depth }),
+    signal,
   })
 
   if (!res.ok) throw new Error(await parseAPIError(res))
@@ -111,11 +113,13 @@ export async function requestQuantumEval(
 export async function requestQuantumEvalBatch(
   quantumStates: object[],
   depth = 8,
+  signal?: AbortSignal,
 ): Promise<QuantumEvalResponse[]> {
   const res = await apiFetch('/quantum/eval-batch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ quantum_states: quantumStates, depth }),
+    signal,
   })
 
   if (!res.ok) throw new Error(await parseAPIError(res))

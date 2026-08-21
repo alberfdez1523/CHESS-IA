@@ -1,0 +1,994 @@
+ACADEMIA ESTRATÉGICA CUÁNTICA
+IMPLEMENTACIÓN REALIZADA Y PREPARACIÓN DE LAS FASES PENDIENTES
+Fecha de referencia: 12 de agosto de 2026
+
+
+======================================================================
+1. OBJETIVO DE ESTE DOCUMENTO
+======================================================================
+
+Este documento describe:
+
+1. Todo lo que se ha implementado en el repositorio.
+2. Qué partes funcionan ya de forma local o contra IA.
+3. Qué partes están preparadas, pero aún necesitan servicios externos.
+4. Qué funcionalidades siguen realmente pendientes.
+5. Qué debes configurar o decidir antes de pedirme que termine esas fases.
+
+Importante:
+
+- No compartas contraseñas, claves privadas, service_role, secretos de Stripe
+  ni secretos OAuth en el chat.
+- Configura los secretos directamente en archivos .env locales ignorados por
+  Git y en los paneles privados de Supabase, Render, Stripe, etc.
+- Antes de tocar producción se debe trabajar con un proyecto de staging y con
+  una copia de seguridad de cualquier base de datos existente.
+
+
+======================================================================
+2. RESUMEN DEL ESTADO ACTUAL
+======================================================================
+
+La aplicación ya funciona como una PWA educativa local-first con:
+
+- Ajedrez clásico.
+- Ajedrez cuántico estándar sin cambios de reglamento.
+- Variante separada de Coherencia limitada.
+- Juego local y contra IA.
+- Academia clásica y cuántica.
+- Progreso adaptativo y repaso.
+- Puzles diarios y Puzzle Sprint.
+- Guardado local, replays y análisis posterior.
+- Interfaz bilingüe ES/EN.
+- Accesibilidad, temas y preferencias visuales.
+- Uso sin conexión de la Academia y del juego local ya descargado.
+- Contratos de API v1 y migraciones de Supabase preparados.
+
+Todavía NO debe considerarse listo para producción:
+
+- El online cuántico completamente autoritativo.
+- La cola competitiva 10+5.
+- Glicko-2 y temporadas.
+- La persistencia real de la API v1 en un proyecto Supabase remoto.
+- Stripe completo con webhooks y entitlements.
+- La apertura pública de clasificaciones.
+- Las pruebas de carga y la beta cerrada necesarias para competitivo.
+
+
+======================================================================
+3. IMPLEMENTACIÓN REALIZADA: FUNDAMENTOS TÉCNICOS
+======================================================================
+
+3.1. Dependencias y compilación
+
+- Las versiones de frontend están fijadas en package.json/package-lock.json.
+- npm ci vuelve a ser reproducible.
+- La auditoría npm termina con 0 vulnerabilidades conocidas.
+- Se eliminó la dependencia completa de Geist que arrastraba Next.js y Sharp.
+- Geist Sans y Geist Mono se sirven ahora como fuentes locales.
+- La tipografía de símbolos de ajedrez también está autoalojada.
+- La compilación TypeScript y Vite funciona correctamente.
+- La entrada inicial mide aproximadamente 133,9 kB gzip sumando JS y CSS.
+- Las pantallas pesadas se cargan de forma diferida.
+
+3.2. Navegación y rutas profundas
+
+Se incorporó navegación basada en React Router y rutas para:
+
+- /                         Inicio.
+- /learn                    Academia.
+- /learn/:lessonId          Lección concreta.
+- /learn/sprint/3           Sprint de 3 minutos.
+- /learn/sprint/5           Sprint de 5 minutos.
+- /learn/sprint/10          Sprint de 10 minutos.
+- /play                     Partida activa.
+- /online                   Lobby online de transición.
+- /join/:code               Entrada mediante código de sala.
+- /profile                  Perfil, cuenta y datos.
+- /rules                    Referencia de reglas.
+
+Los enlaces antiguos con ?room= se convierten a /join/:code.
+
+3.3. Tipos y contratos públicos
+
+Se añadieron tipos para:
+
+- RulesetId.
+- GameConfigV2.
+- TimeControl.
+- StateEnvelope<T>.
+- GameActionEnvelope.
+- LessonDefinition.
+- AttemptEvent.
+- SkillMastery.
+- CoachFeedback.
+- DailyChallenge.
+- Acciones y resultados neutrales de replay.
+
+Los autosaves antiguos que solo conocen gameMode siguen siendo compatibles y
+se traducen al rulesetId correspondiente.
+
+3.4. Feature flags reales
+
+Los siguientes flags controlan funcionalidades que sí existen:
+
+- VITE_FEATURE_ACADEMY.
+- VITE_FEATURE_ACCOUNT_SYNC.
+- VITE_FEATURE_DAILY_SPRINT.
+- VITE_FEATURE_QUANTUM_COHERENCE.
+- VITE_FEATURE_SUPPORTER.
+- FEATURE_AUTHORITATIVE_QUANTUM, únicamente en servidor.
+
+Hay una prueba específica que comprueba que desactivar Academia,
+sincronización o diario oculta sus superficies y redirige las rutas profundas.
+
+No existe todavía un flag de cliente para competitivo, porque no se debe mostrar
+una opción que aún no dispone de implementación y validación completas.
+
+
+======================================================================
+4. IMPLEMENTACIÓN REALIZADA: ACADEMIA
+======================================================================
+
+4.1. Estructura educativa
+
+Se construyeron dos rutas completas:
+
+RUTA CLÁSICA, 8 módulos:
+
+1. Tablero y notación.
+2. Reglas y finales básicos.
+3. Principios de apertura.
+4. Táctica.
+5. Ataque y defensa.
+6. Estructuras de peones.
+7. Finales.
+8. Cálculo práctico.
+
+RUTA CUÁNTICA, 8 módulos:
+
+1. Modelo probabilístico.
+2. Movimiento clásico.
+3. Split o superposición.
+4. Fusión.
+5. Medición.
+6. Túnel.
+7. Entrelazamiento y enroque cuántico.
+8. Estrategia y coherencia.
+
+Cada módulo contiene cuatro actividades:
+
+- Explicación conceptual.
+- Práctica guiada.
+- Puzle independiente.
+- Examen sin pistas.
+
+Total implementado: 16 módulos y 64 actividades bilingües.
+
+El contenido está versionado, estructurado y validado con Zod. Cada intento
+conserva la versión de contenido con la que se inició.
+
+4.2. Diagnóstico y recomendación
+
+- El diagnóstico es opcional.
+- Evalúa varios módulos de la ruta seleccionada.
+- El resultado inicial queda limitado a 60 puntos de dominio.
+- Nunca sustituye la comprobación posterior mediante práctica real.
+- El sistema recomienda la siguiente lección o un repaso vencido.
+- También se permite navegación libre por el mapa dentro de las reglas de
+  desbloqueo.
+
+4.3. Puntuación y dominio
+
+- Cada intento obtiene entre 0 y 100 puntos.
+- Se tienen en cuenta corrección, pistas y acciones adicionales.
+- Las pistas finales penalizan más que las iniciales.
+- El dominio se actualiza mediante:
+
+  nuevo = 0,7 x dominio anterior + 0,3 x puntuación del intento
+
+- Para avanzar a un módulo posterior se requiere:
+
+  - Dominio mínimo de 70.
+  - Dos resoluciones correctas e independientes.
+
+- El contenido completado nunca vuelve a bloquearse.
+- Los eventos repetidos con el mismo UUID se ignoran de forma idempotente.
+
+4.4. Repaso espaciado
+
+- Intervalos de 1, 3, 7, 14 y 30 días.
+- Un acierto avanza al siguiente intervalo.
+- Un fallo retrocede un intervalo.
+- La cola de repaso prioriza habilidades vencidas.
+- El cuaderno de errores permite volver al último concepto fallado.
+
+4.5. Escalera de pistas
+
+Se implementaron cuatro niveles:
+
+1. Orientación conceptual.
+2. Foco sobre la zona o el riesgo relevante.
+3. Reducción de candidatos.
+4. Solución y explicación de consecuencias.
+
+4.6. Modos educativos
+
+- Ruta guiada adaptativa.
+- Cola de repaso.
+- Cuaderno de errores.
+- Laboratorio diario determinista por fecha y ruta.
+- Puzzle Sprint de 3, 5 y 10 minutos.
+- Diagnóstico independiente para clásico y cuántico.
+
+
+======================================================================
+5. IMPLEMENTACIÓN REALIZADA: JUEGO Y VARIANTES
+======================================================================
+
+5.1. Modos preservados
+
+- classic continúa utilizando chess.js.
+- quantum-standard conserva el reglamento cuántico anterior.
+- En modo cuántico no existe jaque ni mate.
+- Capturar el rey rival produce la victoria.
+- La ausencia de acciones legales produce tablas.
+
+5.2. Coherencia limitada
+
+Se añadió quantum-coherence como ruleset separado.
+
+Reglas implementadas:
+
+- Capacidad configurable de 2, 4 o 6.
+- El valor previsto para competitivo es 4.
+- Cada rama adicional consume una unidad.
+- Un entrelazamiento de túnel activo consume una unidad adicional.
+- El enroque cuántico requiere dos unidades libres.
+- Las fusiones y colapsos liberan capacidad automáticamente.
+- No hay regeneración pasiva.
+- No existe gasto permanente de coherencia.
+- El consumo se deriva del estado y de la configuración.
+- El estado del modo estándar no se modifica.
+
+La interfaz muestra coherencia mediante:
+
+- Número usado/disponible.
+- Segmentos visuales.
+- Etiqueta accesible actualizada.
+- Información junto a cada jugador.
+
+5.3. Vista previa de capturas cuánticas
+
+- Las acciones complejas muestran un árbol de resultados antes de confirmar.
+- Se presentan atacante, defensor, probabilidades y consecuencias posibles.
+- El resultado nunca depende solamente del color.
+
+
+======================================================================
+6. IMPLEMENTACIÓN REALIZADA: IA Y TUTOR
+======================================================================
+
+6.1. IA cuántica
+
+- Ejecuta la búsqueda en un Web Worker.
+- Se puede cancelar cuando cambia la posición o se abandona la partida.
+- Tiene presupuestos de tiempo por dificultad.
+- Admite semillas reproducibles.
+- Ordena acciones de forma determinista cuando las evaluaciones empatan.
+- Enumera movimientos clásicos, split, fusión, túnel, enroque y capturas.
+- Usa heurística local incluso si Stockfish no está disponible.
+
+Se corrigió además un problema real de estabilidad: la identidad cambiante del
+objeto de sonido reiniciaba el efecto del Worker y podía cancelar la respuesta
+de la IA. Los efectos y callbacks relevantes quedaron estabilizados.
+
+6.2. Tutor clásico
+
+- Utiliza Stockfish MultiPV.
+- Calcula pérdida aproximada en centipawns.
+- Clasifica jugadas como mejor, excelente, buena, imprecisión, error o blunder.
+- Detecta motivos deterministas básicos como captura, jaque y enroque/seguridad.
+
+6.3. Tutor cuántico
+
+- Ordena candidatos legales reproducibles.
+- Expone evaluación, probabilidad y conceptos relacionados.
+- Considera material esperado, seguridad, ramas y coherencia.
+- Usa claves de explicación localizadas.
+- No envía partidas ni posiciones a modelos generativos.
+
+
+======================================================================
+7. IMPLEMENTACIÓN REALIZADA: REPLAYS Y ANÁLISIS
+======================================================================
+
+- Los replays terminados se guardan como acciones neutrales al idioma.
+- No se persisten títulos ni descripciones traducidas como fuente de verdad.
+- Las mediciones incluyen sus rolls y resultados reproducibles.
+- Los autosaves cuánticos conservan acciones y snapshots necesarios para
+  reanudar exactamente.
+- Los replays terminados se guardan en IndexedDB.
+- Existe una cola de sincronización idempotente para cuentas vinculadas.
+- Se creó la migración finished_replays con RLS de lectura propia.
+- El análisis clásico usa Stockfish MultiPV cuando está disponible.
+- El análisis cuántico usa candidatos locales deterministas.
+- Se muestran clasificación, alternativas, conceptos y probabilidades.
+- El usuario puede abrir el repaso educativo recomendado.
+- Un replay puede ramificarse a un laboratorio “¿Qué habría pasado si...?”.
+- La ramificación no modifica la partida original.
+
+
+======================================================================
+8. IMPLEMENTACIÓN REALIZADA: PWA, OFFLINE Y PERSISTENCIA
+======================================================================
+
+8.1. PWA
+
+- Manifest instalable.
+- App shell precacheado.
+- Contenido educativo y chunks necesarios disponibles sin conexión.
+- Fuentes locales incluidas en la caché.
+- Assets públicos y paisajes sonoros con políticas separadas.
+- Las rutas /api y los datos privados no se cachean.
+- La actualización se anuncia al usuario.
+- No se aplica una actualización durante una partida o un lobby.
+
+8.2. IndexedDB
+
+La base local almacena:
+
+- Progreso consolidado.
+- Eventos pendientes de sincronizar.
+- Contenido educativo versionado.
+- Ajustes de la aplicación.
+- Autosave de la partida local.
+- Replays terminados y su cola de sincronización.
+
+localStorage se conserva como copia rápida y compatibilidad. El autosave puede
+rehidratar esa copia desde IndexedDB al arrancar.
+
+8.3. Invitado persistente
+
+- Se genera un identificador local persistente.
+- No hace falta crear cuenta para aprender o jugar.
+- El progreso funciona sin red.
+- Una interrupción no elimina los eventos ya guardados.
+
+
+======================================================================
+9. IMPLEMENTACIÓN REALIZADA: CUENTA, PRIVACIDAD Y APOYO
+======================================================================
+
+9.1. Cuenta opcional
+
+La pantalla de Perfil incorpora:
+
+- Enlace mágico por correo mediante Supabase Auth.
+- Inicio OAuth con Google.
+- Confirmación 13+ sin fecha de nacimiento.
+- Cierre de sesión.
+- Exportación local JSON.
+- Borrado local y llamada de borrado remoto para cuenta vinculada.
+- Sincronización manual y estado de conexión.
+
+La funcionalidad solo aparece cuando Supabase está configurado y el flag de
+sincronización está activo.
+
+9.2. Progreso append-only
+
+- Los intentos tienen UUID.
+- La cola offline es idempotente.
+- Los reintentos no duplican dominio.
+- Una cuenta vinculada puede enviar el identificador del invitado como origen.
+- El backend recalcula el estado consolidado en lugar de confiar en snapshots.
+
+9.3. Telemetría
+
+- Es opcional y está desactivada por defecto.
+- Usa una allow-list estricta.
+- Solo admite ruta, lección, concepto, duración, puntuación y nivel de pista.
+- Rechaza campos adicionales como estado de tablero o texto personal.
+- Los datos funcionales no dependen del consentimiento analítico.
+
+9.4. Membresía de apoyo
+
+- Existe una tarjeta de apoyo en Perfil controlada por feature flag.
+- Solo acepta URLs HTTPS válidas de Stripe Checkout.
+- El texto deja claro que educación, reglas, tutor, retos y competitivo siguen
+  siendo gratuitos.
+- Todavía no hay webhooks ni entrega real de entitlements; esa parte está
+  pendiente y el flag permanece apagado.
+
+
+======================================================================
+10. IMPLEMENTACIÓN REALIZADA: DISEÑO Y ACCESIBILIDAD
+======================================================================
+
+- Se conserva el lenguaje de instrumento editorial.
+- Se conservan grafito, marfil, latón, violeta y cian.
+- Se introdujeron tokens semánticos para superficies, texto y estados.
+- Hay tema oscuro, claro y sistema.
+- Hay modo de alto contraste.
+- Hay preferencia de movimiento sistema, completo o reducido.
+- El scroll suave se desactiva con movimiento reducido.
+- Hay selección de estilo de tablero y de piezas.
+- Hay nivel de narración del lector de pantalla.
+- Los objetivos interactivos generales alcanzan al menos 44 x 44 px.
+- El tablero conserva navegación por teclado y estados anunciados.
+- Las ramas muestran contorno, patrón y porcentaje.
+- El color no es la única forma de comunicar estado.
+- En móvil se usa navegación inferior fuera de la pantalla de partida.
+- En partida se protege el espacio del tablero.
+- overscroll-behavior queda limitado a la experiencia de juego.
+- Hay sonidos diferenciados para movimiento, split, fusión, captura y medición.
+- La vibración es opcional.
+
+
+======================================================================
+11. IMPLEMENTACIÓN REALIZADA: BACKEND Y API V1
+======================================================================
+
+11.1. Stockfish
+
+- El único bloqueo global fue sustituido internamente por un pool acotado.
+- Cada proceso sirve una operación cada vez.
+- Existe tamaño máximo, cola y timeout.
+- Se reemplaza un proceso terminado cuando es posible.
+- Los límites se configuran por variables de entorno.
+
+11.2. Endpoints API v1
+
+Están implementados:
+
+- POST   /api/v1/progress/sync
+- GET    /api/v1/academy/recommendation
+- POST   /api/v1/coach/evaluate
+- GET    /api/v1/daily/:date
+- POST   /api/v1/daily/:date/attempts
+- POST   /api/v1/replays/sync
+- POST   /api/v1/analytics/events
+- POST   /api/v1/matches
+- POST   /api/v1/matches/:id/actions
+- GET    /api/v1/matches/:id/events
+- GET    /api/v1/profile/export
+- DELETE /api/v1/profile
+
+Los endpoints anteriores de Stockfish y evaluación cuántica se conservan durante
+la transición.
+
+11.3. Autenticación
+
+- La API puede verificar el access token mediante Supabase Auth /user.
+- La publishable/anon key se usa para la verificación.
+- Hay una caché corta de identidades verificadas.
+- TRUST_AUTH_PROXY solo existe para pruebas detrás de un proxy local confiable.
+
+11.4. Partidas autoritativas
+
+- Existe contrato de acciones con actionId y expectedVersion.
+- El repositorio valida jugador, color, turno, versión e idempotencia.
+- El servicio autoritativo clásico está preparado como base técnica.
+- Las acciones cuánticas del servidor permanecen bloqueadas mediante
+  FEATURE_AUTHORITATIVE_QUANTUM=0.
+- El lobby antiguo continúa durante la transición.
+
+Limitación actual importante:
+
+- La API v1 incluida usa repositorios en memoria para desarrollo y tests.
+- Todavía no persiste estos datos en el Supabase remoto.
+- Todavía no es el servicio TypeScript autoritativo final descrito en el plan.
+
+
+======================================================================
+12. IMPLEMENTACIÓN REALIZADA: SUPABASE Y RLS
+======================================================================
+
+Se añadieron migraciones versionadas para:
+
+- profiles.
+- guest_claims.
+- progress_events.
+- skill_mastery.
+- achievements.
+- daily_challenges.
+- daily_attempts.
+- matches.
+- match_events.
+- ratings.
+- entitlements.
+- analytics_events.
+- finished_replays.
+- tablas legacy rooms y room_moves durante la transición.
+
+Seguridad incorporada al SQL:
+
+- RLS activado.
+- Lectura de datos propios para usuarios autenticados.
+- Lectura pública únicamente de retos diarios.
+- Lectura de partidas solo para participantes.
+- Ausencia de políticas de escritura directa para estados autoritativos.
+- Funciones privadas reservadas a service_role.
+- Grants explícitos para proyectos Supabase actuales.
+
+Las migraciones están en:
+
+supabase/migrations/202608110001_academy_and_authoritative_matches.sql
+supabase/migrations/202608110002_legacy_rooms_transition.sql
+supabase/migrations/202608120001_finished_replays.sql
+
+No se ejecutó supabase db reset local porque Docker no estaba instalado en el
+entorno usado para esta implementación.
+
+
+======================================================================
+13. PRUEBAS Y VERIFICACIÓN REALIZADAS
+======================================================================
+
+Resultado final:
+
+- npm ci: correcto.
+- npm audit: 0 vulnerabilidades.
+- Unitarias frontend: 71 aprobadas.
+- Backend: 18 aprobadas.
+- E2E Chromium: 20 aprobadas.
+- E2E Firefox: 20 aprobadas.
+- E2E WebKit: 20 aprobadas.
+- PWA de producción: 2 aprobadas.
+- Feature flags apagados: 1 aprobada.
+- Build TypeScript/Vite: correcto.
+- git diff --check: sin errores.
+
+Cobertura destacada:
+
+- Reglas estándar y acciones cuánticas avanzadas.
+- Coherencia y conservación de probabilidades.
+- IA determinista, cancelación y semillas.
+- Autosaves y replays.
+- Puntuación, dominio, diagnóstico, repaso y deduplicación UUID.
+- Academia ES/EN y sus 64 actividades.
+- Uso desde 320 x 568 hasta 1440 x 900.
+- Teclado, temas y movimiento reducido.
+- Chromium, Firefox y WebKit.
+- Service Worker real, recarga offline y fuentes cacheadas.
+- Confirmación de que /api no se cachea.
+- Escritura de ajustes y partida local en IndexedDB.
+- Rechazo de analítica con datos no permitidos.
+- Rechazo de snapshots o acciones no válidas en API v1.
+
+
+======================================================================
+14. QUÉ QUEDA PENDIENTE DE IMPLEMENTACIÓN
+======================================================================
+
+14.1. Núcleo de juego compartido
+
+- Extraer reglas, RNG, hashes y validación a un paquete TypeScript puro.
+- Consumir el mismo paquete desde navegador, Worker y servicio autoritativo.
+- Ejecutar pruebas de equivalencia contra classic y quantum-standard.
+- Evitar cualquier divergencia entre cliente y servidor.
+
+14.2. Servicio TypeScript autoritativo
+
+- Crear el servicio Node/TypeScript separado.
+- Recibir únicamente acciones, nunca snapshots.
+- Persistir partidas y eventos en Supabase mediante service_role.
+- Implementar relojes de servidor.
+- Pausar ambos relojes durante medición con máximo de 15 segundos.
+- Añadir reconexión por afterVersion.
+- Hacer idempotentes todos los reintentos.
+- Migrar las salas casuales desde el sistema legacy.
+- Dejar terminar las salas antiguas antes del corte.
+
+14.3. Persistencia Supabase real
+
+- Sustituir los repositorios en memoria de la API v1.
+- Implementar el adaptador de progreso.
+- Implementar el adaptador de replays.
+- Implementar retos diarios validados online.
+- Implementar analítica consentida.
+- Implementar perfiles, logros y rachas consolidados.
+- Probar migración y deduplicación entre dos dispositivos reales.
+- Probar exportación y borrado contra la base remota.
+
+14.4. Online cuántico
+
+- Validar todas las acciones cuánticas desde el núcleo compartido.
+- Sincronizar mediciones y RNG desde servidor.
+- Resolver acciones simultáneas y versiones obsoletas.
+- Probar cortes de red, reintentos y reconexión.
+- Ejecutar simulaciones concurrentes sin divergencias.
+- Abrir primero una beta casual no clasificada.
+
+14.5. Competitivo
+
+- Implementar cola Coherencia limitada 10+5.
+- Implementar rating Glicko-2 separado.
+- Marcar los diez primeros encuentros como provisionales.
+- Validar abandono, timeout y reconexión.
+- Crear clasificación semanal solo con intentos validados online.
+- Diseñar operación y soporte antes de abrir temporadas.
+
+14.6. Stripe y cosméticos
+
+- Crear productos/precios reales.
+- Crear Checkout desde servidor o enlaces administrados definitivos.
+- Implementar webhook con firma e idempotencia.
+- Escribir entitlements solo desde servidor.
+- Definir temas, piezas y paisajes sonoros accesibles.
+- Probar restauración de compras.
+- Añadir portal de gestión si se usa suscripción recurrente.
+
+14.7. Calidad de producción
+
+- Ejecutar las migraciones en Supabase local y staging.
+- Realizar pruebas RLS contra staging.
+- Ejecutar pruebas de carga del servicio de acciones.
+- Ejecutar carga del pool Stockfish.
+- Medir LCP, INP y CLS en un despliegue real.
+- Añadir monitorización, alertas y trazas.
+- Definir retención y borrado de logs.
+- Completar beta cerrada sin errores críticos de estado.
+- Revisión pedagógica humana del contenido ES/EN.
+- Añadir comprobación CI completa de claves de traducción.
+- Preparar landing bilingüe prerenderizada.
+
+
+======================================================================
+15. PASOS IMPRESCINDIBLES QUE DEBES HACER ANTES DE LA SIGUIENTE FASE
+======================================================================
+
+No necesitas programar nada. Lo importante es preparar infraestructura, accesos
+y decisiones de producto.
+
+PASO 1. ELEGIR EL OBJETIVO DE LA SIGUIENTE FASE
+
+Recomendación:
+
+1. Primero Supabase staging y persistencia real.
+2. Después núcleo TypeScript compartido y online casual autoritativo.
+3. Después beta cerrada y carga.
+4. Después competitivo.
+5. Stripe puede hacerse en paralelo o posponerse.
+
+Indícame si quieres seguir este orden o si Stripe debe adelantarse.
+
+PASO 2. CREAR UN PROYECTO SUPABASE DE STAGING
+
+Debes tener:
+
+- Un proyecto separado de producción.
+- Project ref.
+- URL del proyecto.
+- Publishable key o anon key.
+- Service role key guardada únicamente en backend/hosting.
+- Una contraseña de base almacenada de forma segura.
+
+No envíes estas claves en el chat.
+
+PASO 3. INSTALAR DOCKER DESKTOP
+
+Es necesario para ejecutar Supabase localmente.
+
+Después verifica:
+
+docker --version
+docker info
+
+PASO 4. PREPARAR SUPABASE CLI
+
+Desde la raíz del repositorio:
+
+npx supabase@2.113.0 login
+npx supabase@2.113.0 link --project-ref TU_PROJECT_REF
+
+Para validar primero en local:
+
+npx supabase@2.113.0 start
+npx supabase@2.113.0 db reset
+
+Revisa que las tres migraciones terminan correctamente.
+
+Solo después, y trabajando sobre staging:
+
+npx supabase@2.113.0 db push
+
+No ejecutes db push sobre producción sin revisar previamente el diff y disponer
+de copia de seguridad.
+
+PASO 5. CONFIGURAR SUPABASE AUTH
+
+En el dashboard de staging:
+
+- Activar usuarios anónimos si se desean invitados online.
+- Activar correo/enlace mágico.
+- Configurar la URL pública de la aplicación.
+- Añadir URLs de redirección de localhost y staging.
+- Crear credenciales Google OAuth.
+- Configurar Client ID y Client Secret de Google dentro de Supabase.
+- Probar magic link y Google con una cuenta de prueba.
+
+Decide también:
+
+- Si los invitados online estarán activos desde la primera beta.
+- Qué ocurre si una persona enlaza dos invitados distintos.
+- Cuánto tiempo se conservará una cuenta borrada en backups.
+
+PASO 6. CREAR LOS ARCHIVOS DE ENTORNO PRIVADOS
+
+Copia:
+
+.env.example              -> .env
+frontend/.env.example     -> frontend/.env
+
+Configura al menos:
+
+Backend:
+
+- SUPABASE_URL.
+- SUPABASE_PUBLISHABLE_KEY.
+- STOCKFISH_POOL_SIZE.
+- STOCKFISH_QUEUE_TIMEOUT.
+- FEATURE_AUTHORITATIVE_QUANTUM=0.
+
+Frontend:
+
+- VITE_API_BASE.
+- VITE_SUPABASE_URL.
+- VITE_SUPABASE_ANON_KEY.
+- Los flags de Academia, sincronización, diario y Coherencia.
+- VITE_FEATURE_SUPPORTER=0 hasta completar Stripe.
+
+Para la futura persistencia del servicio será necesaria una variable privada
+SUPABASE_SERVICE_ROLE_KEY en el backend. No debe llevar prefijo VITE_ y nunca
+debe llegar al navegador.
+
+PASO 7. DECIDIR DÓNDE DESPLEGAR EL SERVICIO TYPESCRIPT
+
+Debes elegir:
+
+- Mantener Render o usar otro proveedor.
+- Región principal.
+- URL pública del servicio de acciones.
+- Número inicial de instancias.
+- Límite de CPU/memoria.
+- Si FastAPI y el servicio TypeScript estarán separados.
+
+Recomendación técnica:
+
+- React PWA como frontend estático.
+- Servicio TypeScript autoritativo separado.
+- FastAPI separado para Stockfish/análisis.
+- Supabase como Postgres/Auth/Realtime de lectura.
+
+Comunícame la decisión y, si existe, el nombre previsto de cada servicio.
+
+PASO 8. DEFINIR LA BETA ONLINE
+
+Necesito que decidas:
+
+- Número aproximado de testers: por ejemplo 20, 100 o 500.
+- Concurrencia objetivo inicial.
+- Si la beta será por invitación.
+- Duración orientativa.
+- Si se permiten invitados o solo cuentas vinculadas.
+- Región principal de los jugadores.
+- Canal de soporte para reportar desincronizaciones.
+
+Recomendación inicial:
+
+- 20-50 testers.
+- Solo casual.
+- Coherencia 4.
+- Sin ranking público.
+- Cuentas vinculadas para las pruebas de reconexión.
+
+PASO 9. PREPARAR STOCKFISH PARA CARGA
+
+Debes decidir:
+
+- Cuántos análisis simultáneos soportará el plan de hosting.
+- Tiempo máximo aceptable de cola.
+- Profundidad/presupuesto por tipo de usuario.
+- Si el coach se limita por usuario o IP.
+
+Empieza con:
+
+- Pool de 2 procesos.
+- 1 thread por proceso.
+- Hash limitado.
+- Timeout de cola de 3 segundos.
+
+Estos valores se ajustarán tras las pruebas de carga.
+
+PASO 10. DECIDIR SI STRIPE ENTRA EN LA SIGUIENTE FASE
+
+Si la respuesta es sí, prepara:
+
+- Cuenta Stripe de prueba.
+- Nombre de la membresía.
+- Precio y moneda.
+- Pago único o suscripción.
+- Lista exacta de cosméticos.
+- Política de reembolso.
+- URL de éxito y cancelación.
+- Endpoint público para webhooks.
+
+Configura los secretos solo en el backend:
+
+- STRIPE_SECRET_KEY.
+- STRIPE_WEBHOOK_SECRET.
+- IDs de producto/precio.
+
+Si Stripe no es prioritario, basta con indicarme “posponer Stripe”.
+
+PASO 11. REVISIÓN LEGAL Y DE CONTENIDO
+
+Antes de publicación pública prepara o valida:
+
+- Política de privacidad ES/EN.
+- Términos de uso ES/EN.
+- Texto de confirmación 13+.
+- Política de cookies si finalmente se usan cookies no esenciales.
+- Retención de progreso, analítica y logs.
+- Proceso de exportación y borrado.
+- Revisión humana de las 64 actividades en ambos idiomas.
+- Revisión de contraste de cualquier cosmético nuevo.
+
+PASO 12. PREPARAR DOMINIOS Y OBSERVABILIDAD
+
+Necesito conocer:
+
+- Dominio de producción.
+- Dominio de staging.
+- URL del frontend.
+- URL del servicio TypeScript.
+- URL de FastAPI.
+- Herramienta preferida de errores/monitorización.
+- Destino de alertas.
+
+No es obligatorio comprar herramientas de pago. Podemos empezar con logs
+estructurados y health checks, pero debe existir una decisión.
+
+
+======================================================================
+16. CHECKLIST MÍNIMO ANTES DE VOLVER A PEDIRME CONTINUAR
+======================================================================
+
+Para poder avanzar sin bloquearme, confirma al menos lo siguiente:
+
+[ ] Has elegido la siguiente fase prioritaria.
+[ ] Existe un proyecto Supabase de staging.
+[ ] Docker Desktop está instalado y funciona.
+[ ] Supabase CLI puede iniciar el entorno local.
+[ ] Las migraciones pasan con supabase db reset.
+[ ] Las migraciones se han aplicado a staging o me autorizas a aplicarlas.
+[ ] Auth anónimo, magic link y Google están decididos/configurados.
+[ ] Los .env privados están creados sin subirlos a Git.
+[ ] Has decidido dónde irá el servicio TypeScript.
+[ ] Has definido tamaño y reglas de la beta cerrada.
+[ ] Has decidido “Stripe ahora” o “Stripe después”.
+[ ] Has definido dominios de staging/producción o confirmado que aún no existen.
+[ ] Sabes dónde se recibirán errores y alertas.
+
+Si todavía no puedes completar todos los puntos, indícame cuáles faltan. Puedo
+continuar con las partes que no dependan de ellos, pero no activar producción ni
+inventar decisiones de infraestructura.
+
+
+======================================================================
+17. INFORMACIÓN QUE DEBES DARME EN EL SIGUIENTE MENSAJE
+======================================================================
+
+No incluyas secretos. Envíame una respuesta con este formato:
+
+FASE PRIORITARIA:
+Ejemplo: persistencia Supabase + núcleo compartido + online casual.
+
+SUPABASE:
+- Staging creado: sí/no.
+- Migraciones locales aprobadas: sí/no.
+- Migraciones en staging: sí/no.
+- Auth anónimo: sí/no.
+- Magic link: sí/no.
+- Google: sí/no.
+- Variables privadas ya configuradas en el entorno: sí/no.
+
+HOSTING:
+- Frontend: proveedor y URL, si existe.
+- Servicio TypeScript: proveedor elegido.
+- FastAPI/Stockfish: proveedor elegido.
+- Región principal.
+
+BETA:
+- Número de testers.
+- Concurrencia objetivo.
+- Invitados permitidos: sí/no.
+- Solo casual al principio: sí/no.
+
+STRIPE:
+- Hacer ahora / posponer.
+- Pago único / suscripción, si se hace ahora.
+
+DOMINIOS Y MONITORIZACIÓN:
+- Dominio de staging.
+- Dominio de producción.
+- Herramienta de errores o “pendiente de decidir”.
+
+DECISIONES ADICIONALES:
+- Cualquier requisito que quieras cambiar respecto al plan.
+
+
+======================================================================
+18. PETICIÓN RECOMENDADA PARA LA SIGUIENTE FASE
+======================================================================
+
+Cuando el checklist esté preparado, puedes pedirme:
+
+“Continúa con la siguiente fase. Supabase staging y los entornos ya están
+configurados. Extrae el Game Core a un paquete TypeScript compartido, conecta
+la API v1 a Supabase, crea el servicio autoritativo de acciones y verifica la
+beta casual. Mantén competitivo, Stripe y FEATURE_AUTHORITATIVE_QUANTUM
+desactivados hasta superar las pruebas de carga.”
+
+Si quieres Stripe en paralelo, añade:
+
+“Implementa también Stripe en modo test con webhook idempotente y entitlements,
+sin activar ninguna ventaja competitiva.”
+
+
+======================================================================
+19. ARCHIVOS DE REFERENCIA
+======================================================================
+
+Documentación:
+
+- README.md
+- PRODUCT.md
+- DESIGN.md
+- IMPLEMENTATION_STATUS.md
+- IMPLEMENTACION_Y_PREPARACION_PENDIENTES.txt
+
+Frontend principal:
+
+- frontend/src/App.tsx
+- frontend/src/lib/academyContent.ts
+- frontend/src/lib/academyProgress.ts
+- frontend/src/lib/academyStore.ts
+- frontend/src/lib/coherence.ts
+- frontend/src/lib/quantumEngine.ts
+- frontend/src/lib/quantumAi.ts
+- frontend/src/lib/gameReplay.ts
+- frontend/src/lib/featureFlags.ts
+
+Backend:
+
+- server.py
+- backend/api_v1.py
+- backend/academy_service.py
+- backend/match_service.py
+- backend/auth.py
+- backend/stockfish_pool.py
+
+Infraestructura:
+
+- .env.example
+- frontend/.env.example
+- render.yaml
+- supabase/config.toml
+- supabase/migrations/
+
+Pruebas:
+
+- tests/test_server.py
+- tests/test_api_v1.py
+- frontend/src/lib/*.test.ts
+- frontend/e2e/academy.spec.ts
+- frontend/e2e/game.spec.ts
+- frontend/e2e/quantum-ai.spec.ts
+- frontend/e2e/accessibility-layout.spec.ts
+- frontend/e2e/pwa.spec.ts
+- frontend/e2e/feature-flags.spec.ts
+
+
+FIN DEL DOCUMENTO

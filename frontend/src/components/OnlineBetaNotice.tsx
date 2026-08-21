@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import type { Language } from '../lib/types'
 import { ui } from '../lib/i18n'
 
@@ -36,15 +35,11 @@ export default function OnlineBetaNotice({ language, variant = 'banner' }: Onlin
   }
 
   return (
-    <motion.div
-      className="rounded border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-ui-sm leading-relaxed text-amber-100/90"
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
-      <motion.div className="flex items-start gap-2.5">
+    <div className="screen-enter rounded border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-ui-sm leading-relaxed text-amber-100/90">
+      <div className="flex items-start gap-2.5">
         <OnlineBetaBadge language={language} className="mt-0.5" />
         <span>{t.onlineBetaNotice}</span>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }

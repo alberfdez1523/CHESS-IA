@@ -1,29 +1,70 @@
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react'
 import { flushSync } from 'react-dom'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { useLocation, useNavigate } from 'react-router-dom'
 import StartMenu from './components/StartMenu'
+import PrimaryNavigation, { type PrimaryDestination } from './components/PrimaryNavigation'
+import PwaUpdatePrompt from './components/PwaUpdatePrompt'
 import {
   clearOnlineSession,
   installOnlineUnloadHandlers,
   registerOnlineSession,
   abandonSessionBestEffort,
 } from './lib/onlineSessionLifecycle'
-import SettingsPanel from './components/SettingsPanel'
 import BoardSkeleton from './components/BoardSkeleton'
 import { isSupabaseConfigured as isOnlineAvailable, parseRoomCodeFromUrl } from './lib/onlineConfig'
 const RulesScreen = lazy(() => import('./components/RulesScreen'))
 const OnlineLobby = lazy(() => import('./components/OnlineLobby'))
 const GameScreen = lazy(() => import('./components/GameScreen'))
 const QuantumGameScreen = lazy(() => import('./components/QuantumGameScreen'))
+const AcademyScreen = lazy(() => import('./components/academy/AcademyScreen'))
+const LessonScreen = lazy(() => import('./components/academy/LessonScreen'))
+const PuzzleSprintScreen = lazy(() => import('./components/academy/PuzzleSprintScreen'))
+const ProfileScreen = lazy(() => import('./components/ProfileScreen'))
+const SettingsPanel = lazy(() => import('./components/SettingsPanel'))
 import type { GameConfig, PlayerColorChoice } from './lib/types'
 import { loadSettings, saveSettings, type AppSettings } from './lib/settings'
 import {
   applyThemeToDom,
+  applyDisplaySettingsToDom,
   runThemeTransition,
   type SettingsChangeMeta,
 } from './lib/themeTransition'
 import { ui } from './lib/i18n'
 import { gameAutosave, type GameAutosave } from './lib/gameAutosave'
+import { useAcademyProgress } from './hooks/useAcademyProgress'
+import { ACADEMY_LESSON_BY_ID } from './lib/academyContent'
+import { FEATURES } from './lib/featureFlags'
+import { saveSettingsSnapshot } from './lib/academyStore'
+
+type AppScreen = 'menu' | 'lobby' | 'game' | 'rules' | 'academy' | 'lesson' | 'sprint' | 'profile'
+
+function screenFromPath(pathname: string): AppScreen {
+  if (!FEATURES.academy && pathname.startsWith('/learn')) return 'menu'
+  if (!FEATURES.dailyAndSprint && /^\/learn\/sprint\//.test(pathname)) return 'academy'
+  if (/^\/learn\/sprint\/(3|5|10)\/?$/.test(pathname)) return 'sprint'
+  if (pathname.startsWith('/learn/')) return 'lesson'
+  if (pathname === '/learn' || pathname === '/learn/') return 'academy'
+  if (pathname === '/profile' || pathname === '/profile/') return 'profile'
+  if (pathname === '/rules' || pathname === '/rules/') return 'rules'
+  if (pathname === '/online' || pathname.startsWith('/join/')) return 'lobby'
+  if (pathname === '/play' || pathname === '/play/') return 'game'
+  return 'menu'
+}
+
+function lessonIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/learn\/([^/]+)\/?$/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
+function sprintMinutesFromPath(pathname: string): 3 | 5 | 10 {
+  const value = Number(pathname.match(/^\/learn\/sprint\/(3|5|10)\/?$/)?.[1])
+  return value === 5 || value === 10 ? value : 3
+}
+
+function joinCodeFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/join\/([^/]+)\/?$/)
+  return match ? decodeURIComponent(match[1]).trim().toUpperCase() : null
+}
 
 function ScreenLoadingFallback({
   language,
@@ -41,8 +82,11 @@ function ScreenLoadingFallback({
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<'menu' | 'lobby' | 'game' | 'rules'>('menu')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [screen, setScreen] = useState<AppScreen>(() => screenFromPath(location.pathname))
   const [rulesInitialTab, setRulesInitialTab] = useState<'quantum' | 'tutorial'>('quantum')
+  const [lessonSource, setLessonSource] = useState<'route' | 'review' | 'daily' | 'error'>('route')
   const [lobbyPrefs, setLobbyPrefs] = useState<{
     gameMode: GameConfig['gameMode']
     color: PlayerColorChoice
@@ -58,18 +102,83 @@ export default function App() {
   const lobbyRoomIdRef = useRef<string | null>(null)
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const reduceMotion = useReducedMotion()
+  const [systemReduceMotion, setSystemReduceMotion] = useState(() => (
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ))
+  const reduceMotion = settings.motionPreference === 'reduced'
+    || (settings.motionPreference === 'system' && !!systemReduceMotion)
+  const academy = useAcademyProgress()
 
   const { language } = settings
+
+  useEffect(() => {
+    if (!FEATURES.academy && location.pathname.startsWith('/learn')) {
+      navigate('/', { replace: true })
+      setScreen('menu')
+      return
+    }
+    if (!FEATURES.dailyAndSprint && location.pathname.startsWith('/learn/sprint/')) {
+      navigate('/learn', { replace: true })
+      setScreen('academy')
+      return
+    }
+    const nextScreen = screenFromPath(location.pathname)
+    if (nextScreen === 'game' && !gameConfigRef.current) {
+      navigate('/', { replace: true })
+      setScreen('menu')
+      return
+    }
+    if (nextScreen === 'lesson') {
+      const lessonId = lessonIdFromPath(location.pathname)
+      if (!lessonId || !ACADEMY_LESSON_BY_ID.has(lessonId)) {
+        navigate('/learn', { replace: true })
+        setScreen('academy')
+        return
+      }
+    }
+    if (nextScreen === 'lobby' && !lobbyPrefs) {
+      setLobbyPrefs({
+        gameMode: 'classic',
+        color: 'w',
+        useTimer: false,
+        timerMinutes: 10,
+        difficulty: 'medium',
+      })
+    }
+    setScreen(nextScreen)
+  }, [location.pathname, lobbyPrefs, navigate])
 
   useEffect(() => {
     document.documentElement.lang = language
   }, [language])
 
   useEffect(() => {
-    applyThemeToDom(settings.theme)
     installOnlineUnloadHandlers()
+    void gameAutosave.hydrateFromIndexedDb()
   }, [])
+
+  useEffect(() => {
+    applyThemeToDom(settings.theme)
+    applyDisplaySettingsToDom(settings)
+    void saveSettingsSnapshot(settings)
+  }, [settings])
+
+  useEffect(() => {
+    if (settings.theme !== 'system' && settings.motionPreference !== 'system') return undefined
+    const colorQuery = window.matchMedia('(prefers-color-scheme: light)')
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const refresh = () => {
+      setSystemReduceMotion(motionQuery.matches)
+      applyThemeToDom(settings.theme)
+      applyDisplaySettingsToDom(settings)
+    }
+    colorQuery.addEventListener('change', refresh)
+    motionQuery.addEventListener('change', refresh)
+    return () => {
+      colorQuery.removeEventListener('change', refresh)
+      motionQuery.removeEventListener('change', refresh)
+    }
+  }, [settings])
 
   useEffect(() => {
     if (screen !== 'menu' || !isOnlineAvailable()) return
@@ -87,8 +196,9 @@ export default function App() {
       timerMinutes: 10,
       difficulty: 'medium',
     })
+    navigate(`/join/${encodeURIComponent(roomCode)}`, { replace: true })
     setScreen('lobby')
-  }, [])
+  }, [navigate])
 
   useEffect(() => {
     const modeLabel = gameConfig?.gameMode === 'quantum'
@@ -99,7 +209,7 @@ export default function App() {
 
   useEffect(() => {
     window.scrollTo(0, 0)
-  }, [screen])
+  }, [screen, location.pathname])
 
   const handleSettingsChange = useCallback(
     (partial: Partial<AppSettings>, meta?: SettingsChangeMeta) => {
@@ -136,7 +246,8 @@ export default function App() {
     setGameInstance((value) => value + 1)
     setGameConfig(config)
     setScreen('game')
-  }, [])
+    navigate('/play')
+  }, [navigate])
 
   const handleContinue = useCallback((autosave: GameAutosave) => {
     setResumeAutosave(autosave)
@@ -148,9 +259,13 @@ export default function App() {
       useTimer: autosave.config.useTimer,
       timerMinutes: autosave.config.timerMinutes,
       gameMode: autosave.type,
+      rulesetId: autosave.config.rulesetId ?? (autosave.type === 'classic' ? 'classic' : 'quantum-standard'),
+      timeControl: autosave.config.timeControl,
+      options: autosave.config.options,
     })
     setScreen('game')
-  }, [])
+    navigate('/play')
+  }, [navigate])
 
   const handleRematch = useCallback(() => {
     setResumeAutosave(null)
@@ -167,8 +282,9 @@ export default function App() {
     }) => {
       setLobbyPrefs(prefs)
       setScreen('lobby')
+      navigate('/online')
     },
-    [],
+    [navigate],
   )
 
   const handleNewGame = useCallback(async () => {
@@ -183,36 +299,53 @@ export default function App() {
     setResumeAutosave(null)
     setLobbyPrefs(null)
     setScreen('menu')
-    if (typeof window !== 'undefined' && window.location.search.includes('room=')) {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('room')
-      window.history.replaceState({}, '', url.pathname + url.hash)
-    }
-  }, [])
+    navigate('/')
+  }, [navigate])
 
-  const transition = reduceMotion
-    ? { duration: 0.01 }
-    : { duration: 0.25, ease: 'easeOut' as const }
+  const handlePrimaryNavigation = useCallback((destination: PrimaryDestination) => {
+    if (destination === 'home' || destination === 'play') {
+      navigate('/')
+      setScreen('menu')
+      if (destination === 'play') {
+        window.setTimeout(() => document.getElementById('game-setup')?.scrollIntoView({
+          behavior: document.documentElement.dataset.motion === 'reduced' ? 'auto' : 'smooth',
+        }), 0)
+      }
+      return
+    }
+    if (destination === 'learn') {
+      navigate('/learn')
+      setScreen('academy')
+      return
+    }
+    navigate('/profile')
+    setScreen('profile')
+  }, [navigate])
+
+  const activeLessonId = lessonIdFromPath(location.pathname)
+  const activeLesson = activeLessonId ? ACADEMY_LESSON_BY_ID.get(activeLessonId) : undefined
+  const showPrimaryNavigation = screen === 'menu' || screen === 'academy' || screen === 'profile'
+  const primaryActive: PrimaryDestination = screen === 'academy'
+    ? 'learn'
+    : screen === 'profile' ? 'profile' : 'home'
 
   return (
     <>
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        settings={settings}
-        onChange={handleSettingsChange}
-        language={language}
-      />
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsPanel
+            open
+            onClose={() => setSettingsOpen(false)}
+            settings={settings}
+            onChange={handleSettingsChange}
+            language={language}
+          />
+        </Suspense>
+      )}
 
-      <AnimatePresence mode="wait">
+      <div>
         {screen === 'menu' ? (
-          <motion.div
-            key="menu"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={transition}
-          >
+          <div key="menu" className="screen-enter">
             <StartMenu
               onPlay={handlePlay}
               onContinue={handleContinue}
@@ -220,23 +353,19 @@ export default function App() {
               onRules={() => {
                 setRulesInitialTab('quantum')
                 setScreen('rules')
+                navigate('/rules')
               }}
               onQuantumTutorial={() => {
-                setRulesInitialTab('tutorial')
-                setScreen('rules')
+                setScreen('academy')
+                navigate('/learn')
               }}
+              academyProgress={academy.progress}
               language={language}
               onOpenSettings={() => setSettingsOpen(true)}
             />
-          </motion.div>
+          </div>
         ) : screen === 'lobby' && lobbyPrefs ? (
-          <motion.div
-            key="lobby"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={transition}
-          >
+          <div key="lobby" className="screen-enter">
             <Suspense
               fallback={
                 <ScreenLoadingFallback
@@ -252,7 +381,7 @@ export default function App() {
                 useTimer={lobbyPrefs.useTimer}
                 timerMinutes={lobbyPrefs.timerMinutes}
                 difficulty={lobbyPrefs.difficulty}
-                initialJoinCode={parseRoomCodeFromUrl()}
+                initialJoinCode={joinCodeFromPath(location.pathname) ?? parseRoomCodeFromUrl()}
                 onBack={() => void handleNewGame()}
                 onRoomActive={(roomId) => {
                   lobbyRoomIdRef.current = roomId
@@ -261,31 +390,78 @@ export default function App() {
                 onStart={handlePlay}
               />
             </Suspense>
-          </motion.div>
+          </div>
         ) : screen === 'rules' ? (
-          <motion.div
-            key="rules"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={transition}
-          >
+          <div key="rules" className="screen-enter">
             <Suspense fallback={<ScreenLoadingFallback language={language} label={ui(language).loadingRules} />}>
               <RulesScreen
-                onBack={() => setScreen('menu')}
+                onBack={() => { setScreen('menu'); navigate('/') }}
                 language={language}
                 initialTab={rulesInitialTab}
               />
             </Suspense>
-          </motion.div>
+          </div>
+        ) : screen === 'academy' ? (
+          <div key="academy" className="screen-enter">
+            <Suspense fallback={<ScreenLoadingFallback language={language} label={language === 'es' ? 'Abriendo la Academia...' : 'Opening Academy...'} />}>
+              <AcademyScreen
+                language={language}
+                academy={academy}
+                onBack={() => { setScreen('menu'); navigate('/') }}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenLesson={(lessonId, source = 'route') => {
+                  setLessonSource(source)
+                  setScreen('lesson')
+                  navigate(`/learn/${encodeURIComponent(lessonId)}`)
+                }}
+                onOpenSprint={(minutes) => {
+                  setScreen('sprint')
+                  navigate(`/learn/sprint/${minutes}`)
+                }}
+              />
+            </Suspense>
+          </div>
+        ) : screen === 'lesson' && activeLesson ? (
+          <div key={`lesson-${activeLesson.id}`} className="screen-enter">
+            <Suspense fallback={<ScreenLoadingFallback language={language} label={language === 'es' ? 'Preparando actividad...' : 'Preparing activity...'} />}>
+              <LessonScreen
+                lesson={activeLesson}
+                language={language}
+                academy={academy}
+                source={lessonSource}
+                onBack={() => { setScreen('academy'); navigate('/learn') }}
+                onOpenLesson={(lessonId) => {
+                  setLessonSource('route')
+                  navigate(`/learn/${encodeURIComponent(lessonId)}`)
+                }}
+              />
+            </Suspense>
+          </div>
+        ) : screen === 'sprint' ? (
+          <div key={`sprint-${location.pathname}`} className="screen-enter">
+            <Suspense fallback={<ScreenLoadingFallback language={language} label="Puzzle Sprint..." />}>
+              <PuzzleSprintScreen
+                minutes={sprintMinutesFromPath(location.pathname)}
+                course={academy.progress.selectedCourse}
+                language={language}
+                academy={academy}
+                onBack={() => { setScreen('academy'); navigate('/learn') }}
+              />
+            </Suspense>
+          </div>
+        ) : screen === 'profile' ? (
+          <div key="profile" className="screen-enter">
+            <Suspense fallback={<ScreenLoadingFallback language={language} label={language === 'es' ? 'Cargando perfil...' : 'Loading profile...'} />}>
+              <ProfileScreen
+                language={language}
+                academy={academy}
+                onBack={() => { setScreen('menu'); navigate('/') }}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
+            </Suspense>
+          </div>
         ) : gameConfig ? (
-          <motion.div
-            key={`game-${gameInstance}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={transition}
-          >
+          <div key={`game-${gameInstance}`} className="screen-enter">
             <Suspense
               fallback={
                 <ScreenLoadingFallback
@@ -318,9 +494,21 @@ export default function App() {
                 />
               )}
             </Suspense>
-          </motion.div>
+          </div>
         ) : null}
-      </AnimatePresence>
+      </div>
+
+      {showPrimaryNavigation && (
+        <PrimaryNavigation
+          language={language}
+          active={primaryActive}
+          onNavigate={handlePrimaryNavigation}
+        />
+      )}
+      <PwaUpdatePrompt
+        language={language}
+        canApplyUpdate={screen !== 'game' && screen !== 'lobby'}
+      />
     </>
   )
 }

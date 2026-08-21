@@ -25,6 +25,14 @@ export type GameIconName =
   | 'history'
   | 'share'
   | 'retry'
+  | 'home'
+  | 'user'
+  | 'lock'
+  | 'check'
+  | 'target'
+  | 'flame'
+  | 'download'
+  | 'trash'
 
 interface GameIconProps extends SVGProps<SVGSVGElement> {
   name: GameIconName
@@ -60,6 +68,14 @@ const paths: Record<GameIconName, JSX.Element> = {
   history: <path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 2" />,
   share: <path d="M18 8a3 3 0 1 0-2.83-4M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm12-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM8.6 16.5l6.8-3M8.6 7.5l6.8 3" />,
   retry: <path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7" />,
+  home: <path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7" />,
+  user: <path d="M20 21a8 8 0 0 0-16 0m12-13a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" />,
+  lock: <path d="M6 10h12v11H6V10Zm3 0V7a3 3 0 0 1 6 0v3" />,
+  check: <path d="m5 12 4 4L19 6" />,
+  target: <path d="M12 2v3m0 14v3M2 12h3m14 0h3m-4 0a6 6 0 1 1-12 0 6 6 0 0 1 12 0Zm-4 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z" />,
+  flame: <path d="M12 22c4 0 7-3 7-7 0-5-3-8-6-12 0 4-2 6-4 8-1-2-2-3-2-5-2 3-3 6-3 9 0 4 3 7 8 7Zm0-3a3 3 0 0 1-3-3c0-1 .5-2 1-3 0 2 1 2 2 3 1-1 2-2 2-4 1 2 1 3 1 4a3 3 0 0 1-3 3Z" />,
+  download: <path d="M12 3v12m0 0 5-5m-5 5-5-5M4 21h16" />,
+  trash: <path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6" />,
 }
 
 export default function GameIcon({ name, className = '', ...props }: GameIconProps) {

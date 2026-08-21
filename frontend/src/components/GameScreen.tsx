@@ -24,6 +24,8 @@ import type { GameChromeModel, GameNotice, GameTone } from '../lib/gamePresentat
 import { gameAutosave, type GameAutosave } from '../lib/gameAutosave'
 import { classicResultFromFen } from '../lib/onlineRoom'
 import { onlineResultToGameOverInfo } from '../lib/onlineTypes'
+import { createClassicFinishedReplay } from '../lib/gameReplay'
+import { saveFinishedReplay } from '../lib/replayStore'
 
 interface GameScreenProps {
   config: GameConfig
@@ -46,7 +48,7 @@ export default function GameScreen({
   resumeAutosave = null,
   onRematch,
 }: GameScreenProps) {
-  const sounds = useSoundFX(settings.sfxVolume)
+  const sounds = useSoundFX(settings.sfxVolume, settings.haptics)
   const music = useAmbientMusic(settings.musicVolume)
   const onlineSync = useOnlineGameSync({
     config,
@@ -59,6 +61,7 @@ export default function GameScreen({
   }, [config.playerColor, language, onlineSync.room?.state.result])
   const leavingRef = useRef(false)
   const [replayOpen, setReplayOpen] = useState(false)
+  const finishedReplaySavedRef = useRef(false)
   const onlineClockRef = useRef({
     whiteTime: config.useTimer ? config.timerMinutes * 60 : null,
     blackTime: config.useTimer ? config.timerMinutes * 60 : null,
@@ -158,6 +161,9 @@ export default function GameScreen({
           difficulty: config.difficulty,
           useTimer: config.useTimer,
           timerMinutes: config.timerMinutes,
+          rulesetId: 'classic',
+          timeControl: config.timeControl,
+          options: {},
         },
         fen: game.fen,
         pgn: game.pgn,
@@ -172,6 +178,7 @@ export default function GameScreen({
     config.difficulty,
     config.gameMode,
     config.opponentMode,
+    config.timeControl,
     config.playerColor,
     config.timerMinutes,
     config.useTimer,
@@ -184,6 +191,13 @@ export default function GameScreen({
     timer.blackTime,
     timer.whiteTime,
   ])
+
+  useEffect(() => {
+    const result = game.gameOverInfo ?? syncedGameOverInfo
+    if (!result || finishedReplaySavedRef.current || game.history.length === 0) return
+    finishedReplaySavedRef.current = true
+    void saveFinishedReplay(createClassicFinishedReplay(game.history, config, result))
+  }, [config, game.gameOverInfo, game.history, syncedGameOverInfo])
 
   useEffect(() => {
     if (music.volume !== settings.musicVolume) {

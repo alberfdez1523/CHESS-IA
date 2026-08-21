@@ -25,6 +25,14 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 
+from backend.api_v1 import (
+    CoachEvaluateRequest,
+    academy_repository,
+    create_api_v1_router,
+    match_repository,
+)
+from backend.stockfish_pool import EnginePoolTimeout, StockfishPool
+
 # ---------------------------------------------------------------------------
 # Localización del binario de Stockfish
 # ---------------------------------------------------------------------------
@@ -108,11 +116,11 @@ DIFFICULTIES = {
 DifficultyLevel = Literal["beginner", "easy", "medium", "hard", "master"]
 
 # ---------------------------------------------------------------------------
-# Motor global reutilizable
+# Pool acotado de motores reutilizables
 # ---------------------------------------------------------------------------
-# Mantener una sola instancia reduce latencia y evita abrir procesos por request.
-engine: chess.engine.SimpleEngine | None = None
-engine_lock = threading.Lock()
+# Cada proceso atiende una sola orden; la cola acotada evita cancelaciones entre
+# peticiones y limita el consumo total de CPU/memoria.
+engine_pool: StockfishPool | None = None
 eval_cache_lock = threading.Lock()
 eval_cache: dict[tuple[str, int], tuple[float, float, int | None]] = {}
 EVAL_CACHE_TTL_SECONDS = 300
@@ -143,68 +151,55 @@ def _http_status_to_code(status_code: int) -> str:
 
 
 def _engine_is_alive() -> bool:
-    global engine
-    if engine is None:
-        return False
-    try:
-        if hasattr(engine, "is_alive") and not engine.is_alive():
-            return False
-        with engine_lock:
-            if engine is None:
-                return False
-            engine.ping()
-        return True
-    except Exception:
-        return False
+    return engine_pool is not None and engine_pool.healthy()
 
 
 def _with_engine_lock(callback):
-    """Serializa acceso al motor compartido para evitar cancelaciones internas."""
-    global engine
+    """Lease one engine from the bounded pool for the duration of a command."""
+    active_pool = engine_pool
+    if active_pool is None:
+        raise HTTPException(status_code=503, detail={"error": "Engine not ready", "code": "ENGINE_UNAVAILABLE"})
 
-    with engine_lock:
-        active_engine = engine
-        if active_engine is None:
-            raise HTTPException(status_code=503, detail={"error": "Engine not ready", "code": "ENGINE_UNAVAILABLE"})
-
-        try:
-            return callback(active_engine)
-        except CancelledError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail={"error": "Engine request was interrupted, retry the move", "code": "ENGINE_UNAVAILABLE"},
-            ) from exc
-        except chess.engine.EngineTerminatedError as exc:
-            engine = None
-            raise HTTPException(
-                status_code=503,
-                detail={"error": "Engine terminated unexpectedly", "code": "ENGINE_UNAVAILABLE"},
-            ) from exc
-        except chess.engine.EngineError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail={"error": f"Engine error: {exc}", "code": "ENGINE_UNAVAILABLE"},
-            ) from exc
+    try:
+        return active_pool.run(callback)
+    except (CancelledError, EnginePoolTimeout) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Engine queue is busy; retry the request", "code": "ENGINE_UNAVAILABLE"},
+        ) from exc
+    except chess.engine.EngineTerminatedError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Engine terminated unexpectedly", "code": "ENGINE_UNAVAILABLE"},
+        ) from exc
+    except chess.engine.EngineError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": f"Engine error: {exc}", "code": "ENGINE_UNAVAILABLE"},
+        ) from exc
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Ciclo de vida de FastAPI: arranque y apagado limpio del motor."""
-    global engine
+    global engine_pool
     if STOCKFISH_PATH and not SKIP_STOCKFISH:
-        print("Starting Stockfish engine...")
-        with engine_lock:
-            engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH)
-            engine.configure({"Threads": 2, "Hash": 128})
-        print("Engine ready")
+        pool_size = max(1, min(int(os.getenv("STOCKFISH_POOL_SIZE", "2")), 8))
+        print(f"Starting Stockfish pool ({pool_size} workers)...")
+        engine_pool = StockfishPool(
+            STOCKFISH_PATH,
+            size=pool_size,
+            acquire_timeout=float(os.getenv("STOCKFISH_QUEUE_TIMEOUT", "3")),
+        )
+        engine_pool.start()
+        print("Engine pool ready")
     else:
-        engine = None
+        engine_pool = None
         print("Skipping engine startup (test mode or no binary)")
     yield
-    print("Shutting down engine...")
-    with engine_lock:
-        if engine is not None:
-            engine.quit()
-            engine = None
+    print("Shutting down engine pool...")
+    if engine_pool is not None:
+        engine_pool.close()
+        engine_pool = None
 
 
 app = FastAPI(title="Gambito de Dama Cuantico", lifespan=lifespan)
@@ -740,6 +735,142 @@ async def quantum_move(req: QuantumMoveRequest):
     """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, partial(_quantum_move_sync, req))
+
+
+# ---------------------------------------------------------------------------
+# API v1: progreso, coach determinista, retos y partidas autoritativas
+# ---------------------------------------------------------------------------
+
+def _coach_classification(centipawn_loss: float) -> str:
+    if centipawn_loss <= 10:
+        return "best"
+    if centipawn_loss <= 30:
+        return "excellent"
+    if centipawn_loss <= 70:
+        return "good"
+    if centipawn_loss <= 130:
+        return "inaccuracy"
+    if centipawn_loss <= 260:
+        return "mistake"
+    return "blunder"
+
+
+def _coach_evaluate(req: CoachEvaluateRequest) -> dict:
+    """Produce reproducible feedback without sending positions to generative models."""
+    if req.ruleset_id != "classic":
+        ranked = sorted(
+            req.legal_actions,
+            key=lambda candidate: (
+                -float(candidate.get("evaluation", 0)),
+                json.dumps(candidate.get("action", {}), sort_keys=True),
+            ),
+        )[:3]
+        return {
+            "classification": "best" if ranked else "good",
+            "concepts": ["quantum.expected-material", "quantum.coherence", "quantum.king-safety"],
+            "candidates": [
+                {
+                    "action": candidate.get("action", {}),
+                    "score": float(candidate.get("evaluation", 0)),
+                    "probability": candidate.get("probability"),
+                }
+                for candidate in ranked
+            ],
+            "probabilities": [candidate.get("probability") for candidate in ranked if candidate.get("probability") is not None],
+            "explanationKey": "coach.quantum.deterministic-evaluation",
+            "engine": "quantum-enumerator-v1",
+            "seed": req.seed,
+        }
+
+    if not req.fen:
+        raise HTTPException(status_code=422, detail={"error": "FEN is required for classic coaching", "code": "VALIDATION_ERROR"})
+    try:
+        board = chess.Board(req.fen)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error": "Invalid FEN", "code": "BAD_REQUEST"}) from exc
+    if board.is_game_over():
+        raise HTTPException(status_code=400, detail={"error": "Game is already over", "code": "BAD_REQUEST"})
+
+    action_uci = req.action if isinstance(req.action, str) else None
+    side_to_move = board.turn
+
+    def _analyse(active_engine: chess.engine.SimpleEngine):
+        multipv = active_engine.analyse(
+            board,
+            chess.engine.Limit(depth=req.depth, time=0.45),
+            multipv=3,
+        )
+        infos = multipv if isinstance(multipv, list) else [multipv]
+        actual_evaluation = None
+        if action_uci:
+            try:
+                actual_move = chess.Move.from_uci(action_uci)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail={"error": "Malformed action", "code": "ILLEGAL_ACTION"}) from exc
+            if actual_move not in board.legal_moves:
+                raise HTTPException(status_code=422, detail={"error": "Illegal action", "code": "ILLEGAL_ACTION"})
+            after = board.copy(stack=False)
+            after.push(actual_move)
+            actual_info = active_engine.analyse(after, chess.engine.Limit(depth=max(1, req.depth - 1), time=0.3))
+            if "score" in actual_info:
+                actual_evaluation, _mate = _score_to_eval(actual_info["score"])
+        return infos, actual_evaluation
+
+    infos, actual_evaluation = _with_engine_lock(_analyse)
+    candidates = []
+    for info in infos:
+        principal_variation = info.get("pv", [])
+        if not principal_variation or "score" not in info:
+            continue
+        evaluation, _mate = _score_to_eval(info["score"])
+        candidates.append({"action": principal_variation[0].uci(), "score": evaluation})
+    if not candidates:
+        raise HTTPException(status_code=503, detail={"error": "Coach returned no candidates", "code": "ENGINE_UNAVAILABLE"})
+
+    best_evaluation = candidates[0]["score"]
+    if action_uci and action_uci == candidates[0]["action"]:
+        centipawn_loss = 0.0
+    elif actual_evaluation is None:
+        centipawn_loss = 0.0
+    else:
+        centipawn_loss = (
+            best_evaluation - actual_evaluation
+            if side_to_move == chess.WHITE
+            else actual_evaluation - best_evaluation
+        )
+    centipawn_loss = max(0.0, centipawn_loss)
+
+    concepts = ["classic.calculation"]
+    if action_uci:
+        move = chess.Move.from_uci(action_uci)
+        if board.is_capture(move):
+            concepts.append("classic.tactics.capture")
+        if board.is_castling(move):
+            concepts.append("classic.opening.king-safety")
+        after = board.copy(stack=False)
+        after.push(move)
+        if after.is_check():
+            concepts.append("classic.tactics.check")
+
+    classification = _coach_classification(centipawn_loss)
+    return {
+        "classification": classification,
+        "concepts": concepts,
+        "candidates": candidates,
+        "probabilities": [],
+        "explanationKey": f"coach.classic.{classification}",
+        "centipawnLoss": round(centipawn_loss, 1),
+        "engine": "stockfish-multipv",
+    }
+
+
+app.include_router(
+    create_api_v1_router(
+        academy=academy_repository,
+        matches=match_repository,
+        coach_evaluator=_coach_evaluate,
+    )
+)
 
 
 # ---------------------------------------------------------------------------

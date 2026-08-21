@@ -1,13 +1,23 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useCallback, useEffect, useMemo } from 'react'
 
 // ─── Efectos de sonido con Web Audio API ───
-export function useSoundFX(volume = 0.8) {
+export function useSoundFX(volume = 0.8, haptics = false) {
   const ctxRef = useRef<AudioContext | null>(null)
   const volumeRef = useRef(volume)
+  const hapticsRef = useRef(haptics)
 
   useEffect(() => {
     volumeRef.current = volume
   }, [volume])
+
+  useEffect(() => {
+    hapticsRef.current = haptics
+  }, [haptics])
+
+  const vibrate = useCallback((pattern: number | number[]) => {
+    if (!hapticsRef.current || typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return
+    navigator.vibrate(pattern)
+  }, [])
 
   const getCtx = useCallback(() => {
     if (!ctxRef.current) {
@@ -38,8 +48,23 @@ export function useSoundFX(volume = 0.8) {
     [getCtx]
   )
 
-  const playMove = useCallback(() => playTone(600, 0.08, 'sine', 0.1), [playTone])
-  const playCapture = useCallback(() => playTone(300, 0.12, 'triangle', 0.15), [playTone])
+  const playMove = useCallback(() => { playTone(600, 0.08, 'sine', 0.1); vibrate(12) }, [playTone, vibrate])
+  const playSplit = useCallback(() => {
+    playTone(520, 0.12, 'sine', 0.08)
+    setTimeout(() => playTone(760, 0.16, 'sine', 0.07), 55)
+    vibrate([10, 25, 10])
+  }, [playTone, vibrate])
+  const playMerge = useCallback(() => {
+    playTone(760, 0.12, 'triangle', 0.08)
+    setTimeout(() => playTone(430, 0.18, 'triangle', 0.09), 55)
+    vibrate([18, 20, 24])
+  }, [playTone, vibrate])
+  const playMeasurement = useCallback(() => {
+    playTone(880, 0.1, 'square', 0.045)
+    setTimeout(() => playTone(660, 0.16, 'sine', 0.065), 90)
+    vibrate([15, 30, 15, 30, 28])
+  }, [playTone, vibrate])
+  const playCapture = useCallback(() => { playTone(300, 0.12, 'triangle', 0.15); vibrate(32) }, [playTone, vibrate])
   const playCheck = useCallback(() => {
     playTone(800, 0.1, 'square', 0.08)
     setTimeout(() => playTone(1000, 0.15, 'square', 0.06), 100)
@@ -50,5 +75,13 @@ export function useSoundFX(volume = 0.8) {
     setTimeout(() => playTone(784, 0.4, 'sine', 0.1), 300)
   }, [playTone])
 
-  return { playMove, playCapture, playCheck, playGameEnd }
+  return useMemo(() => ({
+    playMove,
+    playSplit,
+    playMerge,
+    playMeasurement,
+    playCapture,
+    playCheck,
+    playGameEnd,
+  }), [playCapture, playCheck, playGameEnd, playMeasurement, playMerge, playMove, playSplit])
 }

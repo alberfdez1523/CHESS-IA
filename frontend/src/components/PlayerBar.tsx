@@ -13,10 +13,11 @@ interface PlayerBarProps {
   isLow?: boolean
   turnLabel?: string
   accent?: 'gold' | 'quantum'
+  coherence?: { used: number; limit: number; label: string }
 }
 
 export default function PlayerBar({
-  label, elo = '', color, isActive, captures, materialDiff, time, isLow, turnLabel, accent = 'gold',
+  label, elo = '', color, isActive, captures, materialDiff, time, isLow, turnLabel, accent = 'gold', coherence,
 }: PlayerBarProps) {
   const sortedCaptures = [...captures].sort(
     (a, b) => CAPTURE_ORDER.indexOf(a) - CAPTURE_ORDER.indexOf(b)
@@ -73,6 +74,26 @@ export default function PlayerBar({
           <span className="ml-0.5 font-mono text-ui-xs text-accent">+{materialDiff}</span>
         )}
       </div>
+
+      {coherence && (
+        <div
+          className="flex shrink-0 items-center gap-1.5"
+          aria-label={`${coherence.label}: ${coherence.used} / ${coherence.limit}`}
+          title={`${coherence.label}: ${coherence.used}/${coherence.limit}`}
+        >
+          <span className="hidden font-mono text-[0.62rem] text-neutral-500 sm:inline">
+            {coherence.used}/{coherence.limit}
+          </span>
+          <span className="flex gap-0.5" aria-hidden="true">
+            {Array.from({ length: coherence.limit }, (_, index) => (
+              <span
+                key={index}
+                className={`h-3 w-1.5 border ${index < coherence.used ? 'border-cyan-300 bg-cyan-300' : 'border-surface-4 bg-transparent'}`}
+              />
+            ))}
+          </span>
+        </div>
+      )}
 
       {/* Timer */}
       {time != null && (

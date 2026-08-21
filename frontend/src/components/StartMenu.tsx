@@ -1,22 +1,32 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { checkHealth } from '../lib/api'
 import { DIFFICULTIES, TIMER_OPTIONS } from '../lib/constants'
-import { gameAutosave, type GameAutosave, type GameAutosaveSummary } from '../lib/gameAutosave'
+import {
+  GAME_AUTOSAVE_STORAGE_KEY,
+  GAME_AUTOSAVE_UPDATED_EVENT,
+  gameAutosave,
+  type GameAutosave,
+  type GameAutosaveSummary,
+} from '../lib/gameAutosave'
 import { loadGameSetup, saveGameSetup } from '../lib/gameSetup'
 import { getDifficultyLabel } from '../lib/i18n'
 import type {
   Difficulty,
+  CoherenceLimit,
   GameConfig,
   GameMode,
   Language,
   OpponentMode,
   PieceColor,
   PlayerColorChoice,
+  RulesetId,
 } from '../lib/types'
 import GameIcon, { type GameIconName } from './GameIcon'
 import OnlineBetaNotice from './OnlineBetaNotice'
 import QuantumLogo from './QuantumLogo'
+import { getAcademyRecommendation, getDueLessons } from '../lib/academyProgress'
+import { textFor, type AcademyProgress } from '../lib/academyTypes'
+import { FEATURES } from '../lib/featureFlags'
 
 interface StartMenuProps {
   onPlay: (config: GameConfig) => void
@@ -30,6 +40,7 @@ interface StartMenuProps {
   }) => void
   onRules: () => void
   onQuantumTutorial: () => void
+  academyProgress: AcademyProgress
   language: Language
   onOpenSettings: () => void
 }
@@ -40,6 +51,7 @@ export default function StartMenu({
   onOpenOnlineLobby,
   onRules,
   onQuantumTutorial,
+  academyProgress,
   language,
   onOpenSettings,
 }: StartMenuProps) {
@@ -50,21 +62,39 @@ export default function StartMenu({
   const [difficulty, setDifficulty] = useState<Difficulty>(initial.difficulty)
   const [useTimer, setUseTimer] = useState(initial.useTimer)
   const [timerMinutes, setTimerMinutes] = useState(initial.timerMinutes)
+  const [rulesetId, setRulesetId] = useState<RulesetId>(initial.rulesetId)
+  const [maxCoherence, setMaxCoherence] = useState<CoherenceLimit>(initial.maxCoherence)
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [serverReady, setServerReady] = useState(false)
   const [checking, setChecking] = useState(true)
   const [autosaveSummary, setAutosaveSummary] = useState<GameAutosaveSummary | null>(() => gameAutosave.getSummary())
-  const reduceMotion = useReducedMotion()
+  const academyRecommendation = getAcademyRecommendation(academyProgress, academyProgress.selectedCourse)
+  const academyDueCount = getDueLessons(academyProgress).length
+  const hasAcademyProgress = academyProgress.completedLessonIds.length > 0
 
   const isQuantum = gameMode === 'quantum'
+  const isCoherence = FEATURES.quantumCoherence && isQuantum && rulesetId === 'quantum-coherence' && opponentMode !== 'online'
   const isOnline = opponentMode === 'online'
   const requiresStockfish = gameMode === 'classic' && opponentMode === 'ai'
   const canStart = !requiresStockfish || serverReady
 
+  useEffect(() => {
+    const refresh = () => setAutosaveSummary(gameAutosave.getSummary())
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === GAME_AUTOSAVE_STORAGE_KEY) refresh()
+    }
+    window.addEventListener(GAME_AUTOSAVE_UPDATED_EVENT, refresh)
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener(GAME_AUTOSAVE_UPDATED_EVENT, refresh)
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [])
+
   const copy = language === 'es'
     ? {
         appName: 'Gambito de Dama Cuántico',
-        title: 'Juega el tablero que todavía no existe.',
+        title: 'Aprende a pensar entre certeza, riesgo y posibilidad.',
         quantum: 'Jugar cuántico',
         quantumDetail: 'Split, fusión y medición',
         classic: 'Clásico',
@@ -72,7 +102,13 @@ export default function StartMenu({
         online: 'En línea',
         onlineDetail: 'Sala privada · beta casual',
         academy: 'Academia',
-        academyDetail: 'Siete misiones jugables',
+        academyDetail: 'Dos rutas · 64 actividades',
+        learnPrimary: hasAcademyProgress ? 'Continuar aprendiendo' : 'Empezar a aprender',
+        learnDetail: academyRecommendation.lesson
+          ? textFor(academyRecommendation.lesson.title, language)
+          : 'Ruta fundamental completada',
+        playSecondary: 'Jugar',
+        academyDue: `${academyDueCount} repasos pendientes`,
         setupEyebrow: 'Nueva partida',
         setupTitle: isQuantum ? 'Configura la partida' : 'Prepara el tablero',
         setupIntro: 'Elige primero a tu rival. El resto ya tiene una configuración recomendada.',
@@ -88,6 +124,13 @@ export default function StartMenu({
         black: 'Negras',
         difficulty: 'Dificultad',
         clock: 'Reloj',
+        variant: 'Reglamento cuántico',
+        standard: 'Estándar',
+        standardDetail: 'Sin límite de ramas',
+        coherence: 'Coherencia limitada',
+        coherenceDetail: 'Capacidad derivada del tablero',
+        capacity: 'Capacidad máxima',
+        capacityUnits: 'unidades',
         noClock: 'Sin reloj',
         summary: 'Resumen',
         start: isOnline ? 'Abrir sala' : isQuantum ? 'Iniciar partida cuántica' : 'Iniciar partida clásica',
@@ -107,7 +150,7 @@ export default function StartMenu({
       }
     : {
         appName: 'Gambito de Dama Cuántico',
-        title: 'Play the board that does not exist yet.',
+        title: 'Learn to think across certainty, risk, and possibility.',
         quantum: 'Play quantum',
         quantumDetail: 'Split, merge and measure',
         classic: 'Classic',
@@ -115,7 +158,13 @@ export default function StartMenu({
         online: 'Online',
         onlineDetail: 'Private room · casual beta',
         academy: 'Academy',
-        academyDetail: 'Seven playable missions',
+        academyDetail: 'Two routes · 64 activities',
+        learnPrimary: hasAcademyProgress ? 'Continue learning' : 'Start learning',
+        learnDetail: academyRecommendation.lesson
+          ? textFor(academyRecommendation.lesson.title, language)
+          : 'Foundation route completed',
+        playSecondary: 'Play',
+        academyDue: `${academyDueCount} reviews due`,
         setupEyebrow: 'New game',
         setupTitle: isQuantum ? 'Configure the game' : 'Prepare the board',
         setupIntro: 'Choose your opponent first. Everything else starts with sensible defaults.',
@@ -131,6 +180,13 @@ export default function StartMenu({
         black: 'Black',
         difficulty: 'Difficulty',
         clock: 'Clock',
+        variant: 'Quantum ruleset',
+        standard: 'Standard',
+        standardDetail: 'Unlimited branches',
+        coherence: 'Limited coherence',
+        coherenceDetail: 'Capacity derived from the board',
+        capacity: 'Maximum capacity',
+        capacityUnits: 'units',
         noClock: 'No clock',
         summary: 'Summary',
         start: isOnline ? 'Open room' : isQuantum ? 'Start quantum game' : 'Start classic game',
@@ -162,9 +218,11 @@ export default function StartMenu({
 
   const selectMode = useCallback((mode: GameMode, opponent?: OpponentMode) => {
     setGameMode(mode)
+    if (mode === 'classic') setRulesetId('classic')
+    else if (rulesetId === 'classic') setRulesetId('quantum-standard')
     if (opponent) setOpponentMode(opponent)
     if (mode === 'quantum' && difficulty === 'master') setDifficulty('medium')
-  }, [difficulty])
+  }, [difficulty, rulesetId])
 
   const setup = useMemo(() => ({
     gameMode,
@@ -173,7 +231,11 @@ export default function StartMenu({
     difficulty,
     useTimer,
     timerMinutes,
-  }), [color, difficulty, gameMode, opponentMode, timerMinutes, useTimer])
+    rulesetId: gameMode === 'classic'
+      ? 'classic' as const
+      : opponentMode === 'online' ? 'quantum-standard' as const : rulesetId,
+    maxCoherence,
+  }), [color, difficulty, gameMode, maxCoherence, opponentMode, rulesetId, timerMinutes, useTimer])
 
   const handleStart = useCallback(() => {
     if (!canStart) return
@@ -185,8 +247,21 @@ export default function StartMenu({
     const playerColor: PieceColor = color === 'random'
       ? (Math.random() < 0.5 ? 'w' : 'b')
       : color
-    onPlay({ playerColor, difficulty, opponentMode, useTimer, timerMinutes, gameMode })
-  }, [canStart, color, difficulty, gameMode, onOpenOnlineLobby, onPlay, opponentMode, setup, timerMinutes, useTimer])
+    const activeRuleset: RulesetId = gameMode === 'classic'
+      ? 'classic'
+      : FEATURES.quantumCoherence ? rulesetId : 'quantum-standard'
+    onPlay({
+      playerColor,
+      difficulty,
+      opponentMode,
+      useTimer,
+      timerMinutes,
+      gameMode,
+      rulesetId: activeRuleset,
+      timeControl: { initialSeconds: timerMinutes * 60, incrementSeconds: 0 },
+      options: activeRuleset === 'quantum-coherence' ? { maxCoherence } : {},
+    })
+  }, [canStart, color, difficulty, gameMode, maxCoherence, onOpenOnlineLobby, onPlay, opponentMode, rulesetId, setup, timerMinutes, useTimer])
 
   const handleContinue = useCallback(() => {
     const autosave = gameAutosave.load()
@@ -197,11 +272,10 @@ export default function StartMenu({
     onContinue(autosave)
   }, [onContinue])
 
-  const duration = reduceMotion ? 0.01 : 0.2
 
   return (
     <main
-      className="min-h-screen bg-surface-0 text-ink"
+      className="min-h-screen bg-surface-0 pb-20 text-ink md:pb-0"
       data-game-variant={gameMode}
     >
       <div className="mx-auto grid min-h-screen max-w-[1440px] lg:grid-cols-[minmax(0,1.08fr)_minmax(430px,0.92fr)]">
@@ -235,6 +309,32 @@ export default function StartMenu({
               <p className="max-w-[34ch] text-base leading-7 text-ink-secondary sm:text-lg">
                 {copy.title}
               </p>
+              <div className={`mt-2 grid w-full max-w-md gap-2 ${FEATURES.academy ? 'sm:grid-cols-[1.35fr_0.65fr]' : ''}`}>
+                {FEATURES.academy && <button
+                  type="button"
+                  data-testid="home-learn-primary"
+                  onClick={onQuantumTutorial}
+                  className="group flex min-h-[58px] items-center justify-between gap-4 bg-accent px-5 text-left text-sm font-semibold text-surface-0 transition-colors hover:bg-accent-hover"
+                >
+                  <span className="min-w-0">
+                    <span className="block">{copy.learnPrimary}</span>
+                    <span className="mt-1 block truncate text-[0.68rem] font-normal opacity-75">{copy.learnDetail}</span>
+                  </span>
+                  <GameIcon name="chevron" className="transition-transform group-hover:translate-x-1" />
+                </button>}
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('game-setup')?.scrollIntoView({
+                    behavior: document.documentElement.dataset.motion === 'reduced' ? 'auto' : 'smooth',
+                  })}
+                  className="min-h-[58px] border border-line bg-surface-1 px-5 text-sm font-semibold text-ink transition-colors hover:border-ink"
+                >
+                  {copy.playSecondary}
+                </button>
+              </div>
+              {FEATURES.academy && hasAcademyProgress && academyDueCount > 0 && (
+                <p className="font-mono text-[0.68rem] text-quantum">{copy.academyDue}</p>
+              )}
             </div>
 
             <nav className="grid gap-px border border-line bg-line sm:grid-cols-2" aria-label={language === 'es' ? 'Centro de juego' : 'Game hub'}>
@@ -263,18 +363,18 @@ export default function StartMenu({
                 testId="start-hub-online"
                 onClick={() => setOpponentMode('online')}
               />
-              <HubAction
+              {FEATURES.academy && <HubAction
                 icon="book"
                 title={copy.academy}
                 detail={copy.academyDetail}
                 testId="start-quantum-tutorial"
                 onClick={onQuantumTutorial}
-              />
+              />}
             </nav>
           </div>
         </section>
 
-        <section className="flex min-h-[56vh] items-center bg-surface-1 px-5 py-10 sm:px-8 lg:min-h-screen lg:px-12 xl:px-16">
+        <section id="game-setup" className="flex min-h-[56vh] items-center bg-surface-1 px-5 py-10 sm:px-8 lg:min-h-screen lg:px-12 xl:px-16">
           <div className="mx-auto w-full max-w-[34rem]">
             <p className="text-xs font-semibold tracking-[0.14em] text-ink-muted">{copy.setupEyebrow}</p>
             <h2 className="mt-3 font-serif text-4xl leading-tight sm:text-5xl">{copy.setupTitle}</h2>
@@ -341,17 +441,54 @@ export default function StartMenu({
               <GameIcon name="chevron" className={`h-4 w-4 transition-transform ${customizeOpen ? 'rotate-90' : ''}`} />
             </button>
 
-            <AnimatePresence initial={false}>
-              {customizeOpen && (
-                <motion.div
+            {customizeOpen && (
+                <div
                   id="game-customization"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration }}
-                  className="overflow-hidden"
+                  className="screen-enter overflow-hidden"
                 >
                   <div className="space-y-6 py-6">
+                    {isQuantum && opponentMode !== 'online' && (
+                      <>
+                        <fieldset>
+                          <legend className="mb-3 text-xs font-semibold text-ink-secondary">{copy.variant}</legend>
+                          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={copy.variant}>
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={!isCoherence}
+                              onClick={() => setRulesetId('quantum-standard')}
+                              className={`min-h-[64px] border px-4 py-3 text-left transition-colors ${!isCoherence ? 'border-quantum bg-quantum/[0.08] text-ink' : 'border-line bg-surface-0 text-ink-secondary hover:text-ink'}`}
+                            >
+                              <span className="block text-sm font-semibold">{copy.standard}</span>
+                              <span className="mt-1 block text-xs text-ink-secondary">{copy.standardDetail}</span>
+                            </button>
+                            {FEATURES.quantumCoherence && (
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={isCoherence}
+                                onClick={() => setRulesetId('quantum-coherence')}
+                                className={`min-h-[64px] border px-4 py-3 text-left transition-colors ${isCoherence ? 'border-merge bg-merge/[0.08] text-ink' : 'border-line bg-surface-0 text-ink-secondary hover:text-ink'}`}
+                              >
+                                <span className="block text-sm font-semibold">{copy.coherence}</span>
+                                <span className="mt-1 block text-xs text-ink-secondary">{copy.coherenceDetail}</span>
+                              </button>
+                            )}
+                          </div>
+                        </fieldset>
+                        {isCoherence && (
+                          <ChoiceGroup
+                            legend={copy.capacity}
+                            value={String(maxCoherence)}
+                            options={([2, 4, 6] as CoherenceLimit[]).map((limit) => ({
+                              value: String(limit),
+                              label: `${limit} ${copy.capacityUnits}`,
+                            }))}
+                            onChange={(value) => setMaxCoherence(Number(value) as CoherenceLimit)}
+                          />
+                        )}
+                      </>
+                    )}
                     <ChoiceGroup
                       legend={copy.pieces}
                       value={color}
@@ -415,15 +552,14 @@ export default function StartMenu({
                       </div>
                     </fieldset>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+            )}
 
             <div className="mt-6 border border-line bg-surface-0 p-4">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-xs font-semibold text-ink-muted">{copy.summary}</span>
                 <span className="text-right text-sm font-medium text-ink">
-                  {isQuantum ? copy.quantum : copy.classic} · {opponentMode === 'ai' ? copy.ai : opponentMode === 'local' ? copy.local : copy.online}
+                  {isQuantum ? `${copy.quantum}${isCoherence ? ` · ${copy.coherence}` : ''}` : copy.classic} · {opponentMode === 'ai' ? copy.ai : opponentMode === 'local' ? copy.local : copy.online}
                 </span>
               </div>
               <div className="mt-3 flex items-center justify-between gap-4 border-t border-line pt-3 text-xs text-ink-secondary">
